@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}e-fakture{% endblock %} — ELBRACO</title>
+  <style>
+    :root {
+      --bg: #f5f6f8; --card: #fff; --line: #e2e5ea; --text: #1d2330; --muted: #6b7280;
+      --brand: #0b5cad; --ok: #16794a; --warn: #b45309; --err: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+           font: 14px/1.45 "Segoe UI", Roboto, Arial, sans-serif; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { background: var(--brand); color: #fff; padding: 9px 18px; display: flex;
+             align-items: center; gap: 20px; flex-wrap: wrap; }
+    header .logo { font-weight: 700; letter-spacing: .3px; }
+    header nav a { color: #dbeafe; margin-right: 14px; }
+    header .spacer { flex: 1; }
+    header .user { color: #cfe3fa; font-size: 13px; }
+    header .user a { color: #fff; margin-left: 10px; }
+    main { padding: 16px 18px 60px; max-width: 1700px; margin: 0 auto; }
+    h1 { font-size: 19px; margin: 0 0 12px; }
+    h2 { font-size: 15px; margin: 20px 0 8px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+            padding: 12px 14px; margin-bottom: 14px; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); }
+    th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left;
+             vertical-align: top; }
+    th { background: #eef1f5; font-size: 11.5px; text-transform: uppercase; color: #48505e;
+         letter-spacing: .4px; position: sticky; top: 0; z-index: 1; }
+    tbody tr:hover { background: #f8fafc; }
+    td.num, th.num { text-align: right; white-space: nowrap; }
+    .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11.5px;
+           border: 1px solid var(--line); background: #f1f3f6; white-space: nowrap; }
+    .tag.ok { background: #e7f6ee; color: var(--ok); border-color: #bfe6d1; }
+    .tag.warn { background: #fdf3e3; color: var(--warn); border-color: #f4dcae; }
+    .tag.err { background: #fdeceb; color: var(--err); border-color: #f6c9c5; }
+    .tag.new { background: #e8f0fb; color: var(--brand); border-color: #c4d9f5; }
+    form.inline { display: inline; }
+    input, select, textarea, button { font: inherit; }
+    input[type=text], input[type=date], input[type=number], select, textarea {
+      padding: 5px 7px; border: 1px solid #c8cdd6; border-radius: 5px; background: #fff;
+      max-width: 100%; }
+    button { padding: 6px 12px; border: 1px solid var(--brand); background: var(--brand);
+             color: #fff; border-radius: 5px; cursor: pointer; }
+    button.ghost { background: #fff; color: var(--brand); }
+    button.danger { background: var(--err); border-color: var(--err); }
+    button.small { padding: 3px 8px; font-size: 12.5px; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .row { display: flex; gap: 9px; flex-wrap: wrap; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 3px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    .msg { padding: 9px 12px; border-radius: 6px; margin-bottom: 12px; background: #e7f6ee;
+           border: 1px solid #bfe6d1; color: var(--ok); }
+    .msg.err { background: #fdeceb; border-color: #f6c9c5; color: var(--err); }
+    .muted { color: var(--muted); }
+    .small { font-size: 12.5px; }
+    dl.kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 14px; margin: 0; }
+    dl.kv dt { color: var(--muted); }
+    dl.kv dd { margin: 0; font-weight: 600; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .tabs a { padding: 6px 13px; border: 1px solid var(--line); border-radius: 20px;
+              background: #fff; color: var(--text); font-size: 13px; }
+    .tabs a.izabran { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .tabs a b { margin-left: 5px; }
+    .traka { position: sticky; bottom: 0; background: #fff; border-top: 2px solid var(--brand);
+             padding: 10px 14px; display: flex; gap: 10px; align-items: center;
+             box-shadow: 0 -2px 10px rgba(0,0,0,.07); }
+  </style>
+</head>
+<body>
+<header>
+  <span class="logo">ELBRACO · e-fakture</span>
+  <nav>
+    {% if user and user.is_operator %}
+      <a href="/red">Red</a>
+      <a href="/pj">Poslovne jedinice</a>
+      <a href="/pravila">Pravila</a>
+      <a href="/tacnost">Tačnost</a>
+    {% elif user %}
+      <a href="/moja-jedinica">Moja jedinica</a>
+    {% endif %}
+  </nav>
+  <span class="spacer"></span>
+  {% if user %}
+    <span class="user">{{ user.name }}
+      {%- if not user.is_operator %} · {{ user.unit_code }}{% endif %}
+      <a href="/odjava">odjava</a></span>
+  {% endif %}
+</header>
+<main>
+  {% set poruka = request.query_params.get('poruka') %}
+  {% if poruka %}
+    <div class="msg {% if 'GREŠKA' in poruka %}err{% endif %}">{{ poruka }}</div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

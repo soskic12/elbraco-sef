@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Pravila razvrstavanja{% endblock %}
+{% block content %}
+<h1>Pravila razvrstavanja</h1>
+
+<div class="card small muted">
+  Pravila se primenjuju redom po prioritetu (manji broj = ranije); prvo pravilo koje se poklopi
+  određuje poslovnu jedinicu. Poređenje ignoriše velika/mala slova, ćirilicu i dijakritiku
+  („Војводе Мишића 12“ = „vojvode misica 12“). <b>regex</b> radi nad originalnim tekstom.
+  Ako nijedno pravilo ne prođe, dokument ide u <a href="/?pj=0">nerazvrstano</a>.
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Novo / izmena pravila</h2>
+  <form method="post" action="/pravila">
+    <input type="hidden" name="rule_id" id="rule_id" value="0">
+    <div class="row">
+      <div class="field"><label>Prioritet</label>
+        <input type="number" name="priority" id="priority" value="100" size="4" style="width:80px"></div>
+      <div class="field"><label>Polje</label>
+        <select name="field" id="field">
+          {% for f in fields %}<option value="{{ f.value }}">{{ f.value }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label>Operator</label>
+        <select name="op" id="op">
+          {% for o in ops %}<option value="{{ o.value }}">{{ o.value }}</option>{% endfor %}
+        </select></div>
+      <div class="field" style="flex:1"><label>Vrednost / šablon *</label>
+        <input type="text" name="pattern" id="pattern" required style="width:100%"
+               placeholder="npr. VOJVODE MISICA 12"></div>
+      <div class="field"><label>Samo za PIB dobavljača</label>
+        <input type="text" name="supplier_vat" id="supplier_vat" size="12"></div>
+      <div class="field"><label>Samo za vrstu</label>
+        <select name="document_type" id="document_type">
+          <option value="">— sve —</option>
+          {% for t in types %}<option value="{{ t.value }}">{{ t | tip }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label>Poslovna jedinica *</label>
+        <select name="business_unit_id" id="business_unit_id" required>
+          {% for u in units %}<option value="{{ u.id }}">{{ u.code }} — {{ u.name }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label>Napomena</label><input type="text" name="comment" id="comment" size="20"></div>
+      <button type="submit">Sačuvaj</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <form method="post" action="/pravila/primeni">
+    <button class="ghost" type="submit">Primeni pravila na sve nerazvrstane dokumente</button>
+  </form>
+</div>
+
+<table>
+  <thead><tr>
+    <th class="num">Prior.</th><th>Polje</th><th>Operator</th><th>Šablon</th><th>PIB</th><th>Vrsta</th>
+    <th>Poslovna jedinica</th><th class="num">Pogodaka</th><th class="num">Promašaja</th><th>Napomena</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for r in rules %}
+    <tr>
+      <td class="num">{{ r.priority }}</td>
+      <td>{{ r.field.value }}</td>
+      <td>{{ r.op.value }}</td>
+      <td><code>{{ r.pattern }}</code></td>
+      <td class="small">{{ r.supplier_vat or '—' }}</td>
+      <td class="small">{{ (r.document_type | tip) if r.document_type else '—' }}</td>
+      <td>{{ r.business_unit.code }} — {{ r.business_unit.name }}</td>
+      <td class="num">{{ r.hits }}</td>
+      <td class="num" {% if r.misses %}style="color:var(--err);font-weight:600"{% endif %}>{{ r.misses or '' }}</td>
+      <td class="small">{{ r.comment or '' }}</td>
+      <td style="white-space:nowrap">
+        <button class="ghost small" type="button" onclick='popuni({{ {
+          "id": r.id, "priority": r.priority, "field": r.field.value, "op": r.op.value,
+          "pattern": r.pattern, "supplier_vat": r.supplier_vat or "",
+          "document_type": r.document_type.value if r.document_type else "",
+          "business_unit_id": r.business_unit_id, "comment": r.comment or "" } | tojson }})'>izmeni</button>
+        <form class="inline" method="post" action="/pravila/{{ r.id }}/obrisi"
+              onsubmit="return confirm('Obrisati pravilo?')">
+          <button class="danger small" type="submit">obriši</button></form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="muted" style="padding:20px;text-align:center">
+      Još nema pravila. Pokreni <code>sefsync analyze</code> da vidiš šta dobavljači šalju,
+      pa napravi pravila po adresi isporuke.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function popuni(r) {
+  for (const k of ['priority','field','op','pattern','supplier_vat','document_type','business_unit_id','comment'])
+    document.getElementById(k).value = r[k] ?? '';
+  document.getElementById('rule_id').value = r.id;
+  window.scrollTo(0, 0);
+}
+</script>
+{% endblock %}

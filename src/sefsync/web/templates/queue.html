@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Red{% endblock %}
+
+{% macro novac(v, val) -%}
+  {% if v is none %}-{% else %}{{ '{:,.2f}'.format(v).replace(',', ' ').replace('.', ',') }} {{ val or '' }}{% endif %}
+{%- endmacro %}
+
+{% set naslovi = {'red': 'Traži potez', 'nerazvrstano': 'Nerazvrstano',
+                  'ceka_prijem': 'Čeka potvrdu prijema', 'arhiva': 'Arhiva'} %}
+
+{% block content %}
+<div class="tabs">
+  {% for kljuc, naslov in naslovi.items() %}
+    <a href="/red?prikaz={{ kljuc }}" class="{% if prikaz == kljuc %}izabran{% endif %}">
+      {{ naslov }} <b>{{ brojaci[kljuc] }}</b></a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <form class="row" method="get" action="/red">
+    <input type="hidden" name="prikaz" value="{{ prikaz }}">
+    <div class="field"><label>Poslovna jedinica</label>
+      <select name="pj">
+        <option value="">— sve —</option>
+        <option value="0" {% if filters.pj == 0 %}selected{% endif %}>nerazvrstano</option>
+        {% for u in units %}
+          <option value="{{ u.id }}" {% if filters.pj == u.id %}selected{% endif %}>{{ u.code }} — {{ u.name }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="field"><label>Vrsta</label>
+      <select name="tip">
+        <option value="">— sve —</option>
+        {% for t in types %}<option value="{{ t.value }}" {% if filters.tip == t.value %}selected{% endif %}>{{ t | tip }}</option>{% endfor %}
+      </select></div>
+    <div class="field" style="flex:1"><label>Pretraga</label>
+      <input type="text" name="q" placeholder="broj, dobavljač, PIB, adresa" value="{{ filters.q or '' }}" style="width:100%"></div>
+    <button type="submit">Filtriraj</button>
+    <a href="/red?prikaz={{ prikaz }}" class="small">poništi</a>
+    <span class="spacer" style="flex:1"></span>
+    <span class="muted small">
+      {% if last_run %}poslednje preuzimanje: {{ last_run.started_at.strftime('%d.%m. %H:%M') }} UTC{% endif %}
+    </span>
+    </form>
+</div>
+
+<form method="post" id="grupno">
+  <input type="hidden" name="povratak" value="/red?prikaz={{ prikaz }}">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26px"><input type="checkbox" onclick="sve(this)"></th>
+        <th>Broj / dobavljač</th>
+        <th>Vrsta</th>
+        <th>Adresa isporuke</th>
+        <th style="width:230px">Poslovna jedinica</th>
+        <th class="num">Iznos</th>
+        <th>SEF</th>
+        <th>Prosleđeno</th>
+        <th style="width:150px"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in documents %}
+      <tr>
+        <td><input type="checkbox" name="dokumenti" value="{{ d.id }}" form="grupno"></td>
+        <td>
+          <a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
+          <div class="small">{{ d.supplier_name or '-' }}</div>
+        </td>
+        <td class="small">{{ d.document_type | tip }}</td>
+        <td class="small">{{ d.delivery_address or d.delivery_name or '—' }}</td>
+        <td>
+          <select name="business_unit_id" form="pj{{ d.id }}" style="width:150px">
+            <option value="">— izaberi —</option>
+            {% for u in units %}
+              <option value="{{ u.id }}" {% if d.business_unit_id == u.id %}selected{% endif %}>{{ u.code }}</option>
+            {% endfor %}
+          </select>
+          <button class="ghost small" type="submit" form="pj{{ d.id }}" title="Sačuvaj i zapamti pravilo">✓</button>
+          {% set kako = {'rule': 'pravilo', 'supplier_default': 'dobavljač',
+                         'manual': 'ručno', 'single_unit': 'jedina PJ'} %}
+          {% if d.business_unit_id %}
+            {% if d.routing_confirmed_at %}
+              <span class="tag ok" title="potvrdio {{ d.routing_confirmed_by }}">✓</span>
+            {% else %}
+              <span class="tag" title="predlog nije proveren">{{ kako.get(d.routing_source.value, '') }}</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="num">{{ novac(d.amount, d.currency) }}</td>
+        <td>
+          {% if d.sef_status.value == 'Approved' %}<span class="tag ok">prihvaćena</span>
+          {% elif d.sef_status.value == 'Rejected' %}<span class="tag err">odbijena</span>
+          {% elif d.sef_status.value == 'Storno' %}<span class="tag err">storno</span>
+          {% else %}<span class="tag new">{{ d.sef_status.value }}</span>{% endif %}
+        </td>
+        <td class="small">
+          {% if d.received_at %}<span class="tag ok">primljeno</span>
+          {% elif d.forwarded_at %}<span class="tag warn">čeka potvrdu</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          {% if prikaz == 'arhiva' %}
+            <form class="inline" method="post" action="/dokument/{{ d.id }}/vrati">
+              <button class="ghost small" type="submit">vrati u red</button></form>
+          {% else %}
+            <a href="/dokument/{{ d.id }}" class="small">otvori</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted" style="padding:26px;text-align:center">
+        {% if prikaz == 'red' %}Red je prazan — nema dokumenata koji traže potez.
+        {% else %}Nema dokumenata u ovom prikazu.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if documents and prikaz != 'arhiva' %}
+  <div class="traka">
+    <span class="muted small">Označeno: <b id="broj">0</b></span>
+    <button type="submit" formaction="/potvrdi" class="ghost"
+            title="Predlog razvrstavanja je tačan">Potvrdi razvrstavanje</button>
+    <button type="submit" formaction="/prihvati"
+            onclick="return potvrdi('Prihvatiti označene dokumente na SEF-u?')">Prihvati na SEF-u</button>
+    <button type="submit" formaction="/prosledi" class="ghost">Prosledi poslovnoj jedinici</button>
+    <button type="submit" formaction="/arhiviraj" class="ghost"
+            onclick="return potvrdi('Skloniti označene iz reda?')">Arhiviraj</button>
+    <span class="spacer" style="flex:1"></span>
+    <span class="muted small">Prihvatanje i prosleđivanje su nezavisni — redosled biraš sam.</span>
+  </div>
+  {% endif %}
+</form>
+
+{% for d in documents %}
+  <form id="pj{{ d.id }}" method="post" action="/dokument/{{ d.id }}/pj" hidden>
+    <input type="hidden" name="napravi_pravilo" value="1">
+    <input type="hidden" name="povratak" value="/red?prikaz={{ prikaz }}">
+  </form>
+{% endfor %}
+
+{% if pages > 1 %}
+<div class="card small">
+  Strana {{ page }} / {{ pages }} ({{ total }} dokumenata)
+  {% if page > 1 %}<a href="?prikaz={{ prikaz }}&strana={{ page - 1 }}">« prethodna</a>{% endif %}
+  {% if page < pages %}<a href="?prikaz={{ prikaz }}&strana={{ page + 1 }}">sledeća »</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <form class="row" method="post" action="/sync">
+    <div class="field"><label>Preuzmi sa SEF-a od</label><input type="date" name="od"></div>
+    <div class="field"><label>do</label><input type="date" name="do"></div>
+    <button class="ghost" type="submit">Preuzmi</button>
+    <span class="muted small">prazno = od poslednjeg uspešnog preuzimanja</span>
+  </form>
+</div>
+
+<script>
+function sve(izvor) {
+  document.querySelectorAll('input[name=dokumenti]').forEach(x => x.checked = izvor.checked);
+  prebroj();
+}
+function prebroj() {
+  const n = document.querySelectorAll('input[name=dokumenti]:checked').length;
+  const polje = document.getElementById('broj');
+  if (polje) polje.textContent = n;
+}
+function potvrdi(pitanje) {
+  if (document.querySelectorAll('input[name=dokumenti]:checked').length === 0) {
+    alert('Nijedan dokument nije označen.');
+    return false;
+  }
+  return confirm(pitanje);
+}
+document.addEventListener('change', e => {
+  if (e.target.name === 'dokumenti') prebroj();
+});
+</script>
+{% endblock %}

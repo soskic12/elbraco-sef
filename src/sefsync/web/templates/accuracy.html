@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Tačnost razvrstavanja{% endblock %}
+
+{% block content %}
+<h1>Tačnost razvrstavanja</h1>
+
+<div class="card small muted">
+  Meri se samo ono što je aplikacija <b>tvrdila</b> pa je čovek to video: predlog koji je
+  ostao računa se kao pogodak, predlog koji je operater promenio kao promašaj. Dokument koji
+  je bio nerazvrstan pa ga je operater dodelio ne ulazi u ocenu — tu aplikacija nije imala
+  odgovor. Potvrda se beleži i kad se dokument prosledi, jer niko ne šalje dokument objektu
+  za koji misli da nije njegov.
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">
+  <div class="card">
+    <div style="font-size:28px;font-weight:700">
+      {% if tacnost.procenat is none %}—{% else %}{{ '%.0f' % tacnost.procenat }}%{% endif %}
+    </div>
+    <div class="muted small">tačnost na {{ tacnost.pregledano }} provere{% if tacnost.pregledano != 1 %}nih{% endif %}</div>
+  </div>
+  <div class="card"><div style="font-size:28px;font-weight:700;color:var(--ok)">{{ tacnost.tacno }}</div>
+    <div class="muted small">predlog potvrđen</div></div>
+  <div class="card"><div style="font-size:28px;font-weight:700;color:var(--err)">{{ tacnost.ispravljeno }}</div>
+    <div class="muted small">predlog ispravljen</div></div>
+  <div class="card"><div style="font-size:28px;font-weight:700;color:var(--warn)">{{ neprovereno }}</div>
+    <div class="muted small">razvrstano, još neprovereno</div></div>
+  <div class="card"><div style="font-size:28px;font-weight:700">{{ nerazvrstano }}</div>
+    <div class="muted small"><a href="/red?prikaz=nerazvrstano">nerazvrstano</a></div></div>
+</div>
+
+{% if sumnjiva %}
+<h2>Pravila koja greše</h2>
+<p class="muted small" style="margin-top:0">Ovde se prvo gleda kad razvrstavanje počne da promašuje —
+  objekat se preselio, dobavljač promenio način pisanja adrese, ili je pravilo od početka bilo preširoko.</p>
+<table>
+  <thead><tr><th>Polje</th><th>Šablon</th><th>Poslovna jedinica</th>
+    <th class="num">Pogodaka</th><th class="num">Promašaja</th><th class="num">Tačnost</th><th></th></tr></thead>
+  <tbody>
+    {% for r in sumnjiva %}
+    <tr>
+      <td class="small">{{ r.field.value }}</td>
+      <td><code>{{ r.pattern[:46] }}</code></td>
+      <td>{{ r.business_unit.code }}</td>
+      <td class="num">{{ r.hits }}</td>
+      <td class="num" style="color:var(--err);font-weight:600">{{ r.misses }}</td>
+      <td class="num">{% if r.accuracy is none %}—{% else %}{{ '%.0f' % r.accuracy }}%{% endif %}</td>
+      <td><a href="/pravila" class="small">uredi</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Odakle dolaze odluke</h2>
+<table>
+  <thead><tr><th>Izvor</th><th class="num">Dokumenata</th><th></th></tr></thead>
+  <tbody>
+    {% set opis = {'rule': 'pravilo (adresa, narudžbenica, napomena…)',
+                   'supplier_default': 'pravilo po dobavljaču',
+                   'manual': 'operater ručno',
+                   'single_unit': 'jedina aktivna poslovna jedinica',
+                   'none': 'nije razvrstano'} %}
+    {% for izvor, broj in po_izvoru.items() %}
+      {% if broj %}
+      <tr><td>{{ opis.get(izvor, izvor) }}</td><td class="num">{{ broj }}</td>
+          <td class="muted small">{{ '%.0f' % (100.0 * broj / ukupno) if ukupno else 0 }}%</td></tr>
+      {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Sva pravila po učinku</h2>
+<table>
+  <thead><tr><th class="num">Prior.</th><th>Polje</th><th>Šablon</th><th>PJ</th>
+    <th class="num">Pogodaka</th><th class="num">Promašaja</th></tr></thead>
+  <tbody>
+    {% for r in pravila %}
+    <tr>
+      <td class="num">{{ r.priority }}</td>
+      <td class="small">{{ r.field.value }}</td>
+      <td class="small"><code>{{ r.pattern[:40] }}</code></td>
+      <td class="small">{{ r.business_unit.code }}</td>
+      <td class="num">{{ r.hits }}</td>
+      <td class="num">{{ r.misses or '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted" style="padding:18px;text-align:center">Nema pravila.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

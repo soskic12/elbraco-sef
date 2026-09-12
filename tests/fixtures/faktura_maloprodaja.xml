@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.rs:srbdt:2022</cbc:CustomizationID>
+  <cbc:ID>2026-114/25</cbc:ID>
+  <cbc:IssueDate>2026-09-01</cbc:IssueDate>
+  <cbc:DueDate>2026-10-01</cbc:DueDate>
+  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+  <cbc:Note>Isporuka za objekat MP Vojvode Mišića</cbc:Note>
+  <cbc:DocumentCurrencyCode>RSD</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>MP-02</cbc:BuyerReference>
+  <cac:OrderReference><cbc:ID>NAR-4471</cbc:ID></cac:OrderReference>
+  <cac:ContractDocumentReference><cbc:ID>UG-2026-8</cbc:ID></cac:ContractDocumentReference>
+
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cbc:EndpointID schemeID="9948">100200300</cbc:EndpointID>
+      <cac:PartyName><cbc:Name>DOBAVLJAČ TRGOVINA DOO</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>Bulevar oslobođenja 100</cbc:StreetName>
+        <cbc:CityName>Novi Sad</cbc:CityName>
+        <cbc:PostalZone>21000</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>RS</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme>
+        <cbc:CompanyID>RS100200300</cbc:CompanyID>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:PartyTaxScheme>
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>DOBAVLJAČ TRGOVINA DOO NOVI SAD</cbc:RegistrationName>
+        <cbc:CompanyID>20123456</cbc:CompanyID>
+      </cac:PartyLegalEntity>
+      <cac:Contact><cbc:ElectronicMail>prodaja@dobavljac.rs</cbc:ElectronicMail></cac:Contact>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+
+  <cac:AccountingCustomerParty>
+    <cac:Party>
+      <cbc:EndpointID schemeID="9948">111222333</cbc:EndpointID>
+      <cac:PartyName><cbc:Name>ELBRACO DOO</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>Kneza Miloša 5</cbc:StreetName>
+        <cbc:CityName>Beograd</cbc:CityName>
+        <cbc:PostalZone>11000</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>RS</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme>
+        <cbc:CompanyID>RS111222333</cbc:CompanyID>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:PartyTaxScheme>
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>ELBRACO DOO BEOGRAD</cbc:RegistrationName>
+        <cbc:CompanyID>21987654</cbc:CompanyID>
+      </cac:PartyLegalEntity>
+    </cac:Party>
+  </cac:AccountingCustomerParty>
+
+  <cac:Delivery>
+    <cbc:ActualDeliveryDate>2026-08-31</cbc:ActualDeliveryDate>
+    <cac:DeliveryLocation>
+      <cbc:ID>MP02</cbc:ID>
+      <cac:Address>
+        <cbc:StreetName>Војводе Мишића 12</cbc:StreetName>
+        <cbc:CityName>Панчево</cbc:CityName>
+        <cbc:PostalZone>26000</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>RS</cbc:IdentificationCode></cac:Country>
+      </cac:Address>
+    </cac:DeliveryLocation>
+    <cac:DeliveryParty><cac:PartyName><cbc:Name>ELBRACO MP Pančevo</cbc:Name></cac:PartyName></cac:DeliveryParty>
+  </cac:Delivery>
+
+  <cac:PaymentMeans>
+    <cbc:PaymentMeansCode>30</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount><cbc:ID>160-123456-78</cbc:ID></cac:PayeeFinancialAccount>
+  </cac:PaymentMeans>
+
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="RSD">2400.00</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="RSD">12000.00</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="RSD">2400.00</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>20</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="RSD">12000.00</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="RSD">12000.00</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="RSD">14400.00</cbc:TaxInclusiveAmount>
+    <cbc:AllowanceTotalAmount currencyID="RSD">0</cbc:AllowanceTotalAmount>
+    <cbc:PrepaidAmount currencyID="RSD">0</cbc:PrepaidAmount>
+    <cbc:PayableAmount currencyID="RSD">14400.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="H87">10</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="RSD">9000.00</cbc:LineExtensionAmount>
+    <cac:AllowanceCharge>
+      <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+      <cbc:Amount currencyID="RSD">1000.00</cbc:Amount>
+    </cac:AllowanceCharge>
+    <cac:Item>
+      <cbc:Name>Kabl PPY 3x1.5</cbc:Name>
+      <cbc:Description>Instalacioni kabl, kolut 100m</cbc:Description>
+      <cac:SellersItemIdentification><cbc:ID>ART-551</cbc:ID></cac:SellersItemIdentification>
+      <cac:StandardItemIdentification><cbc:ID>8600123456789</cbc:ID></cac:StandardItemIdentification>
+      <cac:ClassifiedTaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>20</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:ClassifiedTaxCategory>
+    </cac:Item>
+    <cac:Price>
+      <cbc:PriceAmount currencyID="RSD">1000.00</cbc:PriceAmount>
+      <cbc:BaseQuantity unitCode="H87">1</cbc:BaseQuantity>
+    </cac:Price>
+  </cac:InvoiceLine>
+
+  <cac:InvoiceLine>
+    <cbc:ID>2</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="MTR">50</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="RSD">3000.00</cbc:LineExtensionAmount>
+    <cac:Item>
+      <cbc:Name>Gibljivo crevo 16mm</cbc:Name>
+      <cac:SellersItemIdentification><cbc:ID>ART-772</cbc:ID></cac:SellersItemIdentification>
+      <cac:BuyersItemIdentification><cbc:ID>10045</cbc:ID></cac:BuyersItemIdentification>
+      <cac:ClassifiedTaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>20</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:ClassifiedTaxCategory>
+    </cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="RSD">60.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice>

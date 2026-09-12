@@ -1,0 +1,5 @@
+code;name;kind;erp_code;address;city;emails;phones
+MP01;Maloprodaja Centar;maloprodaja;01;Kneza Miloša 5;Beograd;mp01@elbraco.rs;+381641111111
+MP02;Maloprodaja Pančevo;maloprodaja;02;Vojvode Mišića 12;Pančevo;mp02@elbraco.rs;
+MAG1;Centralni magacin;magacin;90;Industrijska 1;Beograd;magacin@elbraco.rs;
+UPR;Uprava;uprava;99;Kneza Miloša 5;Beograd;racunovodstvo@elbraco.rs;

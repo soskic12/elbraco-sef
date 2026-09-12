@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ unit.code }}{% endblock %}
+
+{% macro novac(v, val) -%}
+  {% if v is none %}-{% else %}{{ '{:,.2f}'.format(v).replace(',', ' ').replace('.', ',') }} {{ val or '' }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<h1>{{ unit.code }} — {{ unit.name }}</h1>
+
+<div class="tabs">
+  <a href="/moja-jedinica?prikaz=novo" class="{% if prikaz == 'novo' %}izabran{% endif %}">
+    Za potvrdu <b>{{ ceka }}</b></a>
+  <a href="/moja-jedinica?prikaz=sve" class="{% if prikaz == 'sve' %}izabran{% endif %}">Sve prosleđeno</a>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Broj / dobavljač</th><th>Vrsta</th><th>Datum prometa</th>
+      <th class="num">Iznos</th><th>Stavki</th><th>Prosleđeno</th><th style="width:280px"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in documents %}
+    <tr>
+      <td><a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
+          <div class="small">{{ d.supplier_name or '-' }}</div></td>
+      <td class="small">{{ d.document_type | tip }}</td>
+      <td class="small">{{ d.delivery_date.strftime('%d.%m.%Y') if d.delivery_date else '-' }}</td>
+      <td class="num"><b>{{ novac(d.amount, d.currency) }}</b></td>
+      <td class="num">{{ d.lines | length }}</td>
+      <td class="small">{{ d.forwarded_at.strftime('%d.%m. %H:%M') if d.forwarded_at else '' }}</td>
+      <td>
+        {% if d.received_at %}
+          <span class="tag ok">prijem potvrdio {{ d.received_by }}</span>
+          <div class="muted small">{{ d.received_at.strftime('%d.%m. %H:%M') }}
+            {{ d.received_note or '' }}</div>
+        {% else %}
+          <form class="row" method="post" action="/dokument/{{ d.id }}/prijem">
+            <input type="text" name="napomena" placeholder="napomena (opciono)" style="width:150px">
+            <button type="submit">Roba je primljena</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted" style="padding:26px;text-align:center">
+      {% if prikaz == 'novo' %}Nema dokumenata koji čekaju tvoju potvrdu.
+      {% else %}Još ti ništa nije prosleđeno.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<p class="muted small" style="margin-top:14px">
+  Potvrda znači da je roba sa dokumenta stvarno stigla u objekat. Ako nešto ne valja —
+  manjak, oštećenje, roba nije stigla — nemoj potvrđivati nego javi kancelariji.
+</p>
+{% endblock %}

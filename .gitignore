@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.env
+data/
+*.db
+*.sqlite3
+.pytest_cache/
+
+objava/
+
+# stvarni sifarnik (mejlovi i telefoni zaposlenih) - dolazi iz ERP-a preko pj-sync
+poslovne_jedinice.csv

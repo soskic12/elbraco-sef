@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.document_number or doc.sef_invoice_id }}{% endblock %}
+
+{% macro novac(v, val) -%}
+  {% if v is none %}-{% else %}{{ '{:,.2f}'.format(v).replace(',', ' ').replace('.', ',') }} {{ val or '' }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<h1>{{ doc.document_type | tip }} {{ doc.document_number or '' }}
+  <span class="muted small">· SEF #{{ doc.sef_invoice_id }}</span>
+  {% if doc.archived %}<span class="tag">arhivirano</span>{% endif %}
+</h1>
+
+{% if doc.error_message %}<div class="msg err">{{ doc.error_message }}</div>{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+  <div class="card">
+    <h2 style="margin-top:0">Zaglavlje</h2>
+    <dl class="kv">
+      <dt>Dobavljač</dt><dd>{{ doc.supplier_name or '-' }}</dd>
+      <dt>PIB / matični</dt><dd>{{ doc.supplier_vat or '-' }} / {{ doc.supplier_reg_no or '-' }}</dd>
+      <dt>Datum prometa</dt><dd>{{ doc.delivery_date.strftime('%d.%m.%Y') if doc.delivery_date else '-' }}</dd>
+      <dt>Rok plaćanja</dt><dd>{{ doc.due_date.strftime('%d.%m.%Y') if doc.due_date else '-' }}</dd>
+      <dt>Osnovica</dt><dd>{{ novac(doc.sum_without_vat, doc.currency) }}</dd>
+      <dt>PDV</dt><dd>{{ novac(doc.vat_amount, doc.currency) }}</dd>
+      <dt>Za plaćanje</dt><dd>{{ novac(doc.amount, doc.currency) }}</dd>
+      <dt>UBL</dt><dd><a href="/dokument/{{ doc.id }}/ubl">preuzmi XML</a></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Tok</h2>
+    <dl class="kv">
+      <dt>Poslovna jedinica</dt>
+      <dd>{% if doc.business_unit %}{{ doc.business_unit.code }} — {{ doc.business_unit.name }}
+          {% else %}<span class="tag warn">nerazvrstano</span>{% endif %}
+        <div class="muted small" style="font-weight:400">{{ doc.routing_note or '' }}</div></dd>
+      <dt>Status na SEF-u</dt>
+      <dd>{{ doc.sef_status.value }}
+        {% if doc.accepted_by %}<div class="muted small" style="font-weight:400">
+          {{ doc.accepted_by }}, {{ doc.accepted_at.strftime('%d.%m.%Y %H:%M') }}</div>{% endif %}</dd>
+      <dt>Prosleđeno</dt>
+      <dd>{% if doc.forwarded_at %}{{ doc.forwarded_by }},
+            {{ doc.forwarded_at.strftime('%d.%m.%Y %H:%M') }}
+          {% else %}<span class="muted" style="font-weight:400">još nije</span>{% endif %}</dd>
+      <dt>Prijem potvrdio</dt>
+      <dd>{% if doc.received_at %}{{ doc.received_by }},
+            {{ doc.received_at.strftime('%d.%m.%Y %H:%M') }}
+            <div class="muted small" style="font-weight:400">{{ doc.received_note or '' }}</div>
+          {% else %}<span class="muted" style="font-weight:400">čeka se</span>{% endif %}</dd>
+      <dt>Adresa isporuke</dt><dd style="font-weight:400">{{ doc.delivery_address or '—' }}</dd>
+      <dt>Narudžbenica</dt><dd style="font-weight:400">{{ doc.order_reference or '—' }}</dd>
+      <dt>Napomena</dt><dd class="small" style="font-weight:400">{{ doc.note or '—' }}</dd>
+    </dl>
+  </div>
+</div>
+
+{% if user.is_operator %}
+<div class="card">
+  <h2 style="margin-top:0">Poslovna jedinica</h2>
+  <form class="row" method="post" action="/dokument/{{ doc.id }}/pj">
+    <div class="field"><label>Dodeli</label>
+      <select name="business_unit_id" required>
+        {% for u in units %}
+          <option value="{{ u.id }}" {% if doc.business_unit_id == u.id %}selected{% endif %}>
+            {{ u.code }} — {{ u.name }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="field"><label>Zapamti pravilo po polju</label>
+      <select name="polje">
+        {% for f in match_fields %}
+          <option value="{{ f.value }}" {% if f.value == 'delivery_address' %}selected{% endif %}>{{ f.value }}</option>
+        {% endfor %}
+      </select></div>
+    <label class="small"><input type="checkbox" name="napravi_pravilo" value="1" checked> napravi pravilo</label>
+    <button type="submit">Sačuvaj</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Radnje</h2>
+  <p class="muted small" style="margin-top:0">Prihvatanje na SEF-u i prosleđivanje su nezavisni —
+    uradi ih kojim redom odgovara ovom dokumentu.</p>
+
+  <form class="row" method="post" action="/dokument/{{ doc.id }}/prihvati">
+    <div class="field" style="flex:1;min-width:300px"><label>Komentar (opciono)</label>
+      <input type="text" name="komentar" placeholder="npr. roba primljena, otpremnica 1234"></div>
+    <button type="submit" {% if doc.sef_decided %}disabled{% endif %}>Prihvati na SEF-u</button>
+  </form>
+
+  <form class="row" method="post" action="/dokument/{{ doc.id }}/odbij" style="margin-top:8px"
+        onsubmit="return confirm('Odbiti dokument na SEF-u? Dobavljač dobija obaveštenje.')">
+    <div class="field" style="flex:1;min-width:300px"><label>Razlog odbijanja (obavezan)</label>
+      <input type="text" name="komentar" required placeholder="npr. roba nije isporučena"></div>
+    <button type="submit" class="danger" {% if doc.sef_decided %}disabled{% endif %}>Odbij</button>
+  </form>
+
+  <div class="row" style="margin-top:12px">
+    <form class="inline" method="post" action="/prosledi">
+      <input type="hidden" name="dokumenti" value="{{ doc.id }}">
+      <input type="hidden" name="povratak" value="/dokument/{{ doc.id }}">
+      <button type="submit">{% if doc.forwarded_at %}Prosledi ponovo{% else %}Prosledi poslovnoj jedinici{% endif %}</button>
+    </form>
+    {% if not doc.archived %}
+      <form class="inline" method="post" action="/arhiviraj">
+        <input type="hidden" name="dokumenti" value="{{ doc.id }}">
+        <input type="hidden" name="povratak" value="/dokument/{{ doc.id }}">
+        <button class="ghost" type="submit">Skloni iz reda</button></form>
+    {% else %}
+      <form class="inline" method="post" action="/dokument/{{ doc.id }}/vrati">
+        <button class="ghost" type="submit">Vrati u red</button></form>
+    {% endif %}
+    <form class="inline" method="post" action="/dokument/{{ doc.id }}/osvezi">
+      <button class="ghost" type="submit">Osveži sa SEF-a</button></form>
+  </div>
+</div>
+{% elif not doc.received_at %}
+<div class="card">
+  <form class="row" method="post" action="/dokument/{{ doc.id }}/prijem">
+    <div class="field" style="flex:1;min-width:300px"><label>Napomena (opciono)</label>
+      <input type="text" name="napomena" placeholder="npr. jedan komad oštećen"></div>
+    <button type="submit">Roba je primljena</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">Stavke ({{ lines | length }})</h2>
+  {% if lines %}
+  <table>
+    <thead><tr>
+      <th>#</th><th>Naziv</th><th>Šifra dob.</th><th>Barkod</th>
+      <th class="num">Količina</th><th>JM</th><th class="num">Cena</th>
+      <th class="num">Rabat</th><th class="num">Osnovica</th><th class="num">PDV %</th>
+    </tr></thead>
+    <tbody>
+      {% for l in lines %}
+      <tr>
+        <td>{{ l.line_no }}</td>
+        <td>{{ l.name or '-' }}</td>
+        <td class="small">{{ l.sellers_item_id or l.line_ref or '-' }}</td>
+        <td class="small">{{ l.standard_item_id or '-' }}</td>
+        <td class="num">{{ '%g' % l.quantity if l.quantity is not none else '-' }}</td>
+        <td>{{ l.unit_code or '' }}</td>
+        <td class="num">{{ novac(l.price, '') }}</td>
+        <td class="num">{{ novac(l.allowance_amount, '') }}</td>
+        <td class="num">{{ novac(l.line_amount, '') }}</td>
+        <td class="num">{{ '%g' % l.vat_percent if l.vat_percent is not none else '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">Dokument nema stavke u UBL-u (usluga ili zbirni obračun).</p>
+  {% endif %}
+</div>
+
+{% if user.is_operator %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+  <div class="card">
+    <h2 style="margin-top:0">Obaveštenja</h2>
+    <table><tbody>
+      {% for n in notifications %}
+      <tr><td class="small">{{ n.created_at.strftime('%d.%m. %H:%M') }}</td>
+          <td>{{ n.channel.value }}</td><td class="small">{{ n.target or '' }}</td>
+          <td>{% if n.status.value == 'sent' %}<span class="tag ok">poslato</span>
+              {% else %}<span class="tag err" title="{{ n.error or '' }}">{{ n.status.value }}</span>{% endif %}</td></tr>
+      {% else %}<tr><td class="muted">Nema obaveštenja.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Istorija</h2>
+    <table><tbody>
+      {% for a in audit %}
+      <tr><td class="small">{{ a.at.strftime('%d.%m. %H:%M') }}</td><td>{{ a.actor }}</td>
+          <td>{{ a.action }}</td><td class="small">{{ a.detail or '' }}</td></tr>
+      {% else %}<tr><td class="muted">Nema zapisa.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

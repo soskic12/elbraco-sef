@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Poslovne jedinice{% endblock %}
+{% block content %}
+<h1>Poslovne jedinice</h1>
+
+<div class="card">
+  <h2 style="margin-top:0">Nova / izmena</h2>
+  <form method="post" action="/pj">
+    <input type="hidden" name="unit_id" id="unit_id" value="0">
+    <div class="row">
+      <div class="field"><label>Šifra *</label><input type="text" name="code" id="code" required size="10"></div>
+      <div class="field"><label>Naziv *</label><input type="text" name="name" id="name" required size="30"></div>
+      <div class="field"><label>Tip</label>
+        <select name="kind" id="kind">
+          {% for k in kinds %}<option value="{{ k.value }}">{{ k.value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Šifra u ERP-u</label><input type="text" name="erp_code" id="erp_code" size="10"></div>
+      <div class="field"><label>Adresa</label><input type="text" name="address" id="address" size="28"></div>
+      <div class="field"><label>Mesto</label><input type="text" name="city" id="city" size="14"></div>
+      <div class="field"><label>PTT</label><input type="text" name="postal_code" id="postal_code" size="6"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>E-mail adrese (zarezom odvojene)</label>
+        <input type="text" name="emails" id="emails" style="width:100%"></div>
+      <div class="field" style="flex:1"><label>Telefoni za Viber/SMS (zarezom odvojeni)</label>
+        <input type="text" name="phones" id="phones" style="width:100%"></div>
+      <label class="small"><input type="checkbox" name="active" id="active" value="1" checked> aktivna</label>
+      <label class="small" title="Da li automatsko razvrstavanje sme da je izabere">
+        <input type="checkbox" name="routable" id="routable" value="1" checked> odredište isporuke</label>
+      <button type="submit">Sačuvaj</button>
+      <button type="button" class="ghost" onclick="resetForm()">Nova</button>
+    </div>
+  </form>
+</div>
+
+<table>
+  <thead><tr>
+    <th>Šifra</th><th>Naziv</th><th>Tip</th><th>ERP</th><th>Adresa</th><th>PTT</th>
+    <th>E-mail</th><th>Telefoni</th><th class="num">Dokumenata</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for u in units %}
+    <tr>
+      <td><b>{{ u.code }}</b></td>
+      <td>{{ u.name }}
+        {% if not u.active %}<span class="tag warn">neaktivna</span>{% endif %}
+        {% if u.active and not u.routable %}<span class="tag">van automatike</span>{% endif %}</td>
+      <td>{{ u.kind.value }}</td>
+      <td>{{ u.erp_code or '—' }}</td>
+      <td class="small">{{ u.address or '' }} {{ u.city or '' }}</td>
+      <td class="small">{{ u.postal_code or '—' }}</td>
+      <td class="small">{{ u.emails or '—' }}</td>
+      <td class="small">{{ u.phones or '—' }}</td>
+      <td class="num"><a href="/?pj={{ u.id }}">{{ counts.get(u.id, 0) }}</a></td>
+      <td><button class="ghost small" type="button" onclick='popuni({{ {
+            "id": u.id, "code": u.code, "name": u.name, "kind": u.kind.value,
+            "erp_code": u.erp_code or "", "address": u.address or "", "city": u.city or "",
+            "postal_code": u.postal_code or "", "emails": u.emails or "",
+            "phones": u.phones or "", "active": u.active, "routable": u.routable } | tojson }})'>izmeni</button></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="10" class="muted" style="padding:20px;text-align:center">
+      Nema unetih poslovnih jedinica. Dodaj maloprodaje i magacine da bi razvrstavanje radilo.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function popuni(u) {
+  for (const k of ['code','name','kind','erp_code','address','city','postal_code','emails','phones'])
+    document.getElementById(k).value = u[k] ?? '';
+  document.getElementById('unit_id').value = u.id;
+  document.getElementById('active').checked = u.active;
+  document.getElementById('routable').checked = u.routable;
+  window.scrollTo(0, 0);
+}
+function resetForm() {
+  for (const k of ['code','name','erp_code','address','city','postal_code','emails','phones'])
+    document.getElementById(k).value = '';
+  document.getElementById('unit_id').value = 0;
+  document.getElementById('active').checked = true;
+  document.getElementById('routable').checked = true;
+}
+</script>
+{% endblock %}
