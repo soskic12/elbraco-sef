@@ -358,15 +358,18 @@ def assign_unit(
     user: Operater,
     business_unit_id: Annotated[int, Form()],
     napravi_pravilo: Annotated[str, Form()] = "",
-    polje: Annotated[str, Form()] = MatchField.DELIVERY_ADDRESS.value,
+    polje: Annotated[str, Form()] = "",
     povratak: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
+    # Prazno polje znaci "izaberi sam": uzima se najuzi podatak koji taj dokument
+    # ima. Ranije je ovde stajala adresa isporuke kao podrazumevana, pa se kod
+    # dokumenata bez adrese pravilo nije ni pravilo.
     rezultat = Workflow().assign_unit(
         doc_id,
         business_unit_id,
         actor=user.login,
         remember=bool(napravi_pravilo),
-        field_name=polje,
+        field_name=polje or None,
     )
     return _back(povratak or f"/dokument/{doc_id}", rezultat.message, rezultat.ok)
 

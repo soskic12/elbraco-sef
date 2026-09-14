@@ -293,7 +293,7 @@ class Workflow:
                 comment=f"napravio {actor} sa dokumenta {doc.document_number}",
             )
         )
-        return f"Zapamćeno pravilo po polju {field.value}."
+        return f"Zapamćeno pravilo: {field.value} = „{str(value)[:60]}”."
 
     def archive(self, doc_ids: list[int], actor: str, reason: str = "") -> ActionResult:
         with session_scope() as session:

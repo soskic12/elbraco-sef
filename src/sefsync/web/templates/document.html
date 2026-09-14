@@ -76,8 +76,9 @@
       </select></div>
     <div class="field"><label>Zapamti pravilo po polju</label>
       <select name="polje">
+        <option value="" selected>— automatski —</option>
         {% for f in match_fields %}
-          <option value="{{ f.value }}" {% if f.value == 'delivery_address' %}selected{% endif %}>{{ f.value }}</option>
+          <option value="{{ f.value }}">{{ f.value }}</option>
         {% endfor %}
       </select></div>
     <label class="small"><input type="checkbox" name="napravi_pravilo" value="1" checked> napravi pravilo</label>

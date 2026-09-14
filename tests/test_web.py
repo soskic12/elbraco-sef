@@ -394,3 +394,54 @@ def test_neispravna_strana_ne_ruši_prikaz(client, podaci):
 
     assert client.get("/red?strana=").status_code == 200
     assert client.get("/red?strana=xyz").status_code == 200
+
+
+def test_dodela_iz_reda_pamti_pravilo_i_bez_adrese_isporuke(client, podaci, db):
+    """Dokument bez adrese isporuke mora da nauči po nečemu drugom.
+
+    Red šalje samo „napravi_pravilo“, bez izbora polja — ranije je ruta tu
+    podrazumevala adresu isporuke, pa se kod takvih dokumenata pravilo nije
+    pravilo, a operater je to lako previđao.
+    """
+    from sqlalchemy import select as _select
+
+    from sefsync.models import MatchField as MF
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["nerazvrstan"])
+        doc.delivery_address = None
+        doc.delivery_name = None
+        doc.supplier_vat = "111222333"
+
+    prijavi(client, OPERATER)
+    odgovor = client.post(
+        f"/dokument/{podaci['nerazvrstan']}/pj",
+        data={"business_unit_id": podaci["unit"], "napravi_pravilo": "1"},
+        follow_redirects=False,
+    )
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        pravilo = session.scalar(_select(RoutingRule))
+        assert pravilo is not None, "pravilo nije zapamćeno"
+        assert pravilo.field is MF.SUPPLIER_VAT
+        assert pravilo.pattern == "111222333"
+
+
+def test_izricito_polje_i_dalje_ima_prednost(client, podaci, db):
+    from sqlalchemy import select as _select
+
+    from sefsync.models import MatchField as MF
+
+    prijavi(client, OPERATER)
+    client.post(
+        f"/dokument/{podaci['nerazvrstan']}/pj",
+        data={"business_unit_id": podaci["unit"], "napravi_pravilo": "1",
+              "polje": "supplier_name"},
+        follow_redirects=False,
+    )
+
+    with db.session_scope() as session:
+        pravilo = session.scalar(_select(RoutingRule))
+        assert pravilo.field is MF.SUPPLIER_NAME
+        assert pravilo.pattern == "FORMA PLUS"
