@@ -113,13 +113,24 @@ Uradi 'upisujem web.config sa pravilom prosledjivanja' {
     Set-Content -Path (Join-Path $Putanja 'web.config') -Value $webConfig -Encoding utf8
 }
 
+# Svoj app pool, ne tudji: DefaultAppPool na ovom serveru ne postoji, a i da
+# postoji, ne treba deliti pool sa drugim sajtovima - restart jednog obara sve.
+Uradi "pravim app pool $Sajt" {
+    if (-not (Test-Path "IIS:\AppPools\$Sajt")) {
+        New-WebAppPool -Name $Sajt | Out-Null
+    }
+    # Sajt je samo posrednik, nema .NET koda
+    Set-ItemProperty "IIS:\AppPools\$Sajt" -Name managedRuntimeVersion -Value ''
+    Set-ItemProperty "IIS:\AppPools\$Sajt" -Name startMode -Value 'AlwaysRunning'
+}
+
 Uradi "registrujem sajt na portu 80 za $Domen" {
     if (-not (Get-Website -Name $Sajt -ErrorAction SilentlyContinue)) {
-        New-Website -Name $Sajt -PhysicalPath $Putanja -Port 80 -HostHeader $Domen | Out-Null
+        New-Website -Name $Sajt -PhysicalPath $Putanja -Port 80 -HostHeader $Domen `
+            -ApplicationPool $Sajt | Out-Null
+    } else {
+        Set-ItemProperty "IIS:\Sites\$Sajt" -Name applicationPool -Value $Sajt
     }
-    Set-ItemProperty "IIS:\Sites\$Sajt" -Name applicationPool -Value 'DefaultAppPool'
-    # Sajt je samo posrednik, nema .NET koda
-    Set-ItemProperty 'IIS:\AppPools\DefaultAppPool' -Name managedRuntimeVersion -Value ''
 }
 
 if ($Sertifikat) {
