@@ -7,6 +7,8 @@ prosleđuje** poslovođi. Poslovođa potvrđuje da je roba stigla.
 
 Ništa ne ide poslovođi samo od sebe — prosleđivanje je potez operatera.
 
+Uputstvo za operatera je u [docs/UPUTSTVO-ZA-OPERATERA.md](docs/UPUTSTVO-ZA-OPERATERA.md).
+
 ## Ko šta vidi
 
 Prijava ide **istim nalogom kojim se ulazi u ERP** — lozinku proverava SQL server tako što
