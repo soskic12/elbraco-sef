@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     # Prva sinhronizacija ide od ovog datuma (YYYY-MM-DD); prazno = 30 dana unazad
     sync_start_date: str | None = None
 
+    # Preuzimanje UBL-a obara status dokumenta iz "Nova" u "Vidjena" na SEF-u -
+    # izmereno: dogadjaj na SEF-u stigne 70-90 ms posle naseg poziva. Dok ljudi
+    # jos rade po starom (gledaju sta je novo na portalu), to im remeti posao.
+    # Sa ovim ukljucenim, dokumenti u statusu "Nova" se NE preuzimaju: u redu se
+    # vide iz pregleda (dobavljac, iznos, datum), a UBL i stavke se povlace tek
+    # kad ih neko otvori na portalu ili kad se prekidac ugasi.
+    sef_preserve_new: bool = True
+
     # --- Politika prihvatanja na SEF-u ---
     # off       = nikad automatski (operater klikce u dashboardu)
     # routed    = automatski prihvati samo dokumente koji su uspesno razvrstani na PJ

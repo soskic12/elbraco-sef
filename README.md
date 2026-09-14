@@ -76,6 +76,13 @@ Cilj je da se posao operatera s vremenom svede na potvrđivanje, a da ručnog ra
 bude sve manje. Faza 2 se kači na isti klik „prosledi“: uz obaveštenje ide i ulazna kalkulacija
 u ERP-u, koju poslovođa samo zaknjiži.
 
+**Preuzimanje UBL-a menja status na SEF-u.** Izmereno na produkciji: „Seen“ događaj stigne
+70–90 ms posle našeg poziva na `/purchase-invoice/xml`. Dok ljudi još prate šta je novo na
+portalu, to im remeti posao — zato `SEF_PRESERVE_NEW=true` preskače dokumente u statusu
+„Nova“. Oni se u redu vide iz pregleda (dobavljač, iznos, datum) i mogu se razvrstati po
+pravilu za dobavljača, a stavke i adresa isporuke stižu čim ih neko otvori na portalu.
+Kad ceo tok pređe u aplikaciju, prekidač se gasi.
+
 Sinhronizacija je **idempotentna** — dokument se prepoznaje po `InvoiceId` sa SEF-a, pa ponovno
 prolaženje kroz isti period samo osvežava statuse. Prozor se preklapa `SYNC_OVERLAP_DAYS`
 dana unazad da bi se pohvatale zakasnele izmene.
@@ -102,6 +109,7 @@ copy .env.example .env                                      # pa popuni vrednost
 | `COMPANY_VAT` | PIB naše firme (koristi se za proveru naloga) |
 | `DB_URL` | baza aplikacije; podrazumevano SQLite u `data/`, u produkciji MS SQL |
 | `ERP_DB_URL` / `ERP_SECRETS_FILE` | ERP baza: ili direktan URL, ili putanja do postojećeg user-secrets skladišta |
+| `SEF_PRESERVE_NEW` | ne preuzimaj dokumente u statusu „Nova“ (da im se ne obori status) |
 | `AUTO_ACCEPT` | `off` / `routed` / `all` — automatsko prihvatanje na SEF-u |
 | `SMTP_*` / `SMTP_SOURCE_FILE` | slanje e-maila: ili ovde, ili iz `web.config`-a projekta koji već šalje (`Mail__*`) |
 | `NOTIFY_BCC` | kopija svih obaveštenja; ova adresa dobija i nerazvrstane dokumente |
@@ -327,7 +335,7 @@ src/sefsync/
   web/               panel: prijava (SQL nalog), red operatera, ekran poslovođe
   services/workflow.py prosleđivanje, potvrda prijema, arhiva — i kuka za fazu 2
   erp/               konekcija na ERP (+ čitanje kredencijala iz user-secrets) i nacrt kalkulacije
-tests/               122 testa (parser, pravila, klijent, tok, web, kalkulacija)
+tests/               141 test (parser, pravila, klijent, tok, web, kalkulacija)
 docs/                zvanična SEF API dokumentacija
 ```
 

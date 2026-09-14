@@ -68,7 +68,11 @@
           <div class="small">{{ d.supplier_name or '-' }}</div>
         </td>
         <td class="small">{{ d.document_type | tip }}</td>
-        <td class="small">{{ d.delivery_address or d.delivery_name or '—' }}</td>
+        <td class="small">
+          {% if d.ubl_pending %}
+            <span class="tag" title="UBL nije preuzet da se ne obori status 'Nova' na SEF-u">nije otvarana</span>
+          {% else %}{{ d.delivery_address or d.delivery_name or '—' }}{% endif %}
+        </td>
         <td>
           <select name="business_unit_id" form="pj{{ d.id }}" style="width:150px">
             <option value="">— izaberi —</option>

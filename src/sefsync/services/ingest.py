@@ -258,6 +258,20 @@ class IngestService:
             session.flush()
 
             need_ubl = force_refetch or is_new or not doc.ubl_path or not doc.lines
+            # Preuzimanje UBL-a obara status "Nova" u "Vidjena" na SEF-u (mereno:
+            # dogadjaj stigne 70-90 ms posle naseg poziva). Dok ljudi jos prate
+            # sta je novo na portalu, to im remeti posao - pa se takav dokument
+            # samo upisuje iz pregleda i ceka. UBL se povlaci kad status prestane
+            # da bude "Nova", ili kad se prekidac ugasi.
+            if (
+                need_ubl
+                and not force_refetch
+                and self.settings.sef_preserve_new
+                and doc.sef_status is SefStatus.NEW
+            ):
+                need_ubl = False
+                log.debug("Preskacem UBL za %s - status je Nova", doc.sef_invoice_id)
+
             if need_ubl:
                 self._fetch_and_parse(session, doc)
 

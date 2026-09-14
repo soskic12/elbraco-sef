@@ -27,7 +27,7 @@ OVERVIEW = [
         "DocumentNumber": "2026-114/25",
         "DocumentType": "Invoice",
         "CirInvoiceId": None,
-        "Status": "New",
+        "Status": "Seen",
         "SupplierName": "DOBAVLJAČ TRGOVINA DOO",
         "SupplierRegistrationNumber": "20123456",
         "SupplierVatRegistrationNumber": "100200300",
@@ -91,7 +91,7 @@ def test_sync_upisuje_dokument_sa_stavkama(db, faktura_xml):
         doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
         assert doc.document_number == "2026-114/25"
         assert doc.document_type is DocumentType.INVOICE
-        assert doc.sef_status is SefStatus.NEW
+        assert doc.sef_status is SefStatus.SEEN
         assert doc.supplier_vat == "100200300"
         assert doc.amount == 14400.0
         assert doc.delivery_address == "Војводе Мишића 12, 26000, Панчево"
@@ -174,3 +174,96 @@ def test_automatsko_obavestavanje_kad_se_izricito_ukljuci(db, faktura_xml, monke
     service.sync("2026-09-01", "2026-09-10")
 
     assert len(notifier.calls) == 1
+
+
+# --------------------------------------------------------------------------- #
+# cuvanje statusa "Nova" na SEF-u
+# --------------------------------------------------------------------------- #
+
+NOVA = [{**OVERVIEW[0], "Status": "New"}]
+
+
+def build_service_sa(records, faktura_xml, notifier=None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/purchase-invoice/overview"):
+            return httpx.Response(200, json=records)
+        if request.url.path.endswith("/purchase-invoice/xml"):
+            return httpx.Response(200, content=faktura_xml)
+        return httpx.Response(404, text="nepoznat endpoint")
+
+    settings = get_settings()
+    http = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.base_url)
+    return IngestService(
+        client=SefClient(settings, client=http),
+        settings=settings,
+        notifier=notifier or FakeNotifier(),
+        acceptor=FakeAcceptor(),
+    )
+
+
+def test_dokument_u_statusu_nova_se_ne_preuzima(db, faktura_xml, monkeypatch):
+    """Preuzimanje UBL-a obara "Nova" u "Vidjena" na SEF-u i remeti rad na portalu."""
+    service = build_service_sa(NOVA, faktura_xml)
+    monkeypatch.setattr(service.settings, "sef_preserve_new", True)
+
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.ubl_path is None
+        assert doc.lines == []
+        assert doc.ubl_pending is True
+        # ono sto stoji u pregledu ipak je upisano
+        assert doc.supplier_name == "DOBAVLJAČ TRGOVINA DOO"
+        assert doc.amount == 14400.0
+
+
+def test_sa_ugasenim_prekidacem_se_preuzima_i_nova(db, faktura_xml, monkeypatch):
+    service = build_service_sa(NOVA, faktura_xml)
+    monkeypatch.setattr(service.settings, "sef_preserve_new", False)
+
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.ubl_path is not None
+        assert len(doc.lines) == 2
+        assert doc.ubl_pending is False
+
+
+def test_ubl_se_povlaci_cim_status_prestane_da_bude_nova(db, faktura_xml, monkeypatch):
+    """Kad dokument neko otvori na portalu, sledece preuzimanje povuce i ostalo."""
+    service = build_service_sa(NOVA, faktura_xml)
+    monkeypatch.setattr(service.settings, "sef_preserve_new", True)
+    service.sync("2026-09-01", "2026-09-10")
+
+    posle = build_service_sa(OVERVIEW, faktura_xml)          # isti dokument, sada "Seen"
+    monkeypatch.setattr(posle.settings, "sef_preserve_new", True)
+    posle.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.sef_status is SefStatus.SEEN
+        assert len(doc.lines) == 2
+        assert doc.delivery_address is not None
+
+
+def test_nova_se_i_dalje_razvrstava_po_dobavljacu(db, faktura_xml, monkeypatch):
+    """Bez UBL-a nema adrese, ali PIB iz pregleda je dovoljan za pravilo po dobavljacu."""
+    with db.session_scope() as session:
+        office = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(office)
+        session.flush()
+        session.add(
+            RoutingRule(priority=60, field=MatchField.SUPPLIER_VAT, op=MatchOp.EQUALS,
+                        pattern="100200300", business_unit_id=office.id)
+        )
+        office_id = office.id
+
+    service = build_service_sa(NOVA, faktura_xml)
+    monkeypatch.setattr(service.settings, "sef_preserve_new", True)
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.business_unit_id == office_id

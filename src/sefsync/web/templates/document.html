@@ -12,6 +12,14 @@
 </h1>
 
 {% if doc.error_message %}<div class="msg err">{{ doc.error_message }}</div>{% endif %}
+{% if doc.ubl_pending %}
+  <div class="msg" style="background:#fdf3e3;border-color:#f4dcae;color:var(--warn)">
+    Dokument je na SEF-u još u statusu <b>Nova</b>, pa UBL namerno nije preuzet — preuzimanje
+    bi ga oborilo u „Viđena“ i poremetilo rad na portalu. Zato nema stavki ni adrese isporuke.
+    Čim ga neko otvori na portalu, sledeće preuzimanje povuče i ostalo.
+    {% if user.is_operator %}Ako ti treba odmah, klikni „Osveži sa SEF-a“ — time se status menja.{% endif %}
+  </div>
+{% endif %}
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
   <div class="card">

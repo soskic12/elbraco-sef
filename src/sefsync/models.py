@@ -307,6 +307,16 @@ class Document(Base):
         return not self.sef_decided or self.forwarded_at is None
 
     @property
+    def ubl_pending(self) -> bool:
+        """UBL namerno nije preuzet, da se ne obori status "Nova" na SEF-u.
+
+        Takav dokument se u redu vidi iz pregleda (dobavljac, iznos, datum),
+        ali nema stavke ni adresu isporuke dok ga neko ne otvori na portalu
+        ili dok se SEF_PRESERVE_NEW ne ugasi.
+        """
+        return self.ubl_path is None and self.sef_status is SefStatus.NEW
+
+    @property
     def waiting_for_unit(self) -> bool:
         """Prosledjen poslovnoj jedinici, ceka potvrdu da je roba stigla."""
         return self.forwarded_at is not None and self.received_at is None
