@@ -179,7 +179,7 @@ jedinicu bira i tabelu.
 | `BROJ` | brojač po magacinu, 5 cifara (`00001`…) |
 | `STAVKE` | `'Da'` kad ima artikala; `''` za 088 |
 | `MENJA_CENU` | u `MKALKUL` uvek `'Da'` |
-| `PROKNJIZENO` | `2` = zaknjiženo (4.211), `1` = čeka (439), `0` (2) |
+| `PROKNJIZENO` | `0` = nije zaknjiženo, `1` = zaknjiženo, `2` = zaključano (admin) |
 
 ### Stavke
 
@@ -262,7 +262,7 @@ Odgovori koje su dali podaci, bez pitanja:
 
 | Polje | Vrednost |
 |---|---|
-| `PROKNJIZENO` | `1` = čeka poslovođu (potvrđeno na nezaknjiženoj kalkulaciji) |
+| `PROKNJIZENO` | **`0` = nije zaknjiženo**, `1` = zaknjiženo, `2` = administrator zaključao stare |
 | `RBR` | `clarion_dan(5) + vreme u stotinkama(7) + 4 cifre + korisničko ime(10)` |
 | `IZVOREPP` | `'Elektronske fakture'` — 4.612 od 4.652 |
 | `LASTUSER` | `1` — 4.631 od 4.652 |
@@ -351,3 +351,55 @@ i SAT-TRAKT.
 3. Punjenje `item_mapping` iz istorije (2.652 para)
 4. Skraćeni brojevi računa — 504 dokumenta bez para
 5. Odgovori na preostala pitanja: `BROJ` pri istovremenom radu, ime pod kojim app piše
+
+
+---
+
+## Probni upis u ELBSX_2026 — 15.09.2026
+
+Kalkulacija `MKALKUL 005/U/00450` upisana iz dokumenta #7714 (3 stavke Gorenje,
+dobavljač 00142, račun 3184VP-2026).
+
+**Svi iznosi se poklapaju sa onim što ERP sam prikaže:**
+
+| | App | ERP ekran |
+|---|---:|---:|
+| Za naplatu | 155.584,61 | 155.584,61 |
+| Rabat | 15.975,16 | 15.975,16 |
+| Nabavna vrednost | 129.653,84 | 129.653,84 |
+| PDV 20 % | 25.930,77 | 25.930,77 |
+| RUC iznos | 52.012,83 | 52.012,83 |
+| Prodajna vrednost | 218.000,00 | 218.000,00 |
+
+### Greška uhvaćena na ekranu: PROKNJIZENO
+
+App je prvi put upisala `PROKNJIZENO=1`, što je ERP prikazao kao **zaknjiženu**
+kalkulaciju. To je ozbiljna greška: knjiženje u ERP-u ne menja samo kalkulaciju
+nego nastavlja u **glavnu knjigu** i ostale evidencije. Kalkulacija označena kao
+zaknjižena izgleda gotovo, a ništa se nije desilo — roba nije zadužena i
+poslovođa nema šta da klikne.
+
+Značenje (potvrdio Bane):
+
+| Vrednost | Značenje |
+|---|---|
+| **`0`** | **nije zaknjiženo — jedino što app sme da upiše** |
+| `1` | zaknjiženo u ERP-u |
+| `2` | administrator zaključao stare kalkulacije |
+
+Zaštita u kodu: imenovane konstante, `upisi()` odbija svaki nacrt koji nije
+`PROKNJIZENO_NIJE`, dva testa to zaključavaju.
+
+### Prava na bazi
+
+Nalog `elbraco_dev_ro` je bio read-only (zato je prvi upis odbijen). Pravo
+`INSERT/UPDATE/DELETE` dodeljeno **samo na tabele kalkulacija i samo u
+`ELBSX_2026`**. `ARTIKLI`, `ARTPROD` i `DARTIKLI` namerno izostavljeni —
+otvaranje šifara još nije razrađeno. Produkcija ostaje read-only.
+
+### Pravilo rada
+
+Nijedno pravilo razvrstavanja i nijedna izmena generatora ne ide u rad dok se ne
+izmeri na svim dokumentima sa poznatim odgovorom iz ERP-a. Ovo je 15.09. uhvatilo
+tri greške koje bi inače prošle: pravilo #47, veličinu slova u rudarenju, i
+prilog u `any_text`.

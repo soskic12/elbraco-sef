@@ -38,6 +38,18 @@ IZVOR = "Elektronske fakture"
 # Izmereno na 4.652 kalkulacije: stopa -> sintetski konto poreza.
 SINTPOR_PO_STOPI = {20.0: "270", 10.0: "271", 0.0: "272"}
 
+# PROKNJIZENO: aplikacija SME da upise samo "nije zaknjizeno".
+#
+# Knjizenje se radi iskljucivo u ERP-u, dugmetom "KNJIZENJE". Taj postupak ne
+# menja samo kalkulaciju - on nastavlja u glavnu knjigu i ostale evidencije.
+# Ako aplikacija upise kalkulaciju kao vec zaknjizenu, ona izgleda gotovo a
+# nista od toga se nije desilo: roba nije zaduzena, glavna knjiga ne zna za nju,
+# a poslovodja nema sta da klikne. Zato je vrednost zakucana i proverava se
+# pri upisu.
+PROKNJIZENO_NIJE = 0    # otvorena kalkulacija, ceka poslovodju
+PROKNJIZENO_JESTE = 1   # zaknjizeno u ERP-u - NIKAD iz aplikacije
+PROKNJIZENO_ZAKLJUCANO = 2  # administrator zakljucao stare kalkulacije
+
 
 def clarion_dan(d: dt.date) -> int:
     return (d - CLARION_NULA).days
@@ -341,7 +353,7 @@ def pripremi(
             "OBRACUN_MALO": "",
             "MODEL": 0,
             "VALUTA": rok,
-            "PROKNJIZENO": 1,  # 1 = ceka poslovodju; 2 = zaknjizeno
+            "PROKNJIZENO": PROKNJIZENO_NIJE,
             "OZNAKA": "EUR",
             "TM": "000000",
             "IZVOREPP": IZVOR,
@@ -393,6 +405,16 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
     if not nacrt.spreman:
         prepreke = nacrt.problemi + [f"nemapirano: {x}" for x in nacrt.nemapirane]
         raise ValueError("Kalkulacija nije spremna: " + "; ".join(prepreke[:5]))
+
+    # Poslednja brana: knjizenje ide iskljucivo kroz ERP, jer povlaci glavnu
+    # knjigu i ostale evidencije. Kalkulacija koja stigne oznacena kao
+    # zaknjizena izgleda gotovo, a nista se nije desilo.
+    if nacrt.zaglavlje.get("PROKNJIZENO") != PROKNJIZENO_NIJE:
+        raise ValueError(
+            "Aplikacija ne sme da upise kalkulaciju kao zaknjizenu "
+            f"(PROKNJIZENO={nacrt.zaglavlje.get('PROKNJIZENO')!r}). "
+            "Knjizenje se radi u ERP-u."
+        )
 
     eng, baza = erp_engine_za_upis(produkcija)
     with eng.begin() as conn:

@@ -100,3 +100,41 @@ def test_csv_izvoz(db, tmp_path):
     content = open(path, encoding="utf-8-sig").read()
     assert "Kabl PPY 3x1.5" in content
     assert "magacin;02" in content
+
+
+def test_app_ne_sme_da_upise_zaknjizenu_kalkulaciju():
+    """Knjizenje ide iskljucivo kroz ERP - ono povlaci i glavnu knjigu.
+
+    Kalkulacija upisana kao vec zaknjizena izgleda gotovo, a nista se nije
+    desilo: roba nije zaduzena, glavna knjiga ne zna za nju, poslovodja nema
+    sta da klikne.
+    """
+    import pytest
+
+    from sefsync.erp.kalkulacija import (PROKNJIZENO_JESTE, PROKNJIZENO_NIJE,
+                                         PROKNJIZENO_ZAKLJUCANO, Nacrt, upisi)
+
+    nacrt = Nacrt(
+        document_id=1, tabela_zaglavlja="MKALKUL", tabela_stavki="MPRULK",
+        magacin="005", zaglavlje={"PROKNJIZENO": PROKNJIZENO_JESTE},
+        stavke=[{"ARTIKAL": "1"}],
+    )
+    with pytest.raises(ValueError, match="zaknjizenu"):
+        upisi(nacrt)
+
+    nacrt.zaglavlje["PROKNJIZENO"] = PROKNJIZENO_ZAKLJUCANO
+    with pytest.raises(ValueError, match="zaknjizenu"):
+        upisi(nacrt)
+
+    assert PROKNJIZENO_NIJE == 0
+
+
+def test_nacrt_podrazumevano_nije_zaknjizen():
+    from sefsync.erp import kalkulacija
+
+    izvor = (kalkulacija.__file__)
+    with open(izvor, encoding="utf-8") as f:
+        kod = f.read()
+    # vrednost se ne sme zakucavati brojem na mestu gradjenja zaglavlja
+    assert '"PROKNJIZENO": PROKNJIZENO_NIJE' in kod
+    assert '"PROKNJIZENO": 1' not in kod
