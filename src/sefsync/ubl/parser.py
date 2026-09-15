@@ -363,6 +363,11 @@ def pdf_tekst(prilozi: list["Attachment"], limit: int = 4000) -> str | None:
         log.debug("pypdf nije instaliran - PDF prilozi se ne citaju")
         return None
 
+    # pypdf za svaki neuredan PDF ispise upozorenje ("Multiple definitions in
+    # dictionary..."). Fakture dobavljaca su pune takvih, a nama je bitan samo
+    # tekst - inace bi log na serveru bio neupotrebljiv.
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
+
     delovi: list[str] = []
     for prilog in prilozi:
         if not prilog.content.startswith(b"%PDF"):

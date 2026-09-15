@@ -65,7 +65,10 @@
         <td><input type="checkbox" name="dokumenti" value="{{ d.id }}" form="grupno"></td>
         <td>
           <a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
-          <div class="small">{{ d.supplier_name or '-' }}</div>
+          <div class="small">{{ d.supplier_name or '-' }}
+            {% if d.bez_identifikacije %}
+              <span class="tag err" title="Faktura nema ni PIB ni matični broj — ne može se proslediti">neispravna</span>
+            {% endif %}</div>
         </td>
         <td class="small">{{ d.document_type | tip }}</td>
         <td class="small">

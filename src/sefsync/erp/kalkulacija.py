@@ -112,8 +112,26 @@ class Nacrt:
 # --------------------------------------------------------------------------- #
 
 
-def _analitika_dobavljaca(conn: Connection, maticni: str | None, pib: str | None) -> str | None:
-    """NAZIVI.ANALITIKA - veza je maticni broj, PIB u toj tabeli nije popunjen."""
+def _analitika_dobavljaca(
+    conn: Connection,
+    maticni: str | None,
+    pib: str | None,
+    racun: str | None = None,
+) -> str | None:
+    """NAZIVI.ANALITIKA - sifra dobavljaca u ERP-u.
+
+    Redosled je izmeren na 198 stvarnih dobavljaca, ne pretpostavljen:
+
+    1. maticni broj (`MATBROJ`) - tacan kad ga ima, ali popunjen je na samo
+       3.351 od 44.949 redova, a kod javnih preduzeca SEF ionako salje drugi
+       identifikator (Srbijagas: 86132 umesto 20084600). Sam nalazi 66%.
+    2. PIB - i to u koloni `ZIRORACUN`, koja uprkos imenu drzi PIB, ne racun
+       (Banca Intesa: ZIRORACUN = 100001159). Popunjena je na 37.411 redova i
+       podize pokrivenost sa 66% na 97%.
+    3. `BPG` - popunjen na svega 22 reda, pa je poslednja nada.
+
+    Preostalih 3% su dobavljaci koji stvarno jos nisu otvoreni u sifarniku.
+    """
     if maticni:
         red = conn.execute(
             text("SELECT TOP 1 RTRIM(ANALITIKA) a FROM dbo.NAZIVI WHERE RTRIM(MATBROJ)=:m"),
@@ -121,9 +139,13 @@ def _analitika_dobavljaca(conn: Connection, maticni: str | None, pib: str | None
         ).first()
         if red:
             return red.a
+
     if pib:
         red = conn.execute(
-            text("SELECT TOP 1 RTRIM(ANALITIKA) a FROM dbo.NAZIVI WHERE RTRIM(ISNULL(BPG,''))=:p"),
+            text(
+                "SELECT TOP 1 RTRIM(ANALITIKA) a FROM dbo.NAZIVI "
+                "WHERE RTRIM(ISNULL(ZIRORACUN,''))=:p OR RTRIM(ISNULL(BPG,''))=:p"
+            ),
             {"p": pib.strip()},
         ).first()
         if red:
@@ -241,7 +263,9 @@ def pripremi(
 
         nacrt = Nacrt(document_id, tabela_z, tabela_s, magacin, {})
 
-        dobavljac = _analitika_dobavljaca(conn, doc.supplier_reg_no, doc.supplier_vat)
+        dobavljac = _analitika_dobavljaca(
+            conn, doc.supplier_reg_no, doc.supplier_vat, doc.payment_account
+        )
         if dobavljac is None:
             nacrt.problemi.append(
                 f"Dobavljač {doc.supplier_name} (MB {doc.supplier_reg_no}) ne postoji u NAZIVI."

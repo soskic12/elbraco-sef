@@ -403,3 +403,55 @@ Nijedno pravilo razvrstavanja i nijedna izmena generatora ne ide u rad dok se ne
 izmeri na svim dokumentima sa poznatim odgovorom iz ERP-a. Ovo je 15.09. uhvatilo
 tri greške koje bi inače prošle: pravilo #47, veličinu slova u rudarenju, i
 prilog u `any_text`.
+
+
+---
+
+## Mapiranje artikala napunjeno iz istorije — 15.09.2026
+
+`services/mapiranje.py` izvodi veze iz dva nezavisna izvora i upisuje samo ono
+u šta se može verovati.
+
+| | |
+|---|---:|
+| Parova ukupno | 3.745 |
+| Iz barkoda | 2.129 |
+| Iz zaknjiženih kalkulacija | 2.288 |
+| Oba izvora se slažu | **1.759** |
+| Oba se NE slažu | 6 |
+| Kolebljivih (odbačeno) | 45 |
+| **Upisano kao pouzdano** | **2.110** |
+
+Za operatera ostaje 587: 536 viđenih samo jednom, 45 kolebljivih, 6 nesaglasnih.
+Onih 6 nesaglasnih vredi pogledati posebno — to su mesta gde barkod vodi na jedan
+artikal a čovek je zaknjižio drugi, dakle verovatna greška u podacima.
+
+Efekat: od 357 stavki na 120 dokumenata, **327 se rešava iz mapiranja**, 30 preko
+barkoda.
+
+## Dobavljač u ERP-u: ključ je PIB, a stoji u koloni ZIRORACUN
+
+Traženje po matičnom broju nalazi samo 66 % dobavljača:
+
+- `NAZIVI.MATBROJ` je popunjen na 3.351 od 44.949 redova
+- kod javnih preduzeća SEF šalje drugi identifikator (Srbijagas: `86132`
+  umesto `20084600`)
+
+Kolona **`ZIRORACUN` uprkos imenu sadrži PIB** (Banca Intesa: `100001159`),
+popunjena je na 37.411 redova i diže pokrivenost na **97 %**. Preostalih 3 % su
+dobavljači koji stvarno još nisu otvoreni u šifarniku.
+
+Uz to je dodato `Document.payment_account` — stvarni žiro račun sa fakture, koji
+kalkulaciji ionako treba.
+
+## Faktura bez PIB-a i matičnog broja je neispravna
+
+Pravilo (Bane, 15.09.): takav dokument **ne sme dalje od operatera** i mora biti
+označen. Bez oba identifikatora dobavljač se ne može prepoznati ni u šifarniku,
+ni u mapiranju artikala, ni u poreskoj evidenciji.
+
+Ugrađeno: `Document.bez_identifikacije`, `Workflow.forward()` odbija takav
+dokument, crvena oznaka u redu i objašnjenje na strani dokumenta, test.
+
+U dosadašnjih 7.727 dokumenata nema nijednog takvog — pravilo je postavljeno
+unapred.

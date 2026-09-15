@@ -12,6 +12,14 @@
 </h1>
 
 {% if doc.error_message %}<div class="msg err">{{ doc.error_message }}</div>{% endif %}
+{% if doc.bez_identifikacije %}
+  <div class="msg err">
+    <b>Faktura nije ispravna:</b> nema ni PIB ni matični broj dobavljača.
+    Bez toga se dobavljač ne može prepoznati ni u šifarniku ni u poreskoj evidenciji,
+    pa dokument <b>ne može da se prosledi</b> poslovnoj jedinici.
+    Reši sa dobavljačem ili odbij na SEF-u uz obrazloženje.
+  </div>
+{% endif %}
 {% if doc.ubl_pending %}
   <div class="msg" style="background:#fdf3e3;border-color:#f4dcae;color:var(--warn)">
     Dokument je na SEF-u još u statusu <b>Nova</b>, pa UBL namerno nije preuzet — preuzimanje

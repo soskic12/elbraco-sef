@@ -263,6 +263,11 @@ class Document(Base):
     contract_reference: Mapped[str | None] = mapped_column(String(200), default=None)
     # Neki dobavljaci ovde upisuju objekat (KIM-TEC: "Elbraco - Sombor").
     additional_reference: Mapped[str | None] = mapped_column(String(500), default=None)
+    # Ziro racun dobavljaca. Kod javnih preduzeca SEF salje identifikator koji
+    # nije maticni broj (Srbijagas: 86132 umesto 20084600), pa je racun jedini
+    # pouzdan nacin da se dobavljac nadje u NAZIVI - popunjen je na 37.411 od
+    # 44.949 redova, naspram 3.351 sa maticnim brojem.
+    payment_account: Mapped[str | None] = mapped_column(String(64), default=None)
     # Tekst PDF priloga - CANDY objekat upisuje samo tamo ("Poslovnica B000067561").
     attachment_text: Mapped[str | None] = mapped_column(Text, default=None)
     note: Mapped[str | None] = mapped_column(Text, default=None)
@@ -311,6 +316,17 @@ class Document(Base):
         if self.archived:
             return False
         return not self.sef_decided or self.forwarded_at is None
+
+    @property
+    def bez_identifikacije(self) -> bool:
+        """Faktura bez PIB-a i bez maticnog broja nije ispravna.
+
+        Bez oba se dobavljac ne moze pouzdano prepoznati - ni u nasem sifarniku
+        (NAZIVI), ni u mapiranju artikala, ni u poreskoj evidenciji. Takav
+        dokument ne sme dalje od operatera: on ga resava sa dobavljacem ili
+        odbija na SEF-u, a ne prosledjuje poslovodji.
+        """
+        return not (self.supplier_vat or "").strip() and not (self.supplier_reg_no or "").strip()
 
     @property
     def ubl_pending(self) -> bool:
@@ -380,6 +396,25 @@ class ItemMapping(Base):
     unit_factor: Mapped[float] = mapped_column(Float, default=1.0)  # dobavljac salje kutije, ERP komade
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    # Odakle veza: "barkod", "kalkulacija", "oba" (dva nezavisna puta se slozila),
+    # "rucno". "oba" je najjaci - mereno 99,7% slaganja na 1.756 parova.
+    source: Mapped[str | None] = mapped_column(String(20), default=None)
+    # Iz koliko zaknjizenih kalkulacija je izvedeno. Jedan nalaz nije dokaz.
+    evidence: Mapped[int] = mapped_column(Integer, default=0)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    confirmed_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    # Isti brojaci kao kod pravila razvrstavanja: bez njih se ne vidi koje
+    # mapiranje je pogresno postavljeno, a dobavljaci umeju da recikliraju sifre.
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    misses: Mapped[int] = mapped_column(Integer, default=0)
+
+    @property
+    def pouzdano(self) -> bool:
+        """Sme li da se koristi bez ljudske potvrde."""
+        if self.confirmed_at is not None:
+            return True
+        return self.source == "oba" or (self.source == "kalkulacija" and self.evidence >= 2)
 
     __table_args__ = (Index("ix_item_map_lookup", "supplier_vat", "supplier_item_id"),)
 

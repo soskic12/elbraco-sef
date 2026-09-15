@@ -66,6 +66,7 @@ def podaci(db):
                                       price=50000.0, line_amount=100000.0, vat_percent=20.0))
         nerazvrstan = Document(
             sef_invoice_id=500200, document_number="FA-5539", supplier_name="FORMA PLUS",
+            supplier_vat="101717578", supplier_reg_no="17242792",
             amount=12000.0, sef_status=SefStatus.SEEN,
         )
         session.add_all([doc, nerazvrstan])

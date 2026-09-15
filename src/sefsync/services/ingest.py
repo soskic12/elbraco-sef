@@ -422,6 +422,7 @@ class IngestService:
         doc.contract_reference = shorten(ubl.contract_reference, 200)
         doc.additional_reference = shorten(" | ".join(ubl.additional_references), 500)
         doc.attachment_text = ubl.attachment_text
+        doc.payment_account = shorten(ubl.payment_account, 64)
         doc.note = ubl.note
 
         doc.lines.clear()

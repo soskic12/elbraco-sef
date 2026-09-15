@@ -45,6 +45,7 @@ def svet(db):
         session.flush()
         doc = Document(
             sef_invoice_id=900, document_number="1/26", supplier_name="EWE COMP",
+            supplier_vat="100042618", supplier_reg_no="17333127",
             amount=1000.0, sef_status=SefStatus.SEEN,
             business_unit_id=apatin.id, routing_source=RoutingSource.RULE,
             routing_rule_id=pravilo.id,
@@ -213,3 +214,32 @@ def test_bez_ijedne_provere_tacnost_nije_nula_nego_nepoznata(db, svet):
 
     assert podaci["tacnost"].pregledano == 0
     assert podaci["tacnost"].procenat is None
+
+
+def test_faktura_bez_piba_i_maticnog_ne_ide_dalje(db, svet):
+    """Bez oba identifikatora dobavljac se ne moze prepoznati - ni u sifarniku
+    NAZIVI, ni u mapiranju artikala, ni u poreskoj evidenciji. Takav dokument
+    staje kod operatera."""
+    with db.session_scope() as session:
+        loša = Document(
+            sef_invoice_id=901, document_number="X-1", supplier_name="Nepoznat",
+            amount=100.0, sef_status=SefStatus.SEEN,
+            business_unit_id=svet["apatin"],
+        )
+        session.add(loša)
+        session.flush()
+        loš_id = loša.id
+        assert loša.bez_identifikacije is True
+        # prazan string je isto sto i None
+        loša.supplier_vat = "  "
+        loša.supplier_reg_no = ""
+        assert loša.bez_identifikacije is True
+
+    ishod = tok().forward([loš_id], actor="NinaR")
+    assert ishod.done == 0
+    assert any("neispravna" in p for p in ishod.problems)
+
+    with db.session_scope() as session:
+        assert session.get(Document, loš_id).forwarded_at is None
+        # ispravan dokument iz fiksture i dalje prolazi
+        assert session.get(Document, svet["doc"]).bez_identifikacije is False

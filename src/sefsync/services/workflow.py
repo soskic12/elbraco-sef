@@ -74,6 +74,13 @@ class Workflow:
                 doc = session.get(Document, doc_id)
                 if doc is None:
                     problemi.append(f"#{doc_id}: ne postoji")
+                elif doc.bez_identifikacije:
+                    # Faktura bez PIB-a i maticnog broja je neispravna - dobavljac
+                    # se ne moze prepoznati, pa nema ni sta da se prosledi.
+                    problemi.append(
+                        f"{doc.document_number or doc_id}: neispravna faktura "
+                        f"(nema ni PIB ni matični broj)"
+                    )
                 elif doc.business_unit_id is None:
                     problemi.append(f"{doc.document_number or doc_id}: nije razvrstan")
                 else:
