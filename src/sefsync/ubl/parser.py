@@ -10,6 +10,7 @@ opciona polja vrlo neujednaceno.
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import logging
 import re
 from dataclasses import dataclass, field
@@ -135,6 +136,9 @@ class UblDocument:
     # cac:AdditionalDocumentReference/cbc:ID - neki dobavljaci tu upisuju objekat
     # (KIM-TEC: "Elbraco - Sombor"). Do sada se gledao samo prilog unutar njega.
     additional_references: list[str] = field(default_factory=list)
+    # Tekst iz PDF priloga. Neki dobavljaci (CANDY) objekat pisu SAMO tamo:
+    #   "Poslovnica B000067561 / Glavna 18 / 21220 Becej"
+    attachment_text: str | None = None
 
     payment_account: str | None = None
     payment_reference: str | None = None
@@ -180,6 +184,7 @@ class UblDocument:
             "supplier_name": self.supplier.name or self.supplier.registration_name,
             "document_number": self.document_number,
             "additional_reference": " | ".join(self.additional_references) or None,
+            "attachment_text": self.attachment_text,
             "item_text": self.item_text or None,
             "document_type": self.document_type,
         }
@@ -350,6 +355,28 @@ def _parse_line(node, index: int, quantity_tags: tuple[str, ...]) -> UblLine:
     return line
 
 
+def pdf_tekst(prilozi: list["Attachment"], limit: int = 4000) -> str | None:
+    """Tekst iz PDF priloga, ili None. Nedostatak pypdf-a nije greska."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        log.debug("pypdf nije instaliran - PDF prilozi se ne citaju")
+        return None
+
+    delovi: list[str] = []
+    for prilog in prilozi:
+        if not prilog.content.startswith(b"%PDF"):
+            continue
+        try:
+            citac = PdfReader(BytesIO(prilog.content))
+            for strana in citac.pages:
+                delovi.append(strana.extract_text() or "")
+        except Exception:  # noqa: BLE001 - los PDF ne sme da obori parsiranje
+            log.warning("PDF prilog %s nije procitan", prilog.filename)
+    tekst = "\n".join(x for x in delovi if x.strip())
+    return tekst[:limit] or None
+
+
 def _parse_attachments(root) -> list[Attachment]:
     out: list[Attachment] = []
     for ref in _find_all(root, "AdditionalDocumentReference"):
@@ -486,4 +513,5 @@ def parse_ubl(data: bytes | str) -> UblDocument:
     quantity_tags = ("InvoicedQuantity", "CreditedQuantity", "Quantity")
     doc.lines = [_parse_line(n, i, quantity_tags) for i, n in enumerate(line_nodes, start=1)]
     doc.attachments = _parse_attachments(root)
+    doc.attachment_text = pdf_tekst(doc.attachments)
     return doc

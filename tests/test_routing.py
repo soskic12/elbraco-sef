@@ -126,3 +126,50 @@ def test_pravilo_moze_da_vazi_samo_za_jednu_vrstu_dokumenta(db, faktura_xml, odo
 
         assert faktura.business_unit_id == mp.id       # faktura -> objekat po adresi
         assert odobrenje.business_unit_id == office.id  # KO istog dobavljača -> finansije
+
+
+def _polja(**kw):
+    osnovno = {
+        "delivery_address": None, "delivery_city": None, "delivery_name": None,
+        "buyer_address": None, "buyer_city": None, "buyer_reference": None,
+        "order_reference": None, "contract_reference": None, "additional_reference": None,
+        "attachment_text": None, "note": None, "supplier_vat": None, "supplier_name": None,
+        "document_number": None, "item_text": None, "document_type": "Invoice",
+    }
+    osnovno.update(kw)
+    return osnovno
+
+
+def test_prilog_ne_ulazi_u_any_text():
+    """Tekst PDF priloga sme da odlucuje samo kad ga pravilo izricito trazi.
+
+    Prilog sadrzi i nasu adresu sedista i nazive artikala, pa bi kroz any_text
+    prosirio svako pravilo do laznih pogodaka. Mereno: tacnost pada sa 97,4%
+    na 91,8% ako se ukljuci.
+    """
+    pravilo = RoutingRule(
+        id=1, priority=10, field=MatchField.ANY_TEXT, op=MatchOp.CONTAINS,
+        pattern="BECEJ", business_unit_id=7, active=True,
+    )
+    engine = RoutingEngine([pravilo])
+
+    # samo u prilogu -> ne sme da se upali
+    odluka = engine.decide(_polja(attachment_text="Poslovnica B000067561 Glavna 18 21220 Becej"))
+    assert not odluka.assigned
+
+    # u napomeni -> pali se normalno
+    odluka = engine.decide(_polja(note="BECEJ po otpremnici 26-30C-1"))
+    assert odluka.business_unit_id == 7
+
+
+def test_pravilo_moze_izricito_da_cilja_prilog():
+    pravilo = RoutingRule(
+        id=2, priority=10, field=MatchField.ATTACHMENT_TEXT, op=MatchOp.CONTAINS,
+        pattern="B000067561", business_unit_id=7, supplier_vat="104211304", active=True,
+    )
+    engine = RoutingEngine([pravilo])
+    odluka = engine.decide(_polja(
+        supplier_vat="104211304",
+        attachment_text="Poslovnica B000067561 Elbraco group Glavna 18 21220 Becej"))
+    assert odluka.business_unit_id == 7
+    assert odluka.rule_id == 2

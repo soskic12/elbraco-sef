@@ -81,7 +81,13 @@ class RoutingEngine:
     def decide(self, fields: dict[str, str | None]) -> RoutingDecision:
         """`fields` je `UblDocument.routing_fields()` (ili isti oblik iz baze)."""
         normalized = {k: normalize(v) for k, v in fields.items() if k != "document_type"}
-        any_text = " ".join(v for v in normalized.values() if v)
+        # Tekst PDF priloga NE ulazi u any_text: on sadrzi i nasu adresu sedista,
+        # nazive artikala i zaglavlje dobavljaca, pa siri svako "any_text" pravilo
+        # do lazno pozitivnih. Mereno: tacnost pada sa 97,4% na 91,8%.
+        # Prilog se koristi samo kad pravilo izricito cilja attachment_text.
+        any_text = " ".join(
+            v for k, v in normalized.items() if v and k != MatchField.ATTACHMENT_TEXT.value
+        )
         supplier_vat = (fields.get("supplier_vat") or "").strip()
 
         doc_type = (fields.get("document_type") or "").strip()
