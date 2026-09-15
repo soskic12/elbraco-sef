@@ -18,9 +18,11 @@ import datetime as dt
 import logging
 import random
 import re
+import time
 from dataclasses import dataclass, field
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
@@ -49,6 +51,9 @@ SINTPOR_PO_STOPI = {20.0: "270", 10.0: "271", 0.0: "272"}
 PROKNJIZENO_NIJE = 0    # otvorena kalkulacija, ceka poslovodju
 PROKNJIZENO_JESTE = 1   # zaknjizeno u ERP-u - NIKAD iz aplikacije
 PROKNJIZENO_ZAKLJUCANO = 2  # administrator zakljucao stare kalkulacije
+
+# Koliko puta se pokusava sa sledecim brojem kad ga neko preotme.
+POKUSAJA_ZA_BROJ = 5
 
 
 def clarion_dan(d: dt.date) -> int:
@@ -417,31 +422,50 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
         )
 
     eng, baza = erp_engine_za_upis(produkcija)
-    with eng.begin() as conn:
-        # Broj se uzima ponovo unutar transakcije - izmedju pripreme i upisa
-        # neko je mogao da otvori kalkulaciju u ERP-u.
-        broj = sledeci_broj(conn, nacrt.tabela_zaglavlja, nacrt.magacin)
-        nacrt.zaglavlje["BROJ"] = broj
-        for s in nacrt.stavke:
-            s["BROJ"] = broj
 
-        kolone = list(nacrt.zaglavlje)
-        conn.execute(
-            text(
-                f"INSERT INTO dbo.{nacrt.tabela_zaglavlja} ({', '.join(kolone)}) "
-                f"VALUES ({', '.join(':' + k for k in kolone)})"
-            ),
-            nacrt.zaglavlje,
-        )
-        for s in nacrt.stavke:
-            vidljive = {k: v for k, v in s.items() if not k.startswith("_")}
-            kolone = list(vidljive)
-            conn.execute(
-                text(
-                    f"INSERT INTO dbo.{nacrt.tabela_stavki} ({', '.join(kolone)}) "
-                    f"VALUES ({', '.join(':' + k for k in kolone)})"
-                ),
-                vidljive,
+    # Broj kalkulacije je brojac po magacinu (MAX+1), a ne sekvenca. ERP ga
+    # dodeljuje tek na "OK" - do tada glava stoji na ekranu bez broja i bez reda
+    # u bazi (provereno 15.09.). Prozor za sudar je zato uzak, ali postoji.
+    #
+    # Sreca je sto tabele imaju primarni kljuc (MAGACIN, VRSTAKNJIZ, BROJ):
+    # sudar zavrsi kao odbijen upis, nikad kao dva reda sa istim brojem. Zato je
+    # dovoljno uzeti sledeci broj i probati ponovo.
+    for pokusaj in range(1, POKUSAJA_ZA_BROJ + 1):
+        try:
+            with eng.begin() as conn:
+                broj = sledeci_broj(conn, nacrt.tabela_zaglavlja, nacrt.magacin)
+                nacrt.zaglavlje["BROJ"] = broj
+                for s in nacrt.stavke:
+                    s["BROJ"] = broj
+
+                kolone = list(nacrt.zaglavlje)
+                conn.execute(
+                    text(
+                        f"INSERT INTO dbo.{nacrt.tabela_zaglavlja} ({', '.join(kolone)}) "
+                        f"VALUES ({', '.join(':' + k for k in kolone)})"
+                    ),
+                    nacrt.zaglavlje,
+                )
+                for s in nacrt.stavke:
+                    vidljive = {k: v for k, v in s.items() if not k.startswith("_")}
+                    kolone = list(vidljive)
+                    conn.execute(
+                        text(
+                            f"INSERT INTO dbo.{nacrt.tabela_stavki} ({', '.join(kolone)}) "
+                            f"VALUES ({', '.join(':' + k for k in kolone)})"
+                        ),
+                        vidljive,
+                    )
+            break
+        except IntegrityError:
+            # Neko je u medjuvremenu uzeo taj broj - u ERP-u ili drugi upis nas.
+            if pokusaj == POKUSAJA_ZA_BROJ:
+                raise
+            log.info(
+                "Broj %s/%s je zauzet, uzimam sledeci (pokusaj %d)",
+                nacrt.magacin, nacrt.zaglavlje.get("BROJ"), pokusaj,
             )
+            time.sleep(0.2 * pokusaj)
+
     log.info("Kalkulacija %s/%s upisana u %s", nacrt.magacin, broj, baza)
     return f"{baza}: {nacrt.tabela_zaglavlja} {nacrt.magacin}/U/{broj}, stavki {len(nacrt.stavke)}"
