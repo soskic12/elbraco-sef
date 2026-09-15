@@ -10,13 +10,14 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 
 from ..config import get_settings
 
 log = logging.getLogger(__name__)
 
 _engine: Engine | None = None
+_test_engine: Engine | None = None
 
 
 class ErpNotConfigured(RuntimeError):
@@ -51,6 +52,61 @@ def get_erp_engine() -> Engine:
             )
         _engine = create_engine(url, pool_pre_ping=True, future=True)
     return _engine
+
+
+def resolve_erp_test_url() -> str | None:
+    """Veza ka test kopiji ERP baze.
+
+    Ako je zadato samo ime baze (podrazumevano ELBSX_2026), uzima se produkciona
+    konekcija sa zamenjenim imenom - da se lozinka ne drzi na dva mesta.
+    """
+    settings = get_settings()
+    if settings.erp_test_db_url:
+        return settings.erp_test_db_url
+    ime = settings.erp_test_db_name
+    if not ime:
+        return None
+    osnovna = resolve_erp_url()
+    if not osnovna:
+        return None
+    url = make_url(osnovna)
+    # Ime baze stoji ili u putanji, ili u ODBC parametru "database".
+    if url.database:
+        url = url.set(database=ime)
+    elif "database" in {k.lower() for k in url.query}:
+        upit = {k: (ime if k.lower() == "database" else v) for k, v in url.query.items()}
+        url = url.set(query=upit)
+    else:
+        return None
+    return url.render_as_string(hide_password=False)
+
+
+def get_erp_test_engine() -> Engine:
+    global _test_engine
+    if _test_engine is None:
+        url = resolve_erp_test_url()
+        if not url:
+            raise ErpNotConfigured(
+                "Test ERP baza nije podešena. Postavi ERP_TEST_DB_URL ili ERP_TEST_DB_NAME."
+            )
+        _test_engine = create_engine(url, pool_pre_ping=True, future=True)
+    return _test_engine
+
+
+def erp_engine_za_upis(produkcija: bool = False) -> tuple[Engine, str]:
+    """Vraca (engine, ime_baze). Produkcija trazi izricitu dozvolu u podesavanjima."""
+    if not produkcija:
+        eng = get_erp_test_engine()
+    else:
+        if not get_settings().erp_allow_production_write:
+            raise ErpNotConfigured(
+                "Upis u produkcionu ERP bazu nije dozvoljen. "
+                "Postavi ERP_ALLOW_PRODUCTION_WRITE=true kad budeš siguran."
+            )
+        eng = get_erp_engine()
+    with eng.connect() as conn:
+        ime = str(conn.execute(text("SELECT DB_NAME()")).scalar())
+    return eng, ime
 
 
 def check_connection() -> str:

@@ -132,6 +132,9 @@ class UblDocument:
     despatch_reference: str | None = None
     project_reference: str | None = None
     billing_references: list[str] = field(default_factory=list)  # KO/KZ -> broj originalne fakture
+    # cac:AdditionalDocumentReference/cbc:ID - neki dobavljaci tu upisuju objekat
+    # (KIM-TEC: "Elbraco - Sombor"). Do sada se gledao samo prilog unutar njega.
+    additional_references: list[str] = field(default_factory=list)
 
     payment_account: str | None = None
     payment_reference: str | None = None
@@ -157,7 +160,9 @@ class UblDocument:
 
     @property
     def item_text(self) -> str:
-        return " | ".join(x.name for x in self.lines if x.name)
+        delovi = [x.name for x in self.lines if x.name]
+        delovi += [x.note for x in self.lines if x.note]
+        return " | ".join(delovi)
 
     def routing_fields(self) -> dict[str, str | None]:
         """Polja koja koristi mehanizam razvrstavanja (i alat za analizu)."""
@@ -174,6 +179,7 @@ class UblDocument:
             "supplier_vat": self.supplier.vat,
             "supplier_name": self.supplier.name or self.supplier.registration_name,
             "document_number": self.document_number,
+            "additional_reference": " | ".join(self.additional_references) or None,
             "item_text": self.item_text or None,
             "document_type": self.document_type,
         }
@@ -435,6 +441,11 @@ def parse_ubl(data: bytes | str) -> UblDocument:
     doc.billing_references = [
         v
         for v in (_text(n, "InvoiceDocumentReference/ID") for n in _find_all(root, "BillingReference"))
+        if v
+    ]
+    doc.additional_references = [
+        v
+        for v in (_text(n, "ID") for n in _find_all(root, "AdditionalDocumentReference"))
         if v
     ]
 

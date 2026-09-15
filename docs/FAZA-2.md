@@ -193,9 +193,9 @@ jedinicu bira i tabelu.
 
 ### Broj računa dobavljača
 
-`BROJ_RN_DOB` je `varchar(20)`. Praksa: izbaciti kose crte, minuse i ostalo da
-stane. **App mora da skraćuje na isti način**, inače pravi brojeve kakve ljudi ne
-prave i veza puca za ubuduće.
+`BROJ_RN_DOB` je `varchar(20)`. **Ispravka merenjem 15.09.**: broj se NE skraćuje po
+pravilu — od 4.652 broja nijedan nije dužine 20, a 4.185 zadržava crtice i kose crte.
+Znači prepisuje se kakav jeste; izbacivanje znakova je izuzetak kad ne stane.
 
 ### Otvaranje nove šifre
 
@@ -241,3 +241,113 @@ Detaljan redosled i koja se polja gde pune — nije još razrađeno.
 - **Unazadna provera faze 1.** Za 5.303 sparena dokumenta znamo u koji je magacin
   kalkulacija stvarno otišla. To je nezavisna istina o poslovnoj jedinici, pa se
   tačnost razvrstavanja može izmeriti na hiljadama slučajeva umesto na uzorku.
+
+
+---
+
+# Dodatak: nalazi od 15.09.2026
+
+## Test baza
+
+`ELBSX_2026` — kopija produkcije od 05.08.2026. Upis kalkulacije ide podrazumevano
+tamo; produkcija traži `ERP_ALLOW_PRODUCTION_WRITE=true` (`erp_engine_za_upis`).
+
+## Generator kalkulacije radi
+
+`erp/kalkulacija.py` gradi zaglavlje i stavke iz e-fakture. Provereno naspram
+stvarnih kalkulacija koje su ljudi uneli: zaglavlje i svi izvedeni iznosi (marža,
+PDV u MP ceni, MP vrednost, rok plaćanja) poklapaju se u paru.
+
+Odgovori koje su dali podaci, bez pitanja:
+
+| Polje | Vrednost |
+|---|---|
+| `PROKNJIZENO` | `1` = čeka poslovođu (potvrđeno na nezaknjiženoj kalkulaciji) |
+| `RBR` | `clarion_dan(5) + vreme u stotinkama(7) + 4 cifre + korisničko ime(10)` |
+| `IZVOREPP` | `'Elektronske fakture'` — 4.612 od 4.652 |
+| `LASTUSER` | `1` — 4.631 od 4.652 |
+| `VALUTA` | rok plaćanja kao Clarion dan (+45 dana najčešće) |
+| `TARIFA` | `ARTIKLI.TARIFA` dopunjeno nulama na 5 → `PTARIFE.STOPA` |
+| `SINTPOR` | stopa 20 → `'270'`, 10 → `'271'` |
+
+### Rabat — rešeno
+
+Mereno na 4.425 stavki sa rabatom:
+
+```
+FAK_CENA    = bruto cena (pre rabata)
+RABAT_PROC  = procenat
+IZN_RABATA  = rabat PO KOMADU (ne po stavci)
+NAB_CENA    = neto cena
+VREDNOST    = neto x količina
+```
+
+Marža (`RUCM_PROC`) se računa od **neto** nabavne cene.
+
+## Razvrstavanje: tačnost izmerena naspram ERP-a
+
+Kalkulacije daju nezavisnu istinu o tome kojoj jedinici dokument pripada —
+4.862 dokumenta na početku, 6.136 posle dopune podataka.
+
+| | Tačnost | Pokrivenost | Grešaka |
+|---|---:|---:|---:|
+| Zatečeno stanje | 70,2 % | 79,2 % | 1.449 |
+| Posle gašenja #44/#47 | 96,5 % | 55,3 % | 119 |
+| **+ 144 pravila iz istorije** | **97,4 %** | **78,5 %** | **124** |
+
+### Dva pravila su pravila 93 % svih grešaka
+
+- **#47** `delivery_address contains 'Srpskih vladara 46'` → MP002. To je **adresa
+  sedišta firme**, ne odredišta. Tačnost **23,8 %** na 1.321 dokumentu. Nastalo je
+  iz automatskog predloga na uzorku od **39 dokumenata** — pouka: predlozi pravila
+  traže proveru na celom skupu, ne na uzorku.
+- **#44** `any_text regex '.'` → OFFICE za sva knjižna odobrenja. Tačnost **48,0 %**;
+  334 grešaka su `088 → 010`, tj. reklamacije.
+
+Oba su ugašena (ne obrisana — `active=False`, trag ostaje). Zamenjena sa 12 pravila
+po ključnim rečima za knjižna odobrenja (redosled: 088 pre 010, mereno bolje).
+
+### Svaki dobavljač piše odredište na svom mestu
+
+Ovo je ključni nalaz. Traženje po jednom polju ne radi:
+
+| Dobavljač | Gde piše | Primer |
+|---|---|---|
+| EWE COMP | `cbc:Note` | `KULA Po otpremnici:26-30C-088989` |
+| BSH | `OrderReference/ID` | `bpalanka`, `Becej` |
+| KIM-TEC | `AdditionalDocumentReference/ID` | `Elbraco - Sombor` |
+| CANDY HOOVER | samo u PDF prilogu | — |
+
+Parser je dopunjen: `additional_references` (popunjeno na **4.603 dokumenta, 60 %**)
+i napomene po stavkama ulaze u `item_text`. Dodato polje `MatchField.ADDITIONAL_REFERENCE`.
+
+### 144 pravila izvedena iz istorije
+
+Rudarenje po dobavljaču kroz sva tekstualna polja, prag: najmanje 5 dokumenata i
+97 % čistoće, izraz mora sadržati slovo (poštanski brojevi su krhki). Pohlepan izbor
+najmanjeg skupa koji pokriva najviše.
+
+## Ostaje za dobavljače: 1.321 dokument (22 %)
+
+| Dobavljač | PIB | Ne zna | Napomena |
+|---|---|---:|---|
+| CANDY HOOVER | 104211304 | 217 | podatak samo u PDF prilogu |
+| CSM 2017 | 110130228 | 193 | |
+| EWE COMP | 100042618 | 172 | (bilo 908 pre pravila) |
+| FORMA PLUS | 101717578 | 67 | |
+| BSH | 107351003 | 57 | (bilo 324) |
+| SKY (Radmilo Aleksić) | 103699024 | 47 | |
+| ROAMING | 103285506 | 41 | |
+| KIM-TEC | 103574264 | 39 | (bilo 75) |
+| ENERGY NET | 101644366 | 38 | |
+
+Preostale greške (124) su sitne i grupisane: LANGOS (usluge knjižene po objektima)
+i SAT-TRAKT.
+
+## Sledeće
+
+1. Čitanje PDF priloga — za CANDY i slične (nijedna PDF biblioteka nije instalirana)
+2. `billing_references` u bazu (parser ih čita, ingest baca)
+3. Punjenje `item_mapping` iz istorije (2.652 para)
+4. Skraćeni brojevi računa — 504 dokumenta bez para
+5. Odgovori na preostala pitanja: `BROJ` pri istovremenom radu, ime pod kojim app piše

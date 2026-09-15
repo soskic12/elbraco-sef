@@ -107,6 +107,7 @@ class MatchField(str, enum.Enum):
     BUYER_REFERENCE = "buyer_reference"        # cbc:BuyerReference
     ORDER_REFERENCE = "order_reference"        # cac:OrderReference/cbc:ID
     CONTRACT_REFERENCE = "contract_reference"
+    ADDITIONAL_REFERENCE = "additional_reference"  # cac:AdditionalDocumentReference/cbc:ID
     NOTE = "note"                              # cbc:Note
     SUPPLIER_VAT = "supplier_vat"
     SUPPLIER_NAME = "supplier_name"
@@ -259,6 +260,8 @@ class Document(Base):
     buyer_reference: Mapped[str | None] = mapped_column(String(200), default=None)
     order_reference: Mapped[str | None] = mapped_column(String(200), default=None)
     contract_reference: Mapped[str | None] = mapped_column(String(200), default=None)
+    # Neki dobavljaci ovde upisuju objekat (KIM-TEC: "Elbraco - Sombor").
+    additional_reference: Mapped[str | None] = mapped_column(String(500), default=None)
     note: Mapped[str | None] = mapped_column(Text, default=None)
 
     ubl_path: Mapped[str | None] = mapped_column(String(400), default=None)

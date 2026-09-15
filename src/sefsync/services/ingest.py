@@ -420,6 +420,7 @@ class IngestService:
         doc.buyer_reference = shorten(ubl.buyer_reference, 200)
         doc.order_reference = shorten(ubl.order_reference, 200)
         doc.contract_reference = shorten(ubl.contract_reference, 200)
+        doc.additional_reference = shorten(" | ".join(ubl.additional_references), 500)
         doc.note = ubl.note
 
         doc.lines.clear()
@@ -464,11 +465,14 @@ class IngestService:
             "buyer_reference": doc.buyer_reference,
             "order_reference": doc.order_reference,
             "contract_reference": doc.contract_reference,
+            "additional_reference": doc.additional_reference,
             "note": doc.note,
             "supplier_vat": doc.supplier_vat,
             "supplier_name": doc.supplier_name,
             "document_number": doc.document_number,
-            "item_text": " | ".join(x.name for x in doc.lines if x.name) or None,
+            "item_text": " | ".join(
+                [x.name for x in doc.lines if x.name] + [x.note for x in doc.lines if x.note]
+            ) or None,
             "document_type": doc.document_type.value,
         }
         decision = engine.decide(fields)

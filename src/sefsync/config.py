@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # --- ERP baza (faza 2, read-only u fazi 1) ---
     erp_db_url: str | None = None
 
+    # Test kopija ERP baze (ELBSX_2026). Svaki upis kalkulacije ide ovde dok
+    # se ne dokaze da je ispravan; produkcija trazi izricito --produkcija.
+    erp_test_db_url: str | None = None
+    # Ako je zadato samo ime baze, uzima se produkciona konekcija sa zamenjenom
+    # bazom - da se lozinka ne prepisuje na dva mesta.
+    erp_test_db_name: str | None = "ELBSX_2026"
+    # Zastita: bez ovoga nijedan upis ne moze u produkcionu ERP bazu.
+    erp_allow_production_write: bool = False
+
     # --- Izvor sifarnika poslovnih jedinica (postojeca tabela na serveru) ---
     # Ako nije zadat, koristi se erp_db_url. Upit mora da vrati kolone:
     # code, name, [kind, erp_code, address, city, emails, phones, active]
