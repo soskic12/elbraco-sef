@@ -512,54 +512,72 @@ postoji podatak u bazi.
 
 Mereno na **923 od 967** knjižnih odobrenja koja nalaze svoju kalkulaciju u ERP-u
 (nespareno 44, dvosmislenih 0). Istina je magacin u koji je kalkulacija stvarno
-otišla.
+otišla. Alat: `alati/meri_odobrenja.py`.
+
+### Prvo merenje je bilo pogrešno — i kako se to videlo
+
+Prvi prolaz je rekao da pravila razvrstavaju 53 % odobrenja i da je „jedna veza"
+bacanje novčića. Greška je bila u merilu, ne u podacima: poslovna jedinica
+**UPRAVA nema `erp_code`**, pa je svaka odluka pravila za rabat/promet ispala kao
+„pravila ćute". Skoro polovina odluka je brojana kao neodlučeno.
+
+Provera pretpostavke posle ispravke — kuda pravila šalju naspram toga gde je
+dokument stvarno završio:
+
+| Pravila kažu | Stvarno | Dokumenata |
+|---|---|---:|
+| MAG010 | 010 | 444 |
+| OFFICE | 088 | 331 |
+| OFFICE | 010 | 16 |
+| MAG010 | 088 | 6 |
+
+`OFFICE ≡ 088` drži u 95,4 % slučajeva, `MAG010 ≡ 010` u 98,7 %. Tek sa tim
+merilom brojke znače nešto.
 
 ### Stvarni magacin po broju veza
 
 | Veza ka fakturi | 010 | 088 | ukupno |
 |---|---:|---:|---:|
 | nema | 221 | 280 | 501 |
-| **tačno jedna** | **346** | 57 | 403 |
+| tačno jedna | 346 | 57 | 403 |
 | dve ili više | 1 | 18 | 19 |
 
-Na prvi pogled potvrda: „tačno jedna veza → 010" pogađa **85,9 %** (346 od 403),
-tačno kao procena sa uzorka od 234 dokumenta.
+Ukupnih 85,9 % za „jedna veza → 010" i dalje stoji, ali ta brojka ne znači ništa
+sama za sebe: pravila po ključnim rečima već rešavaju većinu tih dokumenata.
 
-### Ali ta brojka je varljiva
+### Šta veza dodaje tamo gde pravila ćute
 
-Pravila po ključnim rečima **već rešavaju** većinu tih dokumenata. Pravo pitanje je
-šta veza dodaje tamo gde pravila ćute — a tamo signal pada:
+Zatečeno stanje na ovih 923: odlučeno **833 (90,2 %)**, tačnost **93,0 %**, 58
+grešaka, neodlučenih **90**. Od tih 90, čak **72 pripadaju magacinu 010** — dakle
+ono što ostaje nerazvrstano nisu rabati nego povraćaji.
 
-| Veza | Dokumenata gde pravila ćute | Stvarno 010 | Stvarno 088 | „010" bi bilo tačno |
+| Veza | Neodlučenih | Stvarno 010 | Stvarno 088 | „010" bi bilo tačno |
 |---|---:|---:|---:|---:|
-| nema | 307 | 30 | 277 | 9,8 % |
-| **tačno jedna** | **111** | 57 | 54 | **51,4 %** |
-| dve ili više | 19 | 1 | 18 | 5,3 % |
+| nema | 31 | 25 | 6 | 80,6 % |
+| **tačno jedna** | **51** | **46** | 5 | **90,2 %** |
+| dve ili više | 8 | 1 | 7 | 12,5 % (dakle 088 u 87,5 %) |
 
-**Kod jedne veze to je bacanje novčića.** Predloženo pravilo iz odeljka 3 —
-„veza ka fakturi → app predloži 010" — **ne sme da ide u rad.** Izgledalo je dobro
-samo zato što su ga pravila po ključnim rečima nosila.
+**Predlog iz odeljka 3 se potvrđuje**, ali tek na pravom skupu: veza ka jednoj
+fakturi znači povraćaj, i to tamo gde ostala pravila nemaju šta da kažu.
 
-### Šta se ipak dobilo
+Dodatna potvrda: od 58 dokumenata koje današnja pravila pogrešno razvrstaju, 39 ima
+tačno jednu vezu i 36 od njih stvarno pripada 010.
 
-Signal radi u **suprotnom** smeru: gde pravila ćute, **nema veze ili ih je više →
-088** pogađa 295 od 326 (**90,5 %**). Deo toga je osnovna stopa (među
-nerazvrstanima je 79,9 % ionako 088), ali 90,5 % je mereno iznad nje.
+### Šta bi koje pravilo donelo
 
-| | Odlučeno | Tačnost | Grešaka | Operateru |
+| | Odlučeno | Tačnost | Grešaka | Neodlučeno |
 |---|---:|---:|---:|---:|
-| Zatečeno (ključne reči) | 486 (52,7 %) | 91,4 % | 42 | 437 |
-| + „0 ili 2+ veze → 088" | 812 (88,0 %) | 91,0 % | 73 | **111** (~0,5 dnevno) |
+| Zatečeno | 833 (90,2 %) | 93,0 % | 58 | 90 |
+| + „jedna veza → 010" | 884 (95,8 %) | 92,9 % | 63 | 39 |
+| + „dve ili više → 088" | 892 (96,6 %) | 92,9 % | 64 | 31 |
+| + „nema veze → 010" | 923 (100 %) | 92,5 % | 69 | 0 |
 
-Pokrivenost skače sa 53 % na 88 % uz istu tačnost. Onih 111 sa jednom vezom su baš
-oni koje mašina ne ume da odluči — i njih treba da vidi čovek.
+Prva dva pravila dižu pokrivenost za 6,4 procentna poena uz nepromenjenu tačnost.
+Treće (80,6 %) je slabo i pitanje je za čoveka, ne za merenje.
 
-Dodatni nalaz: od 42 dokumenta koja današnja pravila **pogrešno** razvrstaju, 28 ima
-tačno jednu vezu i 25 od njih stvarno pripada 010. Veza je, dakle, upotrebljiva kao
-**znak za sumnju**, ne kao odluka.
+### Pouka o merenju
 
-### Nije još odlučeno
-
-Da li app sme sama da upiše 088 na tih 326 dokumenata (uz 31 grešku), ili to ostaje
-predlog operateru. Odluka je poslovna, ne tehnička: greška znači da reklamacija ode
-na promet umesto na magacin 010. Operater ionako vidi dokument pre prosleđivanja.
+Signal se ne meri na celom skupu nego **na onome što ostaje posle svih pravila
+koja već rade**. Ista zamka je bila u pravilu #47: izgledalo je dobro jer je
+mereno tamo gde su i druga pravila pogađala. I merilo se proverava pre nalaza —
+`OFFICE` bez `erp_code` je tiho pretvorio 347 odluka u „neodlučeno".

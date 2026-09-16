@@ -25,7 +25,7 @@ from sqlalchemy import select, text  # noqa: E402
 
 from sefsync.db import session_scope  # noqa: E402
 from sefsync.erp.connection import get_erp_engine  # noqa: E402
-from sefsync.models import BusinessUnit, Document, DocumentType  # noqa: E402
+from sefsync.models import BusinessUnit, Document, DocumentType, UnitKind  # noqa: E402
 from sefsync.routing.engine import RoutingEngine  # noqa: E402
 from sefsync.services.mapiranje import OD_DANA, kljuc_racuna  # noqa: E402
 
@@ -87,10 +87,13 @@ def main() -> None:
 
     with session_scope() as session:
         motor = RoutingEngine.from_db(session)
-        magacin_pj = {
-            u.id: (u.erp_code or "").strip()
-            for u in session.scalars(select(BusinessUnit))
-        }
+        # UPRAVA nema erp_code, a njena knjizna odobrenja zavrsavaju na magacinu
+        # 088 ("BEZ EVIDENCIJE U ROBNOM") - bez ovoga bi svaka odluka pravila za
+        # rabat/promet ispala kao "pravila cute".
+        magacin_pj = {}
+        for u in session.scalars(select(BusinessUnit)):
+            kod = (u.erp_code or "").strip()
+            magacin_pj[u.id] = kod or (PROMET if u.kind is UnitKind.HQ else "")
         odobrenja = list(
             session.scalars(
                 select(Document).where(Document.document_type == DocumentType.CREDIT_NOTE)
