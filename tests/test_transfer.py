@@ -181,3 +181,54 @@ def test_duplikati_istog_pravila_se_gase_svi(db, izvor):
         ]
     assert stanja == [False, False]      # oba reda, ne samo prvi
     assert brojac["pravila_upaljena"] == 0
+
+
+def test_pravila_za_razlicite_dobavljace_nisu_isto_pravilo(db, izvor):
+    """Dobavljac mora da bude deo kljuca - inace se rudarena pravila gube.
+
+    Na serveru se to videlo tek 16.09.: 174 od 232 pravila vezana su za dobavljaca,
+    a uvoz ih je prepoznavao samo po (polje, operator, sablon, PJ, vrsta). Prvo bi
+    proslo, a ostala bi se prebrojala kao "vec postoji" i nikad ne bi stigla.
+    """
+    podaci = izvezi()
+    sablon = next(p for p in podaci["pravila"] if p["pattern"] == "Srpskih vladara 46")
+    podaci["pravila"] = [
+        {**sablon, "supplier_vat": "100000104"},
+        {**sablon, "supplier_vat": "106665031"},
+    ]
+    with db.session_scope() as session:
+        session.query(RoutingRule).delete()
+
+    brojac = uvezi(podaci)
+
+    assert brojac["pravila_nova"] == 2
+    with db.session_scope() as session:
+        dobavljaci = {
+            r.supplier_vat for r in session.scalars(
+                select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+            )
+        }
+    assert dobavljaci == {"100000104", "106665031"}
+
+
+def test_sablon_se_poredi_bez_obzira_na_velicinu_slova(db, izvor):
+    """SQLite je razlikovao velicinu slova a MS SQL nije - pa se stanje razilazilo.
+
+    Razvrstavanje ionako sve diže na velika slova, pa su "Srpskih vladara 46" i
+    "SRPSKIH VLADARA 46" isto pravilo i moraju imati isto stanje.
+    """
+    podaci = izvezi()
+    for pravilo in podaci["pravila"]:
+        if pravilo["pattern"] == "Srpskih vladara 46":
+            pravilo["pattern"] = "SRPSKIH VLADARA 46"
+            pravilo["active"] = False
+
+    brojac = uvezi(podaci)
+
+    assert brojac["pravila_nova"] == 0        # nije napravljeno drugo pravilo
+    assert brojac["pravila_ugasena"] == 1
+    with db.session_scope() as session:
+        pravilo = session.scalar(
+            select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+        )
+        assert pravilo.active is False

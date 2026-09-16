@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..db import session_scope
 from ..models import (
@@ -151,13 +151,21 @@ def uvezi(podaci: dict, i_jedinice: bool = False) -> dict[str, int]:
             # Svi redovi sa istim kljucem, ne samo prvi: ako ih ima vise sa
             # razlicitim stanjem, "prvi koji se nadje" znaci da svaki uvoz upali
             # jedan a ugasi drugi - i ispis to prikazuje kao stalnu promenu.
+            # Dobavljac je deo kljuca. Bez njega su rudarena pravila za razlicite
+            # dobavljace izgledala kao jedno te isto: na server bi otislo prvo, a
+            # ostala bi se prebrojala kao "vec postoji" i nikad ne bi stigla.
+            # Poredjenje sablona je namerno neosetljivo na velicinu slova - takvo
+            # je i samo razvrstavanje (normalize dize sve na velika), a MS SQL se
+            # tako ponasa i sam. Dok je ovde stajalo obicno `==`, SQLite je pravio
+            # dva pravila a MS SQL jedno, pa je svaki uvoz palio jedno i gasio drugo.
             istovetni = list(session.scalars(
                 select(RoutingRule).where(
                     RoutingRule.field == MatchField(red["field"]),
                     RoutingRule.op == MatchOp(red["op"]),
-                    RoutingRule.pattern == red["pattern"],
+                    func.upper(RoutingRule.pattern) == (red["pattern"] or "").upper(),
                     RoutingRule.business_unit_id == po_sifri[sifra],
                     RoutingRule.document_type == vrsta,
+                    RoutingRule.supplier_vat == (red.get("supplier_vat") or None),
                 )
             ))
             if istovetni:

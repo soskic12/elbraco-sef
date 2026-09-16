@@ -704,3 +704,42 @@ pripadaju 088), ne u šifarniku.
 Ostaje 321 dokument: 39 avansa, 65 od dobavljača bez ijedne kalkulacije, oko 65
 stvarnih promašaja kod dobavljača koji se knjiže redovno, i ostatak sitno razbacan.
 Nijedna od preostalih grupa ne obećava nove šifre artikala.
+
+
+---
+
+## Prenos pravila na server je gubio pravila — 16.09.2026
+
+Otkriveno proverom na serveru posle žalbe kolega. Uvoz je pravilo prepoznavao po
+ključu **(polje, operator, šablon, PJ, vrsta dokumenta)** — bez dobavljača. A od
+232 pravila njih **174 važi samo za jednog dobavljača**.
+
+Posledice, obe izmerene:
+
+**41 pravilo nikad nije stiglo na server.** Rudarena pravila za različite
+dobavljače sa istim šablonom (npr. `delivery_address contains 'SRPSKIH VLADARA 46'`
+za Comtrade, MISON i CHIP CARD) izgledala su kao jedno te isto: prvo bi se upisalo,
+ostala bi se prebrojala kao „već postoji".
+
+**Gašenje pravila #47 nikad nije stiglo.** Na serveru je to pravilo (`#5`,
+`delivery_address contains 'Srpskih vladara 46'`) i danas **aktivno, sa 1.482
+pogotka** — ono sa izmerenih 23,8 % tačnosti. Uvoz je umesto njega nalazio neko od
+rudarenih pravila sa istim šablonom i gasio/palio njega, pa je svaki prolaz
+ispisivao „ugašena: 1, upaljena: 1" i ništa se nije smirivalo.
+
+### Druga polovina uzroka: velika i mala slova
+
+Lokalno (SQLite) `pattern == 'Srpskih vladara 46'` **ne** hvata
+`'SRPSKIH VLADARA 46'`; na MS SQL-u hvata, jer je poređenje neosetljivo na veličinu
+slova. Isti kod je na dve baze pravio dva različita ishoda — zato se problem nije
+video u razvoju.
+
+Ispravka: ključ sada uključuje dobavljača, a šablon se poredi preko `UPPER()` na obe
+strane. To je i ispravno po smislu — razvrstavanje ionako sve diže na velika slova,
+pa su ta dva šablona isto pravilo i moraju imati isto stanje.
+
+### Pouka
+
+Razlika između razvojne i produkcione baze nije samo u brzini. `tests/test_mssql_saglasnost.py`
+je napravljen posle `IS FALSE` koji SQLite prima a MS SQL odbija; ovo je isti rod
+greške, samo tiši — ništa ne puca, nego se tiho radi nad pogrešnim redom.
