@@ -224,8 +224,24 @@ class IngestService:
         return stats
 
     def fetch_one(self, sef_invoice_id: int, force: bool = False) -> Document | None:
-        """Preuzima/osvezava jedan dokument po SEF ID-u (npr. iz dashboarda)."""
+        """Preuzima/osvezava jedan dokument po SEF ID-u (npr. iz dashboarda).
+
+        Dokument koji je na SEF-u jos "Nova" se NE dira dok je zastita ukljucena -
+        ni poziv za detalje, jer se ne zna da li i on obara status. Dok kolege
+        prate sta je novo na portalu, jedan klik u panelu im menja spisak.
+        """
         stats = SyncStats()
+        if self.settings.sef_preserve_new:
+            with session_scope() as session:
+                doc = session.scalar(
+                    select(Document).where(Document.sef_invoice_id == sef_invoice_id)
+                )
+                if doc is not None and doc.sef_status is SefStatus.NEW:
+                    log.info(
+                        "Ne osvezavam %s - na SEF-u je jos 'Nova', a zastita je ukljucena",
+                        sef_invoice_id,
+                    )
+                    return doc
         record = {"InvoiceId": sef_invoice_id}
         try:
             detail = self.client.purchase_invoice(sef_invoice_id)
@@ -263,12 +279,10 @@ class IngestService:
             # sta je novo na portalu, to im remeti posao - pa se takav dokument
             # samo upisuje iz pregleda i ceka. UBL se povlaci kad status prestane
             # da bude "Nova", ili kad se prekidac ugasi.
-            if (
-                need_ubl
-                and not force_refetch
-                and self.settings.sef_preserve_new
-                and doc.sef_status is SefStatus.NEW
-            ):
+            # Vazi i kad je trazeno osvezavanje: dugme u panelu je ranije bilo
+            # izuzetak, pa je jedan klik operatera obarao status na portalu -
+            # tacno ono sto ova zastita treba da spreci. Prekidac je jedini izuzetak.
+            if need_ubl and self.settings.sef_preserve_new and doc.sef_status is SefStatus.NEW:
                 need_ubl = False
                 log.debug("Preskacem UBL za %s - status je Nova", doc.sef_invoice_id)
 

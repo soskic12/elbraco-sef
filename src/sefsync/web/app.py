@@ -403,6 +403,16 @@ def refresh(doc_id: int, user: Operater) -> RedirectResponse:
         if doc is None:
             raise HTTPException(404, "Dokument ne postoji.")
         sef_id = doc.sef_invoice_id
+        jos_nova = doc.sef_status is SefStatus.NEW
+    if jos_nova and get_settings().sef_preserve_new:
+        # Preuzimanje bi ga na portalu prebacilo u "Viđena" i pomerilo kolegama
+        # spisak novih. Operater mora da zna zasto se nista nije desilo.
+        return _back(
+            f"/dokument/{doc_id}",
+            "Dokument je na SEF-u još „Nova“ — ne osvežavam ga da ne bih oborio taj "
+            "status kolegama na portalu. Stavke stižu čim ga neko tamo otvori.",
+            False,
+        )
     IngestService().fetch_one(sef_id, force=True)
     return _back(f"/dokument/{doc_id}", "Dokument je ponovo preuzet sa SEF-a.")
 

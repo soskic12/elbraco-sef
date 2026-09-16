@@ -346,3 +346,56 @@ def test_ponovno_citanje_bez_fajla_ne_puca(db, faktura_xml):
         doc_id = doc.id
 
     assert service.ponovo_parsiraj(doc_id) is False
+
+
+def test_osvezavanje_ne_dira_dokument_koji_je_jos_nova(db, faktura_xml, monkeypatch):
+    """Dugme "Osveži sa SEF-a" je obaralo status koji zastita treba da cuva.
+
+    Zahtev je stigao od kolega koji rade na portalu: njima "Nova" nestaje iz
+    spiska cim ga panel dodirne. Zato refresh ne sme da zove SEF uopste - ni po
+    detalje, jer se ne zna da li i taj poziv obara status.
+    """
+    pozivi: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pozivi.append(request.url.path)
+        if request.url.path.endswith("/purchase-invoice/overview"):
+            return httpx.Response(200, json=NOVA)
+        if request.url.path.endswith("/purchase-invoice/xml"):
+            return httpx.Response(200, content=faktura_xml)
+        return httpx.Response(200, json=NOVA[0])
+
+    settings = get_settings()
+    http = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.base_url)
+    service = IngestService(
+        client=SefClient(settings, client=http), settings=settings,
+        notifier=FakeNotifier(), acceptor=FakeAcceptor(),
+    )
+    monkeypatch.setattr(service.settings, "sef_preserve_new", True)
+    service.sync("2026-09-01", "2026-09-10")
+    pozivi.clear()
+
+    service.fetch_one(494482, force=True)
+
+    assert pozivi == []   # nijedan poziv ka SEF-u
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.ubl_path is None
+
+
+def test_prisilno_preuzimanje_ne_probija_zastitu(db, faktura_xml, monkeypatch):
+    """Ni izricito trazeno ponovno preuzimanje ne povlaci UBL dokumenta "Nova".
+
+    Ranije je `force_refetch` bio izuzetak od zastite - i upravo kroz njega je
+    dugme u panelu obaralo status.
+    """
+    from sefsync.services.ingest import SyncStats
+
+    service = build_service_sa(NOVA, faktura_xml)
+    monkeypatch.setattr(service.settings, "sef_preserve_new", True)
+
+    service._process_record(NOVA[0], SyncStats(), force_refetch=True)
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.ubl_path is None

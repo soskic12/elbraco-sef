@@ -293,9 +293,18 @@ def cmd_sample(
         records = client.purchase_overview(date_from, date_to)
         typer.echo(f"Pronađeno {len(records)} dokumenata u periodu {date_from} .. {date_to}")
         saved = 0
+        preskoceno_novih = 0
         for record in records[:limit]:
             invoice_id = record.get("InvoiceId") or record.get("invoiceId")
             if invoice_id is None:
+                continue
+            # Skidanje UBL-a obara "Nova" u "Vidjena" na portalu. Uzorak se uzima
+            # radi analize i ne sme da pomeri kolegama spisak novih dokumenata.
+            if (
+                get_settings().sef_preserve_new
+                and str(record.get("Status") or record.get("status") or "") == "New"
+            ):
+                preskoceno_novih += 1
                 continue
             target = out_dir / f"{invoice_id}.xml"
             if target.exists():
@@ -306,6 +315,11 @@ def cmd_sample(
             except SefError as exc:
                 typer.secho(f"  {invoice_id}: {exc}", fg="yellow")
     typer.echo(f"Sačuvano {saved} UBL fajlova u {out_dir}")
+    if preskoceno_novih:
+        typer.echo(
+            f"Preskočeno {preskoceno_novih} dokumenata u statusu „Nova“ — "
+            f"preuzimanje bi im oborilo status na portalu (SEF_PRESERVE_NEW)."
+        )
 
 
 @app.command("analyze")
