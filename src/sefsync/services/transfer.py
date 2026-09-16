@@ -148,7 +148,10 @@ def uvezi(podaci: dict, i_jedinice: bool = False) -> dict[str, int]:
                 continue
 
             vrsta = DocumentType(red["document_type"]) if red.get("document_type") else None
-            postoji = session.scalar(
+            # Svi redovi sa istim kljucem, ne samo prvi: ako ih ima vise sa
+            # razlicitim stanjem, "prvi koji se nadje" znaci da svaki uvoz upali
+            # jedan a ugasi drugi - i ispis to prikazuje kao stalnu promenu.
+            istovetni = list(session.scalars(
                 select(RoutingRule).where(
                     RoutingRule.field == MatchField(red["field"]),
                     RoutingRule.op == MatchOp(red["op"]),
@@ -156,15 +159,19 @@ def uvezi(podaci: dict, i_jedinice: bool = False) -> dict[str, int]:
                     RoutingRule.business_unit_id == po_sifri[sifra],
                     RoutingRule.document_type == vrsta,
                 )
-            )
-            if postoji is not None:
+            ))
+            if istovetni:
                 # Gasenje pravila mora da predje sa izvozom. Inace ostane ovako:
                 # #44 i #47 su ugaseni ovde jer su pravili 93 % svih gresaka u
                 # razvrstavanju, a na serveru bi i dalje radili — uvoz ih nalazi
                 # kao "vec postojece" i ne dira im stanje.
                 zeljeno = bool(red.get("active", True))
-                if postoji.active != zeljeno:
-                    postoji.active = zeljeno
+                promenjeno = False
+                for pravilo in istovetni:
+                    if pravilo.active != zeljeno:
+                        pravilo.active = zeljeno
+                        promenjeno = True
+                if promenjeno:
                     brojac["pravila_ugasena" if not zeljeno else "pravila_upaljena"] += 1
                 else:
                     brojac["pravila_postojeca"] += 1

@@ -142,3 +142,42 @@ def test_ponovo_upaljeno_pravilo_se_pali(db, izvor):
             select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
         )
         assert pravilo.active is True
+
+
+def test_duplikati_istog_pravila_se_gase_svi(db, izvor):
+    """Uvoz je uzimao "prvi koji nadje", pa je svaki prolaz palio jedan a gasio drugi.
+
+    Na serveru se to videlo kao "pravila ugasena: 1, pravila upaljena: 1" pri
+    svakom uvozu, iako se nista nije menjalo.
+    """
+    with db.session_scope() as session:
+        original = session.scalar(
+            select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+        )
+        session.add(
+            RoutingRule(
+                priority=original.priority,
+                field=original.field,
+                op=original.op,
+                pattern=original.pattern,
+                business_unit_id=original.business_unit_id,
+                document_type=original.document_type,
+                active=True,
+            )
+        )
+
+    podaci = izvezi()
+    for pravilo in podaci["pravila"]:
+        if pravilo["pattern"] == "Srpskih vladara 46":
+            pravilo["active"] = False
+
+    brojac = uvezi(podaci)
+
+    with db.session_scope() as session:
+        stanja = [
+            r.active for r in session.scalars(
+                select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+            )
+        ]
+    assert stanja == [False, False]      # oba reda, ne samo prvi
+    assert brojac["pravila_upaljena"] == 0
