@@ -421,6 +421,10 @@ class IngestService:
         doc.order_reference = shorten(ubl.order_reference, 200)
         doc.contract_reference = shorten(ubl.contract_reference, 200)
         doc.additional_reference = shorten(" | ".join(ubl.additional_references), 500)
+        # Broj se cuva radi operatera (koju fakturu odobrenje ispravlja), a broj
+        # veza radi razvrstavanja - zato se broji pre skracivanja teksta.
+        doc.billing_reference = shorten(" | ".join(ubl.billing_references) or None, 500)
+        doc.billing_reference_count = len(ubl.billing_references)
         doc.attachment_text = ubl.attachment_text
         doc.payment_account = shorten(ubl.payment_account, 64)
         doc.note = ubl.note
@@ -468,6 +472,7 @@ class IngestService:
             "order_reference": doc.order_reference,
             "contract_reference": doc.contract_reference,
             "additional_reference": doc.additional_reference,
+            "billing_reference": doc.billing_reference,
             "attachment_text": doc.attachment_text,
             "note": doc.note,
             "supplier_vat": doc.supplier_vat,
@@ -493,6 +498,36 @@ class IngestService:
                     rule.hits += 1
         else:
             doc.state = ProcessState.UNASSIGNED
+
+    def ponovo_parsiraj(self, doc_id: int) -> bool:
+        """Ponovo cita vec sacuvani UBL sa diska — bez obracanja SEF-u.
+
+        Koristi se kad parser nauci novo polje: istorija je preuzeta, fajl je tu,
+        pa nema razloga da se skida ponovo. Stavke se grade iznova, ali se ERP
+        sifra koju je operater potvrdio vraca na svoju stavku — ona nije iz UBL-a
+        i ponovno citanje je ne sme pojesti.
+
+        Razvrstavanje se NE dira: ako novo polje treba da promeni odluku, to radi
+        `razvrstaj`, posle merenja.
+        """
+        with session_scope() as session:
+            doc = session.get(Document, doc_id)
+            if doc is None:
+                raise ValueError(f"Dokument {doc_id} ne postoji.")
+            if not doc.ubl_path or not Path(doc.ubl_path).exists():
+                return False
+            ubl = parse_ubl(Path(doc.ubl_path).read_bytes())
+            ranije = {
+                line.line_no: (line.erp_item_code, line.erp_mapping_source)
+                for line in doc.lines
+                if line.erp_item_code
+            }
+            self._apply_ubl(session, doc, ubl)
+            session.flush()
+            for line in doc.lines:
+                if line.line_no in ranije:
+                    line.erp_item_code, line.erp_mapping_source = ranije[line.line_no]
+            return True
 
     def reroute(self, doc_id: int) -> RoutingSource:
         """Ponovo primenjuje pravila na postojeci dokument (posle izmene pravila)."""

@@ -455,3 +455,52 @@ dokument, crvena oznaka u redu i objašnjenje na strani dokumenta, test.
 
 U dosadašnjih 7.727 dokumenata nema nijednog takvog — pravilo je postavljeno
 unapred.
+
+
+---
+
+## Veza ka ispravljenoj fakturi u bazi — 16.09.2026
+
+Parser je `BillingReference` čitao od početka, a ingest ga je bacao. Sada se čuva:
+
+| Kolona | Sadržaj |
+|---|---|
+| `Document.billing_reference` | brojevi faktura koje dokument ispravlja, spojeni sa ` \| ` |
+| `Document.billing_reference_count` | koliko ih je — broji se pre skraćivanja teksta na 500 |
+
+Broj veza je drugi nivo pouzdanosti iz odeljka 3: **tačno jedna** veza znači povraćaj
+po jednoj fakturi (magacin 010), **nijedna ili više** finansijsko odobrenje na promet
+(088). Mereno ranije: 234 odluke, 85 % tačnih. Operater vidi broj na strani dokumenta,
+a uz više veza i objašnjenje šta to znači.
+
+Dodato je i polje `MatchField.BILLING_REFERENCE` da pravilo može da ga cilja.
+
+### Namerno NIJE ušlo u `any_text`
+
+Broj tuđe fakture ne može da imenuje odredište — može samo da unese nove cifre u koje
+bi se uhvatila postojeća `any_text` pravila. Ista greška koju je napravio prilog
+(tačnost 97,4 % → 91,8 %). Polje radi samo kad ga pravilo izričito cilja; dva testa
+to zaključavaju.
+
+**Zatečena nedoslednost, nije dirana:** kod operatora `regex` nad `any_text` prilog
+i dalje ulazi u tekst, za razliku od ostalih operatora. Ispravka bi promenila odluke
+postojećih regex pravila, pa čeka merenje naspram ERP-a.
+
+### `osvezi-ubl` — dopuna istorije bez SEF-a
+
+Nova kolona ostaje prazna za 7.727 već preuzetih dokumenata. Fajlovi su na disku, pa
+`sefsync osvezi-ubl` čita njih, bez ijednog poziva ka SEF-u. Isto vredi za svaku
+raniju dopunu parsera (`additional_reference`, `attachment_text`, `payment_account`).
+
+Stavke se grade iznova, ali se `erp_item_code` vraća na svoju stavku po rednom broju —
+ta šifra nije iz UBL-a i ponovno čitanje je ne sme pojesti. Razvrstavanje se ne dira;
+za to postoji `razvrstaj`, posle merenja.
+
+**Pre puštanja:** `sefsync init-db` dodaje dve kolone (`sync_schema`), pa tek onda
+`osvezi-ubl`.
+
+### Ostaje
+
+Pravila po broju veza (010/088) još nisu napisana — po pravilu rada od 15.09. idu tek
+kad se izmere na svih 904 sparena odobrenja sa poznatim odgovorom iz ERP-a. Sada za to
+postoji podatak u bazi.

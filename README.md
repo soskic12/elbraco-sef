@@ -263,6 +263,7 @@ Alternativno razdvojeno:
 | `sefsync ko-moze` | ko može u panel i sa kojom ulogom (po šifarniku) |
 | `sefsync arhiviraj --do <datum>` | sklanja istoriju iz reda (ostaje u arhivi) |
 | `sefsync backfill --od <datum>` | preuzimanje dužeg perioda, mesec po mesec |
+| `sefsync osvezi-ubl [--dokument <id>]` | ponovo čita sačuvane UBL-ove sa diska (kad parser nauči novo polje) |
 | `sefsync pravila` | ispis pravila razvrstavanja |
 | `sefsync smtp-check [--na adresa]` | prikaz SMTP podešavanja i probna poruka |
 | `sefsync notify-test <id>` | pravo obaveštenje za jedan dokument |

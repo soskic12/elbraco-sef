@@ -173,3 +173,47 @@ def test_pravilo_moze_izricito_da_cilja_prilog():
         attachment_text="Poslovnica B000067561 Elbraco group Glavna 18 21220 Becej"))
     assert odluka.business_unit_id == 7
     assert odluka.rule_id == 2
+
+
+def test_veza_ka_ispravljenoj_fakturi_je_polje_za_pravila(db, odobrenje_xml):
+    """Knjizno odobrenje nosi broj fakture koju ispravlja - pravilo sme da ga cilja."""
+    with db.session_scope() as session:
+        mp, _ = _units(session)
+        session.add(
+            RoutingRule(
+                priority=10,
+                field=MatchField.BILLING_REFERENCE,
+                op=MatchOp.CONTAINS,
+                pattern="2026-114",
+                business_unit_id=mp.id,
+            )
+        )
+        session.flush()
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
+
+        assert decision.business_unit_id == mp.id
+
+
+def test_veza_ka_fakturi_ne_ulazi_u_any_text(db, odobrenje_xml):
+    """Broj ispravljene fakture ne imenuje odrediste, pa ne sme da siri any_text.
+
+    Inace bi postojeca any_text pravila pocela da se hvataju za cifre iz tudjeg
+    broja racuna - ista greska koju je napravio prilog (tacnost 97,4% -> 91,8%).
+    """
+    with db.session_scope() as session:
+        mp, _ = _units(session)
+        session.add(
+            RoutingRule(
+                priority=10,
+                field=MatchField.ANY_TEXT,
+                op=MatchOp.CONTAINS,
+                pattern="2026-114",
+                business_unit_id=mp.id,
+            )
+        )
+        session.flush()
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
+
+        assert decision.source is RoutingSource.NONE

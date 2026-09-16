@@ -85,9 +85,11 @@ class RoutingEngine:
         # nazive artikala i zaglavlje dobavljaca, pa siri svako "any_text" pravilo
         # do lazno pozitivnih. Mereno: tacnost pada sa 97,4% na 91,8%.
         # Prilog se koristi samo kad pravilo izricito cilja attachment_text.
-        any_text = " ".join(
-            v for k, v in normalized.items() if v and k != MatchField.ATTACHMENT_TEXT.value
-        )
+        # Broj ispravljene fakture (billing_reference) je takodje van any_text:
+        # on ne moze da imenuje odrediste, a unosi nove cifre u koje bi se uhvatila
+        # postojeca any_text pravila. Koristi se samo kad pravilo cilja to polje.
+        _van_any_text = {MatchField.ATTACHMENT_TEXT.value, MatchField.BILLING_REFERENCE.value}
+        any_text = " ".join(v for k, v in normalized.items() if v and k not in _van_any_text)
         supplier_vat = (fields.get("supplier_vat") or "").strip()
 
         doc_type = (fields.get("document_type") or "").strip()
@@ -102,7 +104,16 @@ class RoutingEngine:
                 continue
             if rule.op is MatchOp.REGEX:
                 # regex ide nad originalnim tekstom - interpunkcija i mala slova su bitni
-                raw_values = fields.values() if is_any else [fields.get(rule.field.value)]
+                if is_any:
+                    # NAPOMENA: attachment_text ovde jos uvek ulazi u any_text, za
+                    # razliku od ostalih operatora iznad. Razlika je zatecena, a
+                    # ispravka bi promenila odluke postojecih regex pravila, pa ceka
+                    # merenje naspram ERP-a. Novo polje se u tu nedoslednost ne dodaje.
+                    raw_values = [
+                        v for k, v in fields.items() if k != MatchField.BILLING_REFERENCE.value
+                    ]
+                else:
+                    raw_values = [fields.get(rule.field.value)]
                 subject = " ".join(v for v in raw_values if v)
             else:
                 subject = haystack

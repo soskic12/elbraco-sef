@@ -184,6 +184,7 @@ class UblDocument:
             "supplier_name": self.supplier.name or self.supplier.registration_name,
             "document_number": self.document_number,
             "additional_reference": " | ".join(self.additional_references) or None,
+            "billing_reference": " | ".join(self.billing_references) or None,
             "attachment_text": self.attachment_text,
             "item_text": self.item_text or None,
             "document_type": self.document_type,

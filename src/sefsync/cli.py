@@ -582,6 +582,49 @@ def cmd_reroute(
     typer.echo(f"Razvrstano: {razvrstano} od {len(ids)}")
 
 
+@app.command("osvezi-ubl")
+def cmd_reparse(
+    dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),
+) -> None:
+    """Ponovo čita sačuvane UBL fajlove sa diska — bez obraćanja SEF-u.
+
+    Kad parser nauči novo polje, istorija ga nema u bazi. Fajlovi su već na disku,
+    pa se ne skidaju ponovo. Potvrđene ERP šifre stavki ostaju netaknute, a
+    razvrstavanje se ne dira — za to postoji `razvrstaj`.
+    """
+    _boot()
+    from sqlalchemy import select as _select
+
+    from .models import Document
+    from .services.ingest import IngestService
+
+    with session_scope() as session:
+        upit = _select(Document.id).where(Document.ubl_path.is_not(None))
+        if dokument is not None:
+            upit = upit.where(Document.id == dokument)
+        ids = list(session.scalars(upit.order_by(Document.id)))
+
+    if not ids:
+        typer.echo("Nema dokumenata sa sačuvanim UBL-om.")
+        return
+
+    typer.echo(f"Ponovo čitam {len(ids)} dokumenata...")
+    servis = IngestService()
+    procitano = bez_fajla = greske = 0
+    for redni, doc_id in enumerate(ids, 1):
+        try:
+            if servis.ponovo_parsiraj(doc_id):
+                procitano += 1
+            else:
+                bez_fajla += 1
+        except Exception as exc:  # noqa: BLE001
+            greske += 1
+            typer.secho(f"  #{doc_id}: {exc}", fg="yellow")
+        if redni % 500 == 0:
+            typer.echo(f"  {redni}/{len(ids)}")
+    typer.echo(f"Pročitano: {procitano}, bez fajla: {bez_fajla}, greške: {greske}")
+
+
 @app.command("pj-import")
 def cmd_units_import(
     fajl: str = typer.Argument(..., help="CSV: code;name;kind;erp_code;address;city;emails;phones"),

@@ -66,6 +66,13 @@
           {% else %}<span class="muted" style="font-weight:400">čeka se</span>{% endif %}</dd>
       <dt>Adresa isporuke</dt><dd style="font-weight:400">{{ doc.delivery_address or '—' }}</dd>
       <dt>Narudžbenica</dt><dd style="font-weight:400">{{ doc.order_reference or '—' }}</dd>
+      {% if doc.billing_reference %}
+      <dt>Ispravlja fakturu</dt>
+      <dd style="font-weight:400">{{ doc.billing_reference }}
+        {% if doc.billing_reference_count > 1 %}
+          <div class="muted small">{{ doc.billing_reference_count }} fakture — odobrenje na promet,
+            ne povraćaj po jednoj otpremnici</div>{% endif %}</dd>
+      {% endif %}
       <dt>Napomena</dt><dd class="small" style="font-weight:400">{{ doc.note or '—' }}</dd>
     </dl>
   </div>

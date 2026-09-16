@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 from sqlalchemy import select
 
@@ -267,3 +269,80 @@ def test_nova_se_i_dalje_razvrstava_po_dobavljacu(db, faktura_xml, monkeypatch):
     with db.session_scope() as session:
         doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
         assert doc.business_unit_id == office_id
+
+
+# --------------------------------------------------------------------------- #
+# veza ka ispravljenoj fakturi + ponovno citanje UBL-a sa diska
+# --------------------------------------------------------------------------- #
+
+
+def test_knjizno_odobrenje_cuva_vezu_ka_fakturi(db, odobrenje_xml):
+    service = build_service(odobrenje_xml)
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.document_type is DocumentType.CREDIT_NOTE
+        assert doc.billing_reference == "2026-114/25"
+        # tacno jedna veza = povracaj po jednoj fakturi; to je signal za magacin 010
+        assert doc.billing_reference_count == 1
+
+
+def test_obicna_faktura_nema_vezu(db, faktura_xml):
+    service = build_service(faktura_xml)
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        assert doc.billing_reference is None
+        assert doc.billing_reference_count == 0
+
+
+def test_ponovno_citanje_sa_diska_ne_dira_sef(db, odobrenje_xml):
+    """Kad parser nauci novo polje, istorija se dopunjava iz sacuvanih fajlova."""
+    service = build_service(odobrenje_xml)
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        doc_id = doc.id
+        # stanje pre nego sto je parser znao za polje
+        doc.billing_reference = None
+        doc.billing_reference_count = 0
+        doc.lines[0].erp_item_code = "12345"
+        doc.lines[0].erp_mapping_source = "operater"
+
+    # SEF vise ne odgovara - citanje mora da prodje samo sa diska
+    mrtav = IngestService(
+        client=SefClient(
+            get_settings(),
+            client=httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(500, text="SEF nedostupan")),
+                base_url=get_settings().base_url,
+            ),
+        ),
+        settings=get_settings(),
+        notifier=FakeNotifier(),
+        acceptor=FakeAcceptor(),
+    )
+    assert mrtav.ponovo_parsiraj(doc_id) is True
+
+    with db.session_scope() as session:
+        doc = session.get(Document, doc_id)
+        assert doc.billing_reference == "2026-114/25"
+        assert doc.billing_reference_count == 1
+        # potvrdjena ERP sifra nije iz UBL-a i ponovno citanje je ne sme pojesti
+        assert doc.lines[0].erp_item_code == "12345"
+        assert doc.lines[0].erp_mapping_source == "operater"
+
+
+def test_ponovno_citanje_bez_fajla_ne_puca(db, faktura_xml):
+    service = build_service(faktura_xml)
+    service.sync("2026-09-01", "2026-09-10")
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
+        doc.ubl_path = str(Path(doc.ubl_path).with_name("nema-me.xml"))
+        doc_id = doc.id
+
+    assert service.ponovo_parsiraj(doc_id) is False

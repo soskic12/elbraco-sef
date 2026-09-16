@@ -108,6 +108,7 @@ class MatchField(str, enum.Enum):
     ORDER_REFERENCE = "order_reference"        # cac:OrderReference/cbc:ID
     CONTRACT_REFERENCE = "contract_reference"
     ADDITIONAL_REFERENCE = "additional_reference"  # cac:AdditionalDocumentReference/cbc:ID
+    BILLING_REFERENCE = "billing_reference"        # cac:BillingReference -> broj ispravljene fakture
     ATTACHMENT_TEXT = "attachment_text"            # tekst iz PDF priloga
     NOTE = "note"                              # cbc:Note
     SUPPLIER_VAT = "supplier_vat"
@@ -263,6 +264,12 @@ class Document(Base):
     contract_reference: Mapped[str | None] = mapped_column(String(200), default=None)
     # Neki dobavljaci ovde upisuju objekat (KIM-TEC: "Elbraco - Sombor").
     additional_reference: Mapped[str | None] = mapped_column(String(500), default=None)
+    # Knjizno odobrenje pokazuje na fakturu koju ispravlja (cac:BillingReference).
+    # Broj veza je signal koji deli dve vrste odobrenja: tacno jedna veza znaci
+    # povracaj robe po jednoj fakturi (magacin 010), a nijedna ili vise njih
+    # finansijsko odobrenje na promet (088). Mereno: 234 odluke, 85 % tacnih.
+    billing_reference: Mapped[str | None] = mapped_column(String(500), default=None)
+    billing_reference_count: Mapped[int] = mapped_column(Integer, default=0)
     # Ziro racun dobavljaca. Kod javnih preduzeca SEF salje identifikator koji
     # nije maticni broj (Srbijagas: 86132 umesto 20084600), pa je racun jedini
     # pouzdan nacin da se dobavljac nadje u NAZIVI - popunjen je na 37.411 od
