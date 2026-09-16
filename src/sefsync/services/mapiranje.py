@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 # Od kog Clarion dana se gledaju kalkulacije (82184 = 2026-01-01).
 OD_DANA = 82184
 
+# Koliko znakova broja racuna mora da se poklopi da poredjenje "po pocetku" ima
+# smisla. Ispod toga se pogadja: krataki brojevi tipa "26-301" pripadaju svakome.
+NAJKRACI_POCETAK = 10
+
 
 def kljuc_racuna(broj: str | None) -> str:
     """Broj racuna u obliku u kom se moze porediti sa ERP-om.
@@ -55,6 +59,7 @@ class Nalaz:
     """Sta je izvedeno iz istorije, pre upisa."""
 
     ukupno_parova: int = 0
+    dokumenata_po_pocetku: int = 0   # spareno tek posle skracivanja broja u ERP-u
     iz_barkoda: int = 0
     iz_kalkulacija: int = 0
     oba_se_slazu: int = 0
@@ -159,8 +164,24 @@ def izvedi(engine: Engine | None = None) -> Nalaz:
         # --- izvor 2: zaknjizene kalkulacije ---
         zaglavlja, erp_stavke = _istina_iz_erpa(conn)
         glasovi: dict[tuple, Counter] = defaultdict(Counter)
+        # Broj racuna u ERP-u ume da bude skracen: "VPRAC/26-000108/VPM1" se
+        # zaknjizi kao "VPRAC26000108". Mereno 16.09.: od 60 takvih razlika 59 je
+        # u tom smeru (ERP kraci). Uzima se samo kad je kandidat tacno jedan -
+        # tako izmereno na 4.641 tacno uparenom dokumentu daje 3 dvosmislena
+        # (0,06 %), a vraca 48 dokumenata koji inace nemaju par.
+        doc_po_pocetku: dict[str, list[str]] = defaultdict(list)
+        for k in doc_po_racunu:
+            if len(k) >= NAJKRACI_POCETAK:
+                doc_po_pocetku[k[:NAJKRACI_POCETAK]].append(k)
+
         for rn, kandidati in zaglavlja.items():
             dids = doc_po_racunu.get(rn)
+            if not dids and len(rn) >= NAJKRACI_POCETAK:
+                duzi = [k for k in doc_po_pocetku.get(rn[:NAJKRACI_POCETAK], ())
+                        if k.startswith(rn)]
+                if len(duzi) == 1:
+                    dids = doc_po_racunu[duzi[0]]
+                    nalaz.dokumenata_po_pocetku += 1
             if not dids:
                 continue
             for tab, mag, vk, br, mb_erp in kandidati:

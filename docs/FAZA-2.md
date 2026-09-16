@@ -606,3 +606,71 @@ poslednje: prioritet 90.
 nije promenilo — jer je `alati/meri_odobrenja.py` imao svoju kopiju spiska polja,
 bez novog. Pravilo se prosto nije okidalo. Spisak je sada na jednom mestu:
 `Document.routing_fields()`, koji koriste i ingest i merenje.
+
+
+---
+
+## Zašto dokument ne nađe svoju kalkulaciju — 16.09.2026
+
+Mereno na svih 7.727 dokumenata (`alati/meri_uparivanje.py`). Tačno se upari
+**7.322 (94,8 %)**, ostaje **405 (5,2 %)** — ne 504, ta brojka je bila sa starijeg
+skupa.
+
+### Svih 405 razvrstano po uzroku
+
+| | Uzrok |
+|---:|---|
+| 131 | neobjašnjeno |
+| 105 | januar — kalkulacija verovatno u bazi `ELBS_2025` |
+| 65 | dobavljač nema nijednu kalkulaciju (banke, usluge) |
+| 48 | našao bi se po početku broja (skraćen u ERP-u) |
+| 39 | avans — kalkulacije ni nema |
+| 17 | sveža faktura — još nije zaknjižena |
+
+**ERP drži bazu po godini** (`ELBS_2012` … `ELBS_2026`), a `ELBS_2026` počinje
+tačno 01.01.2026. Kalkulacija za januarsku fakturu često stoji u prošlogodišnjoj
+bazi. Nalog `elbraco_dev_ro` nema pravo pristupa na `ELBS_2025`, pa se to ne može
+proveriti — traži jedan `GRANT`.
+
+Onih 131 neobjašnjenih, po tome koliko se taj dobavljač inače knjiži:
+
+| | |
+|---:|---|
+| 65 | dobavljač se knjiži gotovo uvek (≥90 %) — **stvarni promašaj** |
+| 39 | dobavljač se knjiži često (50–90 %) |
+| 27 | dobavljač se retko knjiži (<50 %) — naknade, usluge |
+
+Dakle stvarno neobjašnjenih je oko **65 dokumenata, 0,8 %**.
+
+### Skraćivanje broja — potvrđeno, ali retko
+
+Od 60 razlika koje poređenje po početku nalazi, **59 je u smeru „ERP kraći"**:
+
+```
+VPRAC/26-000108/VPM1  ->  ERP: VPRAC26000108
+7016088538_122025     ->  ERP: 7016088538
+K110/2026-835249      ->  ERP: K110202683524
+```
+
+Pretpostavka iz faze 2 je bila tačna po mehanizmu, ali pogrešna po veličini: to
+nije uzrok za 7 % dokumenata nego za 0,6 %.
+
+### Ugrađeno i izmereno
+
+`mapiranje.py` sada, kad ne nađe tačan broj, pokuša po **prvih 10 znakova** i uzima
+kandidata **samo ako je jedan**. Prag od 10 nije proizvoljan: kraći brojevi tipa
+`26-301` pripadaju svakome.
+
+Lažni parovi: od 4.641 tačno uparenog dokumenta, njih **3 (0,06 %)** bi imalo i
+drugog kandidata. Dobitak: 52 zaglavlja iz ERP-a nađe svoj dokument (48 dokumenata
+— neki dokument ima dve kalkulacije).
+
+**Ali mapiranja artikala nisu porasla: i dalje 2.110 pouzdanih, 2.288 iz
+kalkulacija.** Tih 48 dokumenata je od dobavljača čiji su artikli već pokriveni iz
+drugih faktura. Vrednost je u tome što merenja imaju 48 dokumenata više sa poznatom
+istinom, ne u novim šiframa.
+
+### Nova komanda
+
+`sefsync mapiranje` — do sada se izvođenje mapiranja pokretalo iz koda, bez komande.
+Podrazumevano samo ispiše šta bi uradilo; `--upisi` stvarno upisuje.

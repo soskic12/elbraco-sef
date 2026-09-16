@@ -590,6 +590,46 @@ def cmd_reroute(
     typer.echo(f"Razvrstano: {razvrstano} od {len(ids)}")
 
 
+@app.command("mapiranje")
+def cmd_mapiranje(
+    upisi: bool = typer.Option(
+        False, "--upisi", help="Stvarno upiši mapiranja (podrazumevano samo ispis)."
+    ),
+    i_nesigurna: bool = typer.Option(
+        False, "--i-nesigurna", help="Upiši i ono što je viđeno samo jednom."
+    ),
+) -> None:
+    """Izvodi mapiranja artikala (dobavljačeva šifra → naša) iz istorije.
+
+    Dva nezavisna izvora: barkod iz šifarnika i ono što je čovek zaknjižio u
+    kalkulacijama. Podrazumevano samo ispisuje šta bi uradila.
+    """
+    _boot()
+    from .services.mapiranje import izvedi
+    from .services.mapiranje import upisi as upisi_u_bazu
+
+    nalaz = izvedi()
+    typer.echo(f"Parova (dobavljač + šifra): {nalaz.ukupno_parova}")
+    typer.echo(f"  iz barkoda:            {nalaz.iz_barkoda}")
+    typer.echo(f"  iz kalkulacija:        {nalaz.iz_kalkulacija}")
+    typer.echo(f"  oba izvora se slažu:   {nalaz.oba_se_slazu}")
+    typer.echo(f"  oba se NE slažu:       {nalaz.oba_se_ne_slazu}")
+    typer.echo(f"  kolebljivih (odbačeno): {nalaz.kolebljivih}")
+    typer.echo(f"  pouzdanih za upis:     {nalaz.pouzdanih}")
+    if nalaz.dokumenata_po_pocetku:
+        typer.echo(
+            f"  (od toga {nalaz.dokumenata_po_pocetku} dokumenata spareno po početku "
+            f"broja — u ERP-u je skraćen)"
+        )
+    if not upisi:
+        typer.echo("")
+        typer.echo("Nije upisano ništa. Za upis: sefsync mapiranje --upisi")
+        return
+
+    nalaz = upisi_u_bazu(nalaz, samo_pouzdana=not i_nesigurna)
+    typer.echo(f"Upisano: {nalaz.upisano}, već postojalo: {nalaz.vec_postojalo}")
+
+
 @app.command("osvezi-ubl")
 def cmd_reparse(
     dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),
