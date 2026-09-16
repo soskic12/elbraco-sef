@@ -504,3 +504,62 @@ za to postoji `razvrstaj`, posle merenja.
 Pravila po broju veza (010/088) još nisu napisana — po pravilu rada od 15.09. idu tek
 kad se izmere na svih 904 sparena odobrenja sa poznatim odgovorom iz ERP-a. Sada za to
 postoji podatak u bazi.
+
+
+---
+
+## Veza ka fakturi: signal izmeren na svim odobrenjima — 16.09.2026
+
+Mereno na **923 od 967** knjižnih odobrenja koja nalaze svoju kalkulaciju u ERP-u
+(nespareno 44, dvosmislenih 0). Istina je magacin u koji je kalkulacija stvarno
+otišla.
+
+### Stvarni magacin po broju veza
+
+| Veza ka fakturi | 010 | 088 | ukupno |
+|---|---:|---:|---:|
+| nema | 221 | 280 | 501 |
+| **tačno jedna** | **346** | 57 | 403 |
+| dve ili više | 1 | 18 | 19 |
+
+Na prvi pogled potvrda: „tačno jedna veza → 010" pogađa **85,9 %** (346 od 403),
+tačno kao procena sa uzorka od 234 dokumenta.
+
+### Ali ta brojka je varljiva
+
+Pravila po ključnim rečima **već rešavaju** većinu tih dokumenata. Pravo pitanje je
+šta veza dodaje tamo gde pravila ćute — a tamo signal pada:
+
+| Veza | Dokumenata gde pravila ćute | Stvarno 010 | Stvarno 088 | „010" bi bilo tačno |
+|---|---:|---:|---:|---:|
+| nema | 307 | 30 | 277 | 9,8 % |
+| **tačno jedna** | **111** | 57 | 54 | **51,4 %** |
+| dve ili više | 19 | 1 | 18 | 5,3 % |
+
+**Kod jedne veze to je bacanje novčića.** Predloženo pravilo iz odeljka 3 —
+„veza ka fakturi → app predloži 010" — **ne sme da ide u rad.** Izgledalo je dobro
+samo zato što su ga pravila po ključnim rečima nosila.
+
+### Šta se ipak dobilo
+
+Signal radi u **suprotnom** smeru: gde pravila ćute, **nema veze ili ih je više →
+088** pogađa 295 od 326 (**90,5 %**). Deo toga je osnovna stopa (među
+nerazvrstanima je 79,9 % ionako 088), ali 90,5 % je mereno iznad nje.
+
+| | Odlučeno | Tačnost | Grešaka | Operateru |
+|---|---:|---:|---:|---:|
+| Zatečeno (ključne reči) | 486 (52,7 %) | 91,4 % | 42 | 437 |
+| + „0 ili 2+ veze → 088" | 812 (88,0 %) | 91,0 % | 73 | **111** (~0,5 dnevno) |
+
+Pokrivenost skače sa 53 % na 88 % uz istu tačnost. Onih 111 sa jednom vezom su baš
+oni koje mašina ne ume da odluči — i njih treba da vidi čovek.
+
+Dodatni nalaz: od 42 dokumenta koja današnja pravila **pogrešno** razvrstaju, 28 ima
+tačno jednu vezu i 25 od njih stvarno pripada 010. Veza je, dakle, upotrebljiva kao
+**znak za sumnju**, ne kao odluka.
+
+### Nije još odlučeno
+
+Da li app sme sama da upiše 088 na tih 326 dokumenata (uz 31 grešku), ili to ostaje
+predlog operateru. Odluka je poslovna, ne tehnička: greška znači da reklamacija ode
+na promet umesto na magacin 010. Operater ionako vidi dokument pre prosleđivanja.
