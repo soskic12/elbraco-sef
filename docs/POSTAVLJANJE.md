@@ -31,6 +31,19 @@ se diže ako proces padne. Za ovaj posao radi isto.
 
 ## Postavljanje
 
+**0.** Napravi paket — **na razvojnoj mašini**, iz foldera projekta:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\napravi-paket.ps1
+```
+
+Skripta sklopi `objava\sefsync-paket.zip`: kod, točkove za offline instalaciju
+(3.12 i 3.13) i `pravila.json` sa šifarnikom PJ, pravilima razvrstavanja i
+mapiranjima artikala. Prethodni paket ne briše nego mu doda datum u ime.
+
+Ručno sklapanje se ne radi — tako je jednom u paket ušao `build\` folder, a pypdf
+je ispao, pa bi instalacija bez interneta pukla na serveru.
+
 **1.** Prekopiraj na server (RDP-om, deljenim folderom, svejedno):
 
 ```
@@ -100,6 +113,32 @@ C:\efakture\.venv\Scripts\sefsync.exe arhiviraj --do <juče> --stvarno
 **Probni režim** je uključen: dok u `.env` stoji `NOTIFY_OVERRIDE_TO`, nijedno
 obaveštenje ne ide u objekte nego samo na tu adresu. Kad se tok uvežba, obriši
 vrednost i restartuj servis.
+
+---
+
+## Nova verzija na server
+
+Posle `postavi.ps1 -Stvarno` idu još tri koraka. Skripta ih ne radi sama jer svaki
+menja podatke, a ne kod.
+
+```powershell
+C:\efakture\.venv\Scripts\sefsync.exe pravila-uvoz C:\efakture\pravila.json
+C:\efakture\.venv\Scripts\sefsync.exe osvezi-ubl
+C:\efakture\.venv\Scripts\sefsync.exe razvrstaj
+```
+
+**`pravila-uvoz`** — pravila razvrstavanja i mapiranja artikala nisu u kodu nego u
+bazi. Bez ovoga nova verzija radi po starim pravilima. Uvoz ne duplira, prenosi i
+**ugašena** pravila kao ugašena (zato što #44 i #47 treba da prestanu da rade i
+ovde, a pravila 93 % svih grešaka u razvrstavanju).
+
+**`osvezi-ubl`** — ponovo čita već preuzete UBL fajlove sa diska, bez SEF-a. Puni
+polja koja parser u međuvremenu nauči (veza ka ispravljenoj fakturi, tekst PDF
+priloga, žiro račun). Bez ovoga ta polja ostaju prazna za istoriju.
+
+**`razvrstaj`** — namerno **bez** `--sve`: razvrstava samo ono što još nema
+poslovnu jedinicu. Sa `--sve` bi promenio PJ i dokumentima koje je operater već
+prosledio u objekat.
 
 ---
 

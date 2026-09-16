@@ -110,7 +110,8 @@ def uvezi(podaci: dict, i_jedinice: bool = False) -> dict[str, int]:
         raise ValueError(f"Nepoznata verzija izvoza: {podaci.get('verzija')}")
 
     brojac = {"jedinice_nove": 0, "jedinice_azurirane": 0, "pravila_nova": 0,
-              "pravila_postojeca": 0, "mapiranja_nova": 0, "preskoceno": 0}
+              "pravila_postojeca": 0, "pravila_ugasena": 0, "pravila_upaljena": 0,
+              "mapiranja_nova": 0, "preskoceno": 0}
 
     with session_scope() as session:
         if i_jedinice:
@@ -157,7 +158,16 @@ def uvezi(podaci: dict, i_jedinice: bool = False) -> dict[str, int]:
                 )
             )
             if postoji is not None:
-                brojac["pravila_postojeca"] += 1
+                # Gasenje pravila mora da predje sa izvozom. Inace ostane ovako:
+                # #44 i #47 su ugaseni ovde jer su pravili 93 % svih gresaka u
+                # razvrstavanju, a na serveru bi i dalje radili — uvoz ih nalazi
+                # kao "vec postojece" i ne dira im stanje.
+                zeljeno = bool(red.get("active", True))
+                if postoji.active != zeljeno:
+                    postoji.active = zeljeno
+                    brojac["pravila_ugasena" if not zeljeno else "pravila_upaljena"] += 1
+                else:
+                    brojac["pravila_postojeca"] += 1
                 continue
 
             session.add(

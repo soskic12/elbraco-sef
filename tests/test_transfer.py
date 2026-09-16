@@ -98,3 +98,47 @@ def test_pravilo_za_nepoznatu_pj_se_preskace_uz_upozorenje(db, izvor):
     brojac = uvezi(podaci)
 
     assert brojac["preskoceno"] == 1
+
+
+def test_ugaseno_pravilo_se_gasi_i_na_odredistu(db, izvor):
+    """Server ima pravilo aktivno, izvoz kaze da je ugaseno — mora da se ugasi.
+
+    Ovo je slucaj #47 ("Srpskih vladara 46" — adresa sedista, tacnost 23,8 %):
+    ugaseno je ovde posle merenja, a na serveru bi bez ovoga i dalje razvrstavalo.
+    """
+    podaci = izvezi()
+    for pravilo in podaci["pravila"]:
+        if pravilo["pattern"] == "Srpskih vladara 46":
+            pravilo["active"] = False
+
+    brojac = uvezi(podaci)
+
+    assert brojac["pravila_ugasena"] == 1
+    assert brojac["pravila_postojeca"] == 2
+    with db.session_scope() as session:
+        pravilo = session.scalar(
+            select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+        )
+        assert pravilo.active is False
+
+
+def test_ponovo_upaljeno_pravilo_se_pali(db, izvor):
+    """Isto vazi u drugom smeru — inace bi ispravka morala rucno na svaku instalaciju."""
+    with db.session_scope() as session:
+        session.scalar(
+            select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+        ).active = False
+
+    podaci = izvezi()
+    for pravilo in podaci["pravila"]:
+        if pravilo["pattern"] == "Srpskih vladara 46":
+            pravilo["active"] = True
+
+    brojac = uvezi(podaci)
+
+    assert brojac["pravila_upaljena"] == 1
+    with db.session_scope() as session:
+        pravilo = session.scalar(
+            select(RoutingRule).where(RoutingRule.pattern == "Srpskih vladara 46")
+        )
+        assert pravilo.active is True
