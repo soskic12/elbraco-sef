@@ -1,4 +1,4 @@
-"""Meri signal "tacno jedna veza ka fakturi -> magacin 010" na svim odobrenjima.
+r"""Meri signal "tacno jedna veza ka fakturi -> magacin 010" na svim odobrenjima.
 
 Istina dolazi iz ERP-a: za knjizno odobrenje koje je covek zaknjizio zna se u
 koji je magacin kalkulacija stvarno otisla. To je nezavisno od svega sto app radi.
