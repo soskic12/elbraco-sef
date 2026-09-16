@@ -110,6 +110,55 @@ def sync_schema() -> list[str]:
     return changes
 
 
+def _alter_sirina(tabela: str, kolona: str, tip: str, duzina: int, nullable: bool) -> str:
+    """ALTER koji siri kolonu, a zadrzava njen tip i NOT NULL."""
+    kraj = "NULL" if nullable else "NOT NULL"
+    return f"ALTER TABLE {tabela} ALTER COLUMN {kolona} {tip}({duzina}) {kraj}"
+
+
+def prosiri_uske_kolone() -> list[str]:
+    """MS SQL: siri kolone koje su uze nego sto model trazi.
+
+    Enum kolona se pravi kao VARCHAR duzine najduze vrednosti u tom trenutku.
+    Kad se enumu doda duza vrednost, stara kolona je vise ne prima - a dopuna
+    seme dodaje samo nove kolone i ovo joj promice.
+
+    Mereno 16.09. na serveru: `routing_rule.field` je bio varchar(18) jer je u
+    trenutku pravljenja najduza vrednost bila CONTRACT_REFERENCE. Uvoz pravila
+    je pukao na ADDITIONAL_REFERENCE (20) porukom o skracivanju, i to tek posle
+    pola posla. Sirenje je bezbedno: nijedan postojeci podatak ne staje.
+    """
+    engine = get_engine()
+    if engine.dialect.name != "mssql":
+        # SQLite ne primenjuje duzinu, a za druge baze ovo nije provereno.
+        return []
+
+    inspector = inspect(engine)
+    promene: list[str] = []
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            u_bazi = {c["name"]: c for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                trazi = getattr(column.type, "length", None)
+                postoji = u_bazi.get(column.name)
+                if trazi is None or postoji is None:
+                    continue
+                ima = getattr(postoji["type"], "length", None)
+                if ima is None or ima >= trazi:
+                    continue
+                tip = postoji["type"].__class__.__name__.upper()
+                if tip not in ("VARCHAR", "NVARCHAR", "CHAR", "NCHAR"):
+                    continue
+                conn.execute(text(_alter_sirina(
+                    table.name, column.name, tip, trazi, bool(postoji.get("nullable", True))
+                )))
+                promene.append(f"{table.name}.{column.name}: {ima} -> {trazi}")
+                log.info("Kolona proširena: %s", promene[-1])
+    return promene
+
+
 def proveri_unicode() -> list[str]:
     """Na MS SQL-u tekstualne kolone moraju biti NVARCHAR.
 
@@ -148,5 +197,6 @@ def proveri_unicode() -> list[str]:
 def init_db() -> list[str]:
     Base.metadata.create_all(get_engine())
     promene = sync_schema()
+    promene += prosiri_uske_kolone()
     proveri_unicode()
     return promene

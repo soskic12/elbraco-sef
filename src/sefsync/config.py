@@ -37,6 +37,31 @@ def _project_root() -> Path:
 
 PROJECT_ROOT = _project_root()
 
+
+def dom_nije_instalacija() -> str | None:
+    r"""Vraca objasnjenje ako je komanda pokrenuta izvan foldera instalacije.
+
+    Aplikacija trazi `.env` i `data\` u radnom folderu. Kad ih tamo nema, uzima
+    se podrazumevano podesavanje - a ono pokazuje na novu, praznu bazu pored.
+    Ne puca nista: komanda uredno "uspe" nad necim sto nije ta instalacija.
+
+    Tako je 16.09. na serveru proslo `pravila-uvoz` (uvezao pravila u praznu
+    bazu u `C:\Users\Administrator`), pa `osvezi-ubl` i `razvrstaj` sa nulom
+    dokumenata - a panel je za to vreme radio nad svojom, pravom bazom.
+    """
+    if os.getenv("SEFSYNC_HOME") or os.getenv("DB_URL") or os.getenv("SEF_DISABLE_DOTENV"):
+        return None  # izricito zadato - covek zna gde radi
+    if (PROJECT_ROOT / ".env").exists() or (PROJECT_ROOT / "data").exists():
+        return None
+    return (
+        f"Ovde nema instalacije: {PROJECT_ROOT}\n"
+        r"Ocekujem `.env` ili `data\` u tom folderu, a nema ih - komanda bi "
+        "napravila novu praznu bazu pored i radila nad njom.\n"
+        r"Predji u folder instalacije (na serveru: cd C:\efakture) ili zadaj "
+        "SEFSYNC_HOME."
+    )
+
+
 SEF_URLS = {
     "prod": "https://efaktura.mfin.gov.rs",
     "demo": "https://demoefaktura.mfin.gov.rs",

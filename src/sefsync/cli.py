@@ -30,6 +30,14 @@ log = logging.getLogger("sefsync.cli")
 
 
 def _boot(naziv: str = "sefsync-cli") -> None:
+    from .config import dom_nije_instalacija
+
+    problem = dom_nije_instalacija()
+    if problem:
+        # Bolje stati nego uspeti nad pogresnom bazom - to se ne vidi dok neko
+        # ne primeti da se posao nije desio.
+        typer.secho(problem, fg="red")
+        raise typer.Exit(2)
     setup_logging(naziv=naziv)
     init_db()
 

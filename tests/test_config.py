@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+import typer
+
 from sefsync.config import _project_root
 
 
@@ -51,3 +54,64 @@ def test_baza_nikad_ne_zavrsi_u_venv(tmp_path, monkeypatch):
 
     assert ".venv" not in str(_project_root())
     assert _project_root() == odrediste
+
+
+# --------------------------------------------------------------------------- #
+# pokretanje iz pogresnog foldera
+# --------------------------------------------------------------------------- #
+
+
+def _cist_env(monkeypatch):
+    for ime in ("SEFSYNC_HOME", "DB_URL", "SEF_DISABLE_DOTENV"):
+        monkeypatch.delenv(ime, raising=False)
+
+
+def test_folder_bez_instalacije_se_prijavljuje(tmp_path, monkeypatch):
+    r"""Komanda pokrenuta iz C:\Users\Administrator mora da stane, ne da uspe.
+
+    Bez ovoga uzme podrazumevano podesavanje, napravi praznu bazu pored i radi
+    nad njom - sto je 16.09. na serveru progutalo pravila-uvoz i osvezi-ubl.
+    """
+    from sefsync import config
+
+    _cist_env(monkeypatch)
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+
+    problem = config.dom_nije_instalacija()
+
+    assert problem is not None
+    assert str(tmp_path) in problem
+
+
+def test_folder_instalacije_prolazi(tmp_path, monkeypatch):
+    from sefsync import config
+
+    _cist_env(monkeypatch)
+    (tmp_path / ".env").write_text("SEF_ENV=prod", encoding="utf-8")
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+
+    assert config.dom_nije_instalacija() is None
+
+
+def test_izricito_zadata_baza_ne_trazi_folder(tmp_path, monkeypatch):
+    """Testovi i posebna podesavanja zadaju DB_URL - njima folder nije potreban."""
+    from sefsync import config
+
+    _cist_env(monkeypatch)
+    monkeypatch.setenv("DB_URL", "sqlite:///:memory:")
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+
+    assert config.dom_nije_instalacija() is None
+
+
+def test_komanda_staje_umesto_da_radi_nad_praznom_bazom(tmp_path, monkeypatch):
+    """Provera da je zastita zaista zakacena na pokretanje svake komande."""
+    from sefsync import cli, config
+
+    _cist_env(monkeypatch)
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+
+    with pytest.raises(typer.Exit) as izlaz:
+        cli._boot()
+
+    assert izlaz.value.exit_code == 2

@@ -148,3 +148,36 @@ def test_provera_cuti_na_sqlite(db):
     from sefsync.db import proveri_unicode
 
     assert proveri_unicode() == []
+
+
+# --------------------------------------------------------------------------- #
+# sirina kolona
+# --------------------------------------------------------------------------- #
+
+
+def test_sirenje_kolone_zadrzava_tip_i_not_null():
+    """Enum kolona je varchar(18) a treba joj 20 - siri se, ali ostaje NOT NULL.
+
+    Da se ispusti "NOT NULL", T-SQL bi kolonu usput napravio NULL-abilnom.
+    """
+    from sefsync.db import _alter_sirina
+
+    naredba = _alter_sirina("routing_rule", "field", "VARCHAR", 20, nullable=False)
+
+    assert naredba == "ALTER TABLE routing_rule ALTER COLUMN field VARCHAR(20) NOT NULL"
+
+
+def test_sirenje_nullable_kolone_ostaje_nullable():
+    from sefsync.db import _alter_sirina
+
+    naredba = _alter_sirina("routing_rule", "document_type", "NVARCHAR", 11, nullable=True)
+
+    assert naredba.endswith("NVARCHAR(11) NULL")
+
+
+def test_enum_kolona_trazi_duzinu_najduze_vrednosti():
+    """Merilo za sirenje: model kaze koliko je potrebno."""
+    from sefsync.models import MatchField, RoutingRule
+
+    assert RoutingRule.__table__.c.field.type.length == max(len(x.name) for x in MatchField)
+    assert RoutingRule.__table__.c.field.type.length == 20  # ADDITIONAL_REFERENCE
