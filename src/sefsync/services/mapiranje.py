@@ -75,6 +75,26 @@ class Nalaz:
                    or (m["source"] == "kalkulacija" and m["evidence"] >= 2))
 
 
+def _proslogodisnja_baza(conn) -> str | None:
+    """Naziv baze za prethodnu godinu, ako nalog ima pravo da je cita.
+
+    ERP drzi bazu po godini (ELBS_2012 ... ELBS_2026). Kalkulacija za januarsku
+    fakturu obicno stoji u proslogodisnjoj bazi jer se roba primila u decembru -
+    mereno 16.09., 83 od 120 januarskih dokumenata bez para nadje se tamo.
+    """
+    tekuca = conn.engine.url.database or ""
+    m = re.match(r"^(.*?)(\d{4})$", tekuca)
+    if not m:
+        return None
+    ranija = f"{m.group(1)}{int(m.group(2)) - 1}"
+    try:
+        conn.execute(text(f"SELECT TOP 1 1 FROM {ranija}.dbo.ULKALKUL"))
+    except Exception as exc:  # noqa: BLE001 - nedostupna baza nije greska
+        log.info("Proslogodisnja baza %s se ne cita (%s)", ranija, str(exc)[:80])
+        return None
+    return ranija
+
+
 def _istina_iz_erpa(conn) -> tuple[dict, dict]:
     """Vraca (zaglavlja po kljucu racuna, stavke po kalkulaciji)."""
     naz_mb = {
@@ -83,29 +103,43 @@ def _istina_iz_erpa(conn) -> tuple[dict, dict]:
             text("SELECT RTRIM(ANALITIKA) a, RTRIM(ISNULL(MATBROJ,'')) mb FROM dbo.NAZIVI")
         )
     }
+    # ("" = tekuca baza) pa prethodna godina, ako je dostupna
+    baze = [""]
+    ranija = _proslogodisnja_baza(conn)
+    if ranija:
+        baze.append(ranija)
+
     zaglavlja: dict[str, list] = defaultdict(list)
-    for tab in ("ULKALKUL", "MKALKUL"):
-        for r in conn.execute(
-            text(
-                f"SELECT RTRIM(BROJ_RN_DOB) rn, RTRIM(MAGACIN) mag, RTRIM(VRSTAKNJIZ) vk, "
-                f"RTRIM(BROJ) br, RTRIM(DOBAVLJAC) dob FROM dbo.{tab} WHERE DATUM >= :od"
-            ),
-            {"od": OD_DANA},
-        ):
-            if r.rn:
-                zaglavlja[kljuc_racuna(r.rn)].append(
-                    (tab, r.mag, r.vk, r.br, naz_mb.get(r.dob, ""))
-                )
+    for baza in baze:
+        prefiks = f"{baza}.dbo." if baza else "dbo."
+        # Granica po datumu vazi samo za tekucu godinu; iz proslogodisnje se uzima
+        # sve, jer je i sama ogranicena tom godinom.
+        uslov = " WHERE DATUM >= :od" if not baza else ""
+        for tab in ("ULKALKUL", "MKALKUL"):
+            for r in conn.execute(
+                text(
+                    f"SELECT RTRIM(BROJ_RN_DOB) rn, RTRIM(MAGACIN) mag, RTRIM(VRSTAKNJIZ) vk, "
+                    f"RTRIM(BROJ) br, RTRIM(DOBAVLJAC) dob FROM {prefiks}{tab}{uslov}"
+                ),
+                {"od": OD_DANA} if not baza else {},
+            ):
+                if r.rn:
+                    zaglavlja[kljuc_racuna(r.rn)].append(
+                        (baza, tab, r.mag, r.vk, r.br, naz_mb.get(r.dob, ""))
+                    )
 
     stavke: dict[tuple, list] = defaultdict(list)
-    for tab, tabela_stavki in (("ULKALKUL", "PRULKALK"), ("MKALKUL", "MPRULK")):
-        for r in conn.execute(
-            text(
-                f"SELECT RTRIM(MAGACIN) mag, RTRIM(VRSTAKNJIZ) vk, RTRIM(BROJ) br, "
-                f"RTRIM(ARTIKAL) art, KOLICINA, FAK_CENA FROM dbo.{tabela_stavki}"
-            )
-        ):
-            stavke[(tab, r.mag, r.vk, r.br)].append((r.art, r.KOLICINA, r.FAK_CENA))
+    for baza in baze:
+        prefiks = f"{baza}.dbo." if baza else "dbo."
+        for tab, tabela_stavki in (("ULKALKUL", "PRULKALK"), ("MKALKUL", "MPRULK")):
+            for r in conn.execute(
+                text(
+                    f"SELECT RTRIM(MAGACIN) mag, RTRIM(VRSTAKNJIZ) vk, RTRIM(BROJ) br, "
+                    f"RTRIM(ARTIKAL) art, KOLICINA, FAK_CENA FROM {prefiks}{tabela_stavki}"
+                )
+            ):
+                # Baza je deo kljuca: isti broj kalkulacije postoji u svakoj godini.
+                stavke[(baza, tab, r.mag, r.vk, r.br)].append((r.art, r.KOLICINA, r.FAK_CENA))
     return zaglavlja, stavke
 
 
@@ -184,14 +218,14 @@ def izvedi(engine: Engine | None = None) -> Nalaz:
                     nalaz.dokumenata_po_pocetku += 1
             if not dids:
                 continue
-            for tab, mag, vk, br, mb_erp in kandidati:
+            for baza, tab, mag, vk, br, mb_erp in kandidati:
                 # Isti broj racuna moze da nosi vise dobavljaca - resava maticni broj.
                 did = next((d for d in dids if podaci[d][1] and podaci[d][1] == mb_erp), None)
                 if did is None and len(dids) == 1:
                     did = dids[0]
                 if did is None:
                     continue
-                nase = erp_stavke.get((tab, mag, vk, br))
+                nase = erp_stavke.get((baza, tab, mag, vk, br))
                 if not nase:
                     continue
                 po_kolicini_i_ceni: dict[tuple, list] = defaultdict(list)

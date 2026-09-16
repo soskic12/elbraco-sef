@@ -674,3 +674,33 @@ istinom, ne u novim šiframa.
 
 `sefsync mapiranje` — do sada se izvođenje mapiranja pokretalo iz koda, bez komande.
 Podrazumevano samo ispiše šta bi uradilo; `--upisi` stvarno upisuje.
+
+### Prošlogodišnja baza — dozvola dobijena, nalaz izmeren
+
+`elbraco_dev_ro` je 16.09. dobio pravo čitanja na `ELBS_2025`. Pretpostavka se
+potvrdila: **84 dokumenta** nalaze svoju kalkulaciju tamo, 83 od njih januarski.
+Uparivanje ide sa 94,8 % na **95,8 %** (7.406 od 7.727).
+
+`mapiranje.py` sada čita i prošlogodišnju bazu — naziv se izvodi iz tekućeg
+(`ELBS_2026` → `ELBS_2025`), a ako nalog nema pravo na nju, radi se bez nje i to
+se samo zabeleži u log.
+
+**Mapiranja artikala ni od ovoga nisu porasla.** Uzrok je pogledan, ne pretpostavljen:
+svih 84 dokumenata je knjiženo na **magacin 088** — SOKOJ, banke, Telekom,
+Vodokanal. To su decembarske usluge fakturisane u januaru, a takva kalkulacija
+nema stavke: od 84 samo jedna ima ijednu stavku u ERP-u.
+
+Dobitak je dakle u **istini o razvrstavanju** (84 dokumenta više za koje se zna da
+pripadaju 088), ne u šifarniku.
+
+### Zbir posla oko uparivanja
+
+| | Uparenost |
+|---|---:|
+| Na početku | 94,8 % |
+| + po početku broja | 95,4 % |
+| + prošlogodišnja baza | **95,8 %** |
+
+Ostaje 321 dokument: 39 avansa, 65 od dobavljača bez ijedne kalkulacije, oko 65
+stvarnih promašaja kod dobavljača koji se knjiže redovno, i ostatak sitno razbacan.
+Nijedna od preostalih grupa ne obećava nove šifre artikala.
