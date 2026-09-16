@@ -109,6 +109,10 @@ class MatchField(str, enum.Enum):
     CONTRACT_REFERENCE = "contract_reference"
     ADDITIONAL_REFERENCE = "additional_reference"  # cac:AdditionalDocumentReference/cbc:ID
     BILLING_REFERENCE = "billing_reference"        # cac:BillingReference -> broj ispravljene fakture
+    # Koliko faktura dokument ispravlja: "nema" / "jedna" / "vise". Mereno na 923
+    # odobrenja: tamo gde ostala pravila cute, "jedna" znaci povracaj (010) u
+    # 90,2 %, a "vise" finansijsko odobrenje (088) u 87,5 %.
+    BILLING_REFERENCE_KIND = "billing_reference_kind"
     ATTACHMENT_TEXT = "attachment_text"            # tekst iz PDF priloga
     NOTE = "note"                              # cbc:Note
     SUPPLIER_VAT = "supplier_vat"
@@ -311,6 +315,38 @@ class Document(Base):
     @property
     def is_credit_note(self) -> bool:
         return self.document_type is DocumentType.CREDIT_NOTE
+
+    def routing_fields(self) -> dict[str, str | None]:
+        """Polja nad kojima rade pravila - isto sto i `UblDocument.routing_fields`.
+
+        Jedno mesto namerno: spisak je ranije postojao i u ingestu i u merenju, pa
+        je novo polje upisano u jedan a u drugom je nedostajalo. Merenje je onda
+        pokazalo da novo pravilo "nista ne menja" - a ono se prosto nije okinulo.
+        """
+        from .ubl.parser import vrsta_veze
+
+        return {
+            "delivery_address": self.delivery_address,
+            "delivery_city": self.delivery_city,
+            "delivery_name": self.delivery_name,
+            "buyer_address": self.buyer_address,
+            "buyer_city": self.buyer_city,
+            "buyer_reference": self.buyer_reference,
+            "order_reference": self.order_reference,
+            "contract_reference": self.contract_reference,
+            "additional_reference": self.additional_reference,
+            "billing_reference": self.billing_reference,
+            "billing_reference_kind": vrsta_veze(self.billing_reference_count),
+            "attachment_text": self.attachment_text,
+            "note": self.note,
+            "supplier_vat": self.supplier_vat,
+            "supplier_name": self.supplier_name,
+            "document_number": self.document_number,
+            "item_text": " | ".join(
+                [x.name for x in self.lines if x.name] + [x.note for x in self.lines if x.note]
+            ) or None,
+            "document_type": self.document_type.value,
+        }
 
     @property
     def sef_decided(self) -> bool:

@@ -56,31 +56,6 @@ def istina_iz_erpa() -> dict[str, list[tuple[str, str]]]:
     return po_racunu
 
 
-def polja(doc: Document) -> dict:
-    """Isto sto ingest daje mehanizmu razvrstavanja."""
-    return {
-        "delivery_address": doc.delivery_address,
-        "delivery_city": doc.delivery_city,
-        "delivery_name": doc.delivery_name,
-        "buyer_address": doc.buyer_address,
-        "buyer_city": doc.buyer_city,
-        "buyer_reference": doc.buyer_reference,
-        "order_reference": doc.order_reference,
-        "contract_reference": doc.contract_reference,
-        "additional_reference": doc.additional_reference,
-        "billing_reference": doc.billing_reference,
-        "attachment_text": doc.attachment_text,
-        "note": doc.note,
-        "supplier_vat": doc.supplier_vat,
-        "supplier_name": doc.supplier_name,
-        "document_number": doc.document_number,
-        "item_text": " | ".join(
-            [x.name for x in doc.lines if x.name] + [x.note for x in doc.lines if x.note]
-        ) or None,
-        "document_type": doc.document_type.value,
-    }
-
-
 def main() -> None:
     po_racunu = istina_iz_erpa()
     print(f"ERP: {len(po_racunu)} brojeva racuna sa kalkulacijom")
@@ -127,7 +102,7 @@ def main() -> None:
             grupa = "0" if veza == 0 else ("1" if veza == 1 else "2+")
             ukrstanje[(grupa, stvarni)] += 1
 
-            odluka = motor.decide(polja(doc))
+            odluka = motor.decide(doc.routing_fields())
             predlog = magacin_pj.get(odluka.business_unit_id, "") if odluka.assigned else ""
             ishod = "pogodak" if predlog == stvarni else ("promasaj" if predlog else "nema")
             sada[ishod] += 1

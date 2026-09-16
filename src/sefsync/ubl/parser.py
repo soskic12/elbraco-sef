@@ -104,6 +104,18 @@ class Attachment:
     content: bytes
 
 
+def vrsta_veze(koliko: int) -> str:
+    """Koliko faktura dokument ispravlja, u obliku koji pravilo moze da cilja.
+
+    Broj sam po sebi pravilima ne znaci nista - znaci ova podela, koja je i
+    merena: kod knjiznih odobrenja "jedna" je povracaj robe po jednoj fakturi,
+    a "vise" (ili "nema") finansijsko odobrenje na promet.
+    """
+    if koliko == 0:
+        return "nema"
+    return "jedna" if koliko == 1 else "vise"
+
+
 @dataclass(slots=True)
 class UblDocument:
     """Isparsiran ulazni dokument."""
@@ -168,6 +180,10 @@ class UblDocument:
         delovi += [x.note for x in self.lines if x.note]
         return " | ".join(delovi)
 
+    @property
+    def billing_reference_kind(self) -> str:
+        return vrsta_veze(len(self.billing_references))
+
     def routing_fields(self) -> dict[str, str | None]:
         """Polja koja koristi mehanizam razvrstavanja (i alat za analizu)."""
         return {
@@ -185,6 +201,7 @@ class UblDocument:
             "document_number": self.document_number,
             "additional_reference": " | ".join(self.additional_references) or None,
             "billing_reference": " | ".join(self.billing_references) or None,
+            "billing_reference_kind": self.billing_reference_kind,
             "attachment_text": self.attachment_text,
             "item_text": self.item_text or None,
             "document_type": self.document_type,

@@ -180,4 +180,4 @@ def test_enum_kolona_trazi_duzinu_najduze_vrednosti():
     from sefsync.models import MatchField, RoutingRule
 
     assert RoutingRule.__table__.c.field.type.length == max(len(x.name) for x in MatchField)
-    assert RoutingRule.__table__.c.field.type.length == 20  # ADDITIONAL_REFERENCE
+    assert RoutingRule.__table__.c.field.type.length == 22  # BILLING_REFERENCE_KIND

@@ -1,4 +1,12 @@
-from sefsync.models import BusinessUnit, MatchField, MatchOp, RoutingRule, RoutingSource, UnitKind
+from sefsync.models import (
+    BusinessUnit,
+    DocumentType,
+    MatchField,
+    MatchOp,
+    RoutingRule,
+    RoutingSource,
+    UnitKind,
+)
 from sefsync.routing import RoutingEngine
 from sefsync.textutil import normalize
 from sefsync.ubl import parse_ubl
@@ -211,6 +219,50 @@ def test_veza_ka_fakturi_ne_ulazi_u_any_text(db, odobrenje_xml):
                 pattern="2026-114",
                 business_unit_id=mp.id,
             )
+        )
+        session.flush()
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
+
+        assert decision.source is RoutingSource.NONE
+
+
+def test_jedna_veza_ka_fakturi_znaci_povracaj(db, odobrenje_xml):
+    """Mereno: tamo gde ostala pravila cute, jedna veza je povracaj u 90,2 %."""
+    with db.session_scope() as session:
+        _, mag = _units(session)
+        session.add(
+            RoutingRule(
+                priority=50,
+                field=MatchField.BILLING_REFERENCE_KIND,
+                op=MatchOp.EQUALS,
+                pattern="jedna",
+                document_type=DocumentType.CREDIT_NOTE,
+                business_unit_id=mag.id,
+            )
+        )
+        session.flush()
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
+
+        assert decision.business_unit_id == mag.id
+
+
+def test_vrsta_veze_deli_na_nema_jednu_i_vise():
+    from sefsync.ubl.parser import vrsta_veze
+
+    assert (vrsta_veze(0), vrsta_veze(1), vrsta_veze(2), vrsta_veze(37)) == (
+        "nema", "jedna", "vise", "vise",
+    )
+
+
+def test_vrsta_veze_ne_ulazi_u_any_text(db, odobrenje_xml):
+    """Inace bi any_text pravilo sa recju 'jedna' pocelo da hvata odobrenja."""
+    with db.session_scope() as session:
+        mp, _ = _units(session)
+        session.add(
+            RoutingRule(priority=10, field=MatchField.ANY_TEXT, op=MatchOp.CONTAINS,
+                        pattern="jedna", business_unit_id=mp.id)
         )
         session.flush()
 

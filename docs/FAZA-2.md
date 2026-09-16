@@ -581,3 +581,28 @@ Signal se ne meri na celom skupu nego **na onome što ostaje posle svih pravila
 koja već rade**. Ista zamka je bila u pravilu #47: izgledalo je dobro jer je
 mereno tamo gde su i druga pravila pogađala. I merilo se proverava pre nalaza —
 `OFFICE` bez `erp_code` je tiho pretvorio 347 odluka u „neodlučeno".
+
+### Upisana dva pravila — provereno merenjem posle upisa
+
+| | Odlučeno | Tačnost | Grešaka | Neodlučeno |
+|---|---:|---:|---:|---:|
+| Pre | 833 (90,2 %) | 93,0 % | 58 | 90 |
+| **Posle** | **892 (96,6 %)** | **92,8 %** | 64 | **31** |
+
+Pravila: `billing_reference_kind == 'jedna'` → MAG010 i `== 'vise'` → OFFICE, oba
+samo za `CreditNote`. Novo polje `MatchField.BILLING_REFERENCE_KIND` daje pravilima
+podelu „nema / jedna / više" — broj sam po sebi pravilu ne znači ništa. Polje ne
+ulazi u `any_text`.
+
+### Dve greške uhvaćene tek ponovnim merenjem
+
+**Prioritet.** Pravila su prvo upisana sa prioritetom 50, a rudarena pravila po
+dobavljaču stoje na 60 — novo pravilo im je **preotelo** dokumente koje su ona
+rešavala tačno. Tačnost je pala na 90,8 % i grešaka je bilo 82 umesto 64. Signal
+je meren na onome što ostaje posle **svih** pravila, pa i pravilo mora da ide
+poslednje: prioritet 90.
+
+**Spisak polja na dva mesta.** Prvo merenje posle upisa pokazalo je da se ništa
+nije promenilo — jer je `alati/meri_odobrenja.py` imao svoju kopiju spiska polja,
+bez novog. Pravilo se prosto nije okidalo. Spisak je sada na jednom mestu:
+`Document.routing_fields()`, koji koriste i ingest i merenje.

@@ -88,7 +88,11 @@ class RoutingEngine:
         # Broj ispravljene fakture (billing_reference) je takodje van any_text:
         # on ne moze da imenuje odrediste, a unosi nove cifre u koje bi se uhvatila
         # postojeca any_text pravila. Koristi se samo kad pravilo cilja to polje.
-        _van_any_text = {MatchField.ATTACHMENT_TEXT.value, MatchField.BILLING_REFERENCE.value}
+        _van_any_text = {
+            MatchField.ATTACHMENT_TEXT.value,
+            MatchField.BILLING_REFERENCE.value,
+            MatchField.BILLING_REFERENCE_KIND.value,
+        }
         any_text = " ".join(v for k, v in normalized.items() if v and k not in _van_any_text)
         supplier_vat = (fields.get("supplier_vat") or "").strip()
 
@@ -110,7 +114,9 @@ class RoutingEngine:
                     # ispravka bi promenila odluke postojecih regex pravila, pa ceka
                     # merenje naspram ERP-a. Novo polje se u tu nedoslednost ne dodaje.
                     raw_values = [
-                        v for k, v in fields.items() if k != MatchField.BILLING_REFERENCE.value
+                        v for k, v in fields.items()
+                        if k not in (MatchField.BILLING_REFERENCE.value,
+                                     MatchField.BILLING_REFERENCE_KIND.value)
                     ]
                 else:
                     raw_values = [fields.get(rule.field.value)]

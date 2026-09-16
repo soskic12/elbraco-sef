@@ -462,27 +462,7 @@ class IngestService:
 
     def _route(self, session: Session, doc: Document) -> None:
         engine = RoutingEngine.from_db(session)
-        fields = {
-            "delivery_address": doc.delivery_address,
-            "delivery_city": doc.delivery_city,
-            "delivery_name": doc.delivery_name,
-            "buyer_address": doc.buyer_address,
-            "buyer_city": doc.buyer_city,
-            "buyer_reference": doc.buyer_reference,
-            "order_reference": doc.order_reference,
-            "contract_reference": doc.contract_reference,
-            "additional_reference": doc.additional_reference,
-            "billing_reference": doc.billing_reference,
-            "attachment_text": doc.attachment_text,
-            "note": doc.note,
-            "supplier_vat": doc.supplier_vat,
-            "supplier_name": doc.supplier_name,
-            "document_number": doc.document_number,
-            "item_text": " | ".join(
-                [x.name for x in doc.lines if x.name] + [x.note for x in doc.lines if x.note]
-            ) or None,
-            "document_type": doc.document_type.value,
-        }
+        fields = doc.routing_fields()
         decision = engine.decide(fields)
         doc.business_unit_id = decision.business_unit_id
         doc.routing_source = decision.source
