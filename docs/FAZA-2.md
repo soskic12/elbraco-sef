@@ -1048,3 +1048,8 @@ bez ijednog poteza — ranije bi mu stajalo „čeka šifru" dok neko ručno ne 
 
 Dva testa: da otvorena šifra rešava i tuđu fakturu, i da se slika jednog objekta vidi
 na fakturi drugog.
+
+**Granica, svesno prihvaćena:** kad dobavljač ne šalje barkod, spajanje ide po
+njegovoj šifri i važi samo unutar tog dobavljača — isti artikal nabavljen od dva
+različita dobavljača, bez barkoda, ne prepoznaje se kao isti. Bane: „ekstremno je
+retko", pa se ne meri niti rešava dok se ne pojavi.
