@@ -962,3 +962,23 @@ zažive, `SEF_PRESERVE_NEW` se gasi i app preuzima UBL odmah — razvrstavanje i
 15 % na 79 %, a nikome se ništa ne pomera.
 
 **Redosled je bitan:** prvo nalozi i navika, pa tek onda gašenje zaštite.
+
+### Nacrti se računaju sami — 17.09.2026
+
+Prvi radni dan tab „Šifre" je odmah pokazao rupu. Operateri su prijavili da artikla
+`FOX 32DTV270H` (faktura VIMPORT `FA-2647-001/26`) nema ni u ERP-u ni na spisku u
+panelu.
+
+Tačno je oboje, a uzrok je bio u aplikaciji: nacrt je do tada računala **samo**
+komanda `nacrti --osvezi`. Faktura je stigla u 12:55, a poslednje računanje bilo je
+u 12:08 — 47 minuta ranije. Pet stavki bez naše šifre, i nijedna se nije videla.
+
+Sada se nacrt računa čim ima šta novo: kad se preuzme UBL i kad dokument dobije
+poslovnu jedinicu (bilo pravilom bilo ručno). Ne računa se za svih 780 dokumenata u
+svakom prolazu, nego samo za promenjene. Nedostupan ERP ne obara sinhronizaciju —
+nacrt se tad preskače uz zapis u log.
+
+**Usput potvrđeno čemu ovo služi:** poslovođa je za tu fakturu već napravio
+kalkulaciju (`MKALKUL 005/00499`) sa **tri od pet stavki** — fale baš one dve kojima
+šifra ne postoji. To je greška koju faza 2− treba da spreči: app kaže da kalkulacija
+nije kompletna dok se šifra ne otvori.

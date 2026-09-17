@@ -289,3 +289,33 @@ def test_zaustavljeni_nacrti_se_vide_na_istom_tabu(client, db, podaci, monkeypat
     odgovor = client.get("/sifre")
 
     assert "ne postoji u NAZIVI" in odgovor.text
+
+
+def test_nacrt_nastaje_cim_operater_razvrsta_dokument(db, podaci, monkeypatch):
+    """Faktura koja stigne posle poslednjeg racunanja mora sama da se pojavi.
+
+    17.09. je faktura FA-2647-001/26 stigla 47 minuta posle `nacrti --osvezi`, sa
+    pet stavki bez nase sifre - i nije se videla nigde, jer nacrte je do tada
+    racunala samo ta komanda.
+    """
+    from sefsync.models import BusinessUnit, NacrtKalkulacije, StanjeNacrta, UnitKind
+    from sefsync.services import nacrti as nacrti_modul
+    from sefsync.services.workflow import Workflow
+
+    monkeypatch.setattr(
+        nacrti_modul, "pripremi", lambda *a, **k: LazniNacrt(nemapirane=[STAVKA_BEZ_SIFRE])
+    )
+    with db.session_scope() as session:
+        druga = BusinessUnit(code="MP005", name="SOMBOR", kind=UnitKind.RETAIL, erp_code="005")
+        session.add(druga)
+        session.flush()
+        doc = session.get(Document, podaci)
+        doc.business_unit_id = None
+        nova_pj = druga.id
+
+    Workflow(notifier=None).assign_unit(podaci, nova_pj, actor="nina", remember=False)
+
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red is not None, "razvrstavanje mora da napravi nacrt"
+        assert red.stanje is StanjeNacrta.CEKA_SIFRU

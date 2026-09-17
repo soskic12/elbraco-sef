@@ -239,6 +239,15 @@ class Workflow:
             poruka = f"Dodeljeno: {unit.code}."
             if remember:
                 poruka += " " + self._remember_rule(session, doc, unit, field_name, actor)
+
+        # Tek sa poslovnom jedinicom zna se magacin, pa se nacrt kalkulacije moze
+        # sklopiti - i odmah videti na tabu "Sifre" ako mu fali nasa sifra.
+        try:
+            from .nacrti import osvezi
+
+            osvezi(doc_id)
+        except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan
+            log.info("Nacrt za #%s nije izracunat: %s", doc_id, str(exc)[:160])
         return ActionResult(True, poruka, 1)
 
     def confirm_routing(self, doc_ids: list[int], actor: str) -> ActionResult:

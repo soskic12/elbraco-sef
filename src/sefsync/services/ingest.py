@@ -290,8 +290,10 @@ class IngestService:
                 self._fetch_and_parse(session, doc)
 
             # dokument bez uspesno preuzetog UBL-a se ne razvrstava - nema po cemu
+            razvrstan_sada = False
             if doc.business_unit_id is None and doc.state is not ProcessState.ERROR:
                 self._route(session, doc)
+                razvrstan_sada = doc.business_unit_id is not None
 
             session.flush()
             if is_new:
@@ -307,6 +309,7 @@ class IngestService:
                 stats.updated += 1
 
             doc_id = doc.id
+            treba_nacrt = (need_ubl or razvrstan_sada) and doc.business_unit_id is not None
             # Preuzimanje ne obavestava nikoga: dokument ide u red operatera,
             # koji ga posle pregleda prosledjuje poslovnoj jedinici.
             should_notify = (
@@ -315,12 +318,31 @@ class IngestService:
                 and doc.state in (ProcessState.ROUTED, ProcessState.UNASSIGNED, ProcessState.FETCHED)
             )
 
+        # Nacrt kalkulacije se racuna odmah, dok je dokument svez. Ranije ga je
+        # racunala samo komanda `nacrti --osvezi`, pa je tab "Sifre" pokazivao
+        # stanje od poslednjeg rucnog pokretanja: faktura koja stigne u 12:55, a
+        # racunato je u 12:08, nije se videla iako joj nijedna stavka nije imala
+        # nasu sifru. Racuna se samo kad ima sta novo (preuzet UBL ili tek
+        # razvrstan), ne za svih 780 dokumenata u svakom prolazu.
+        if treba_nacrt:
+            self._osvezi_nacrt(doc_id)
+
         # notifikacije i prihvatanje - van glavne transakcije (mrezni pozivi)
         if should_notify:
             if self.notifier.notify_document(doc_id):
                 stats.notified += 1
         if self.acceptor.maybe_auto_accept(doc_id):
             stats.accepted += 1
+
+    @staticmethod
+    def _osvezi_nacrt(doc_id: int) -> None:
+        """Nacrt kalkulacije za jedan dokument; nedostupan ERP ne sme da obori sync."""
+        try:
+            from .nacrti import osvezi
+
+            osvezi(doc_id)
+        except Exception as exc:  # noqa: BLE001 - ERP je tudja baza i ume da bude dole
+            log.info("Nacrt za #%s nije izracunat: %s", doc_id, str(exc)[:160])
 
     def _apply_overview(self, doc: Document, record: dict[str, Any]) -> bool:
         """Upisuje polja iz /overview (ili /purchase-invoice) zapisa. Vraca True ako se nesto promenilo."""
