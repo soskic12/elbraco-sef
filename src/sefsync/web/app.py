@@ -629,6 +629,17 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
                 .order_by(NacrtKalkulacije.document_id.desc())
             )
         )
+        # Nacrti zaustavljeni iz drugog razloga (dobavljac van sifarnika, sifra
+        # bez artikla) moraju da se vide na istom mestu - inace stoje a niko ne
+        # zna za njih.
+        zapeli = list(
+            session.scalars(
+                select(NacrtKalkulacije)
+                .options(selectinload(NacrtKalkulacije.document))
+                .where(NacrtKalkulacije.stanje == StanjeNacrta.PROBLEM)
+                .order_by(NacrtKalkulacije.document_id.desc())
+            )
+        )
         broj = {
             stanje.value: session.scalar(
                 select(func.count())
@@ -641,7 +652,13 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "sifre.html",
-        {"nacrti": nacrti, "broj": broj, "racunato": racunato, "user": user},
+        {
+            "nacrti": nacrti,
+            "zapeli": zapeli,
+            "broj": broj,
+            "racunato": racunato,
+            "user": user,
+        },
     )
 
 

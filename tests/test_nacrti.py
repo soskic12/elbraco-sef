@@ -273,3 +273,19 @@ def test_sql_nosi_izmerene_stalne_vrednosti(db, podaci):
     assert sql.count("INSERT INTO dbo.DARTIKLI") == 1
     assert "'86100'" in sql
     assert "DECKOLIC" in sql and "PROIZVODJAC" in sql
+
+
+def test_zaustavljeni_nacrti_se_vide_na_istom_tabu(client, db, podaci, monkeypatch):
+    """Nacrt zaustavljen necim drugim (dobavljac van sifarnika) ne sme da nestane."""
+    from sefsync.services import nacrti
+
+    monkeypatch.setattr(
+        nacrti,
+        "pripremi",
+        lambda *a, **k: LazniNacrt(problemi=["Dobavljač EWE COMP (MB 123) ne postoji u NAZIVI."]),
+    )
+    nacrti.osvezi(podaci)
+
+    odgovor = client.get("/sifre")
+
+    assert "ne postoji u NAZIVI" in odgovor.text

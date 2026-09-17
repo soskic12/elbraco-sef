@@ -79,4 +79,25 @@
 {% else %}
 <div class="card">Nema kalkulacija koje čekaju šifru.</div>
 {% endfor %}
+
+{% if zapeli %}
+<h2>Zaustavljeno iz drugog razloga</h2>
+<div class="card small muted">
+  Ovde šifra nije problem — kalkulacija ne može da se sklopi dok se ne reši ono što piše.
+  Najčešće: dobavljača nema u šifarniku ERP-a, ili šifra postoji u mapiranju a artikal je obrisan.
+</div>
+{% for nacrt in zapeli %}
+<div class="card">
+  <div class="row" style="align-items:baseline">
+    <b><a href="/dokument/{{ nacrt.document_id }}">{{ nacrt.document.document_number or '—' }}</a></b>
+    <span class="muted">{{ nacrt.document.supplier_name }}</span>
+    <span class="spacer"></span>
+    {% if nacrt.magacin %}<span class="tag">magacin {{ nacrt.magacin }}</span>{% endif %}
+  </div>
+  <div class="small" style="color:#b91c1c">
+    {% for p in nacrt.problemi %}<div>{{ p }}</div>{% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
 {% endblock %}
