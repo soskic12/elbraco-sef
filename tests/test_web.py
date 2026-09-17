@@ -446,3 +446,58 @@ def test_izricito_polje_i_dalje_ima_prednost(client, podaci, db):
         pravilo = session.scalar(_select(RoutingRule))
         assert pravilo.field is MF.SUPPLIER_NAME
         assert pravilo.pattern == "FORMA PLUS"
+
+
+# --------------------------------------------------------------------------- #
+# "nepregledano" - nasa zamena za status "Nova" na portalu
+# --------------------------------------------------------------------------- #
+
+
+def test_nov_dokument_je_nepregledan_i_vidi_se_u_redu(client, podaci):
+    prijavi(client, OPERATER)
+
+    odgovor = client.get("/red?prikaz=nepregledano")
+
+    assert odgovor.status_code == 200
+    assert "26-30F-087050" in odgovor.text
+    assert "novo" in odgovor.text
+
+
+def test_oznaka_pregledano_belezi_ko_je_i_kada(client, podaci, db):
+    prijavi(client, OPERATER)
+
+    client.post(
+        "/pregledano",
+        data={"dokumenti": str(podaci["doc"]), "povratak": "/red"},
+        follow_redirects=False,
+    )
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        assert doc.pregledano_at is not None
+        assert doc.pregledano_by == "bogdan"
+    odgovor = client.get("/red?prikaz=nepregledano")
+    assert "26-30F-087050" not in odgovor.text
+
+
+def test_prosledjivanje_samo_po_sebi_skida_oznaku(podaci, db):
+    """Ko prosledi dokument objektu, taj ga je i video."""
+    from sefsync.services.workflow import Workflow
+
+    Workflow(notifier=LazniNotifier()).forward([podaci["doc"]], actor="nina")
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        assert doc.pregledano_by == "nina"
+
+
+def test_ponovno_oznacavanje_ne_menja_ko_je_prvi_video(client, podaci, db):
+    prijavi(client, OPERATER)
+    client.post("/pregledano", data={"dokumenti": str(podaci["doc"])}, follow_redirects=False)
+    with db.session_scope() as session:
+        prvi_put = session.get(Document, podaci["doc"]).pregledano_at
+
+    client.post("/pregledano", data={"dokumenti": str(podaci["doc"])}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        assert session.get(Document, podaci["doc"]).pregledano_at == prvi_put

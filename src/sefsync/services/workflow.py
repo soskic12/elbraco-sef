@@ -64,6 +64,29 @@ class Workflow:
     # prosledjivanje
     # ------------------------------------------------------------------ #
 
+    def oznaci_pregledano(self, doc_ids: list[int], actor: str) -> ActionResult:
+        """Skida oznaku "nepregledano" - ono sto je kolegama do sada bio status "Nova".
+
+        Oznaka je nasa, ne SEF-ova: preuzimanje UBL-a obara "Nova" na portalu, a
+        bez UBL-a se razvrsta samo 15 % dokumenata. Ko je pregledao i kada ostaje
+        zapisano, da se ne raspravlja ko je sta video.
+        """
+        koliko = 0
+        with session_scope() as session:
+            for doc_id in doc_ids:
+                doc = session.get(Document, doc_id)
+                if doc is None or doc.pregledano_at is not None:
+                    continue
+                doc.pregledano_at = utcnow()
+                doc.pregledano_by = actor
+                koliko += 1
+                session.add(
+                    AuditLog(actor=actor, action="pregledano", document_id=doc_id)
+                )
+        if koliko == 0:
+            return ActionResult(True, "Nema šta da se označi — sve je već pregledano.")
+        return ActionResult(True, f"Označeno kao pregledano: {koliko}.", koliko)
+
     def forward(self, doc_ids: list[int], actor: str) -> ActionResult:
         """Salje dokumente poslovnim jedinicama. Nerazvrstani se preskacu."""
         spremni: list[int] = []
@@ -107,6 +130,10 @@ class Workflow:
                 doc.forwarded_at = utcnow()
                 doc.forwarded_by = actor
                 doc.state = ProcessState.NOTIFIED
+                # Ko prosledjuje, taj je dokument i video.
+                if doc.pregledano_at is None:
+                    doc.pregledano_at = utcnow()
+                    doc.pregledano_by = actor
                 # Prosledjivanje je ujedno potvrda razvrstavanja: niko ne salje
                 # dokument objektu za koji misli da nije njegov.
                 if doc.routing_confirmed_at is None:

@@ -291,6 +291,13 @@ class Document(Base):
     accepted_by: Mapped[str | None] = mapped_column(String(100), default=None)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
+    # "Nepregledano" kod nas, umesto statusa "Nova" na SEF-u. Preuzimanje UBL-a
+    # obara "Nova" na portalu, a bez UBL-a se razvrsta samo 15 % dokumenata
+    # (naspram 79 % sa njim) - mereno 17.09. na 4.000 dokumenata. Zato oznaku
+    # vodimo sami: kolege je vide u panelu, a app sme da preuzme UBL odmah.
+    pregledano_at: Mapped[datetime | None] = mapped_column(DateTime, default=None, index=True)
+    pregledano_by: Mapped[str | None] = mapped_column(String(100), default=None)
+
     # Tok rada operatera: dokument ceka u redu dok ga operater ne prosledi
     # poslovnoj jedinici, a poslovodja potvrdjuje da je roba stigla.
     forwarded_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)

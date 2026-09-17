@@ -190,6 +190,10 @@ def _queue_filter(query, prikaz: str):
     aktivni = Document.archived == False
     if prikaz == "arhiva":
         return query.where(Document.archived == True)
+    if prikaz == "nepregledano":
+        # Ono sto je kolegama na portalu bio status "Nova" - samo sto oznaku
+        # sada vodimo mi, pa preuzimanje UBL-a ne mora nikoga da remeti.
+        return query.where(aktivni, Document.pregledano_at.is_(None))
     if prikaz == "nerazvrstano":
         return query.where(aktivni, Document.business_unit_id.is_(None))
     if prikaz == "ceka_prijem":
@@ -269,7 +273,7 @@ def queue(
             naziv: session.scalar(
                 select(func.count()).select_from(_queue_filter(select(Document), naziv).subquery())
             )
-            for naziv in ("red", "nerazvrstano", "ceka_prijem", "arhiva")
+            for naziv in ("red", "nepregledano", "nerazvrstano", "ceka_prijem", "arhiva")
         }
         last_run = session.scalar(select(SyncRun).order_by(SyncRun.id.desc()))
         return templates.TemplateResponse(
@@ -660,6 +664,16 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
             "user": user,
         },
     )
+
+
+@app.post("/pregledano")
+def oznaci_pregledano(
+    user: Operater,
+    dokumenti: Annotated[list[str], Form()] = None,
+    povratak: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    rezultat = Workflow().oznaci_pregledano(_ids(dokumenti or []), actor=user.login)
+    return _back(povratak or "/red?prikaz=nepregledano", rezultat.message, rezultat.ok)
 
 
 @app.post("/sifre/povezi")

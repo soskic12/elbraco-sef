@@ -936,3 +936,29 @@ Sa pragom 500 ima **26 rupa i 47.039 mesta**, a prva predložena šifra je danas
 najveći blokovi (`40411–45378`, 4.968 mesta) traju godinama.
 
 `sefsync sifre-slobodne` ispisuje mapu rupa i šifru koja bi se predložila.
+
+
+---
+
+## „Nepregledano" umesto statusa „Nova" — 17.09.2026
+
+Zaštita statusa „Nova" ima cenu koja se do sada nije merila. Sa punim UBL-om
+razvrstavanje pogađa **79 %** dokumenata; **samo iz pregleda** (dobavljač, iznos,
+datumi, broj) — **15 %**. Mereno na 4.000 dokumenata.
+
+Nijedna odluka nije pogrešna, samo ih skoro nema: adresa isporuke, napomena, nazivi
+stavki i `AdditionalDocumentReference` stižu tek sa UBL-om, a on obara „Nova".
+
+**Odluka (Bane, 17.09.):** status „Nova" je kolegama služio samo kao interna oznaka
+šta je nepregledano. Tu oznaku sada vodimo mi:
+
+- `Document.pregledano_at` / `pregledano_by`
+- oznaka **novo** u redu, i svoj prikaz „Nepregledano" sa brojačem
+- dugme „Označi pregledano" (pojedinačno i grupno)
+- prosleđivanje poslovnoj jedinici skida oznaku samo po sebi — ko prosledi, taj je i video
+
+Kolege dobijaju nalog u panelu i prate taj prikaz umesto „Nova" na portalu. Kad to
+zažive, `SEF_PRESERVE_NEW` se gasi i app preuzima UBL odmah — razvrstavanje ide sa
+15 % na 79 %, a nikome se ništa ne pomera.
+
+**Redosled je bitan:** prvo nalozi i navika, pa tek onda gašenje zaštite.

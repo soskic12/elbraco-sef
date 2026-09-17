@@ -5,7 +5,8 @@
   {% if v is none %}-{% else %}{{ '{:,.2f}'.format(v).replace(',', ' ').replace('.', ',') }} {{ val or '' }}{% endif %}
 {%- endmacro %}
 
-{% set naslovi = {'red': 'Traži potez', 'nerazvrstano': 'Nerazvrstano',
+{% set naslovi = {'red': 'Traži potez', 'nepregledano': 'Nepregledano',
+                  'nerazvrstano': 'Nerazvrstano',
                   'ceka_prijem': 'Čeka potvrdu prijema', 'arhiva': 'Arhiva'} %}
 
 {% block content %}
@@ -64,6 +65,10 @@
       <tr>
         <td><input type="checkbox" name="dokumenti" value="{{ d.id }}" form="grupno"></td>
         <td>
+          {% if not d.pregledano_at %}
+            <span class="tag" style="background:#1d4ed8;color:#fff"
+                  title="Niko u panelu još nije pregledao ovaj dokument">novo</span>
+          {% endif %}
           <a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
           <div class="small">{{ d.supplier_name or '-' }}
             {% if d.bez_identifikacije %}
@@ -126,6 +131,8 @@
   {% if documents and prikaz != 'arhiva' %}
   <div class="traka">
     <span class="muted small">Označeno: <b id="broj">0</b></span>
+    <button type="submit" formaction="/pregledano" class="ghost"
+            title="Skida oznaku „novo“ — ono što je na portalu bio status „Nova“">Označi pregledano</button>
     <button type="submit" formaction="/potvrdi" class="ghost"
             title="Predlog razvrstavanja je tačan">Potvrdi razvrstavanje</button>
     <button type="submit" formaction="/prihvati"
