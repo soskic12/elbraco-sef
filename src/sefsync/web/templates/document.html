@@ -138,7 +138,7 @@
       <form class="inline" method="post" action="/dokument/{{ doc.id }}/vrati">
         <button class="ghost" type="submit">Vrati u red</button></form>
     {% endif %}
-    {% if not doc.pregledano_at %}
+    {% if doc.nepregledan %}
       <form class="inline" method="post" action="/pregledano">
         <input type="hidden" name="dokumenti" value="{{ doc.id }}">
         <input type="hidden" name="povratak" value="/dokument/{{ doc.id }}">

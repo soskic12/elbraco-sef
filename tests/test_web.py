@@ -501,3 +501,19 @@ def test_ponovno_oznacavanje_ne_menja_ko_je_prvi_video(client, podaci, db):
 
     with db.session_scope() as session:
         assert session.get(Document, podaci["doc"]).pregledano_at == prvi_put
+
+
+def test_prosledjena_istorija_ne_zatrpava_prikaz_novih(client, podaci, db):
+    """Polja za oznaku postoje tek od 17.09.; prosledjen dokument je vidjen i bez njih."""
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+        doc.pregledano_at = None          # stara istorija, bez oznake
+    prijavi(client, OPERATER)
+
+    odgovor = client.get("/red?prikaz=nepregledano")
+
+    assert "26-30F-087050" not in odgovor.text

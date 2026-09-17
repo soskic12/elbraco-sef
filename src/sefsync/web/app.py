@@ -193,7 +193,9 @@ def _queue_filter(query, prikaz: str):
     if prikaz == "nepregledano":
         # Ono sto je kolegama na portalu bio status "Nova" - samo sto oznaku
         # sada vodimo mi, pa preuzimanje UBL-a ne mora nikoga da remeti.
-        return query.where(aktivni, Document.pregledano_at.is_(None))
+        return query.where(
+            aktivni, Document.pregledano_at.is_(None), Document.forwarded_at.is_(None)
+        )
     if prikaz == "nerazvrstano":
         return query.where(aktivni, Document.business_unit_id.is_(None))
     if prikaz == "ceka_prijem":

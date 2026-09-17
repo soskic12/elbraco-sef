@@ -65,7 +65,7 @@
       <tr>
         <td><input type="checkbox" name="dokumenti" value="{{ d.id }}" form="grupno"></td>
         <td>
-          {% if not d.pregledano_at %}
+          {% if d.nepregledan %}
             <span class="tag" style="background:#1d4ed8;color:#fff"
                   title="Niko u panelu još nije pregledao ovaj dokument">novo</span>
           {% endif %}

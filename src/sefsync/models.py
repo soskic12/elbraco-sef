@@ -320,6 +320,16 @@ class Document(Base):
     )
 
     @property
+    def nepregledan(self) -> bool:
+        """Niko ga jos nije video - ono sto je na portalu bio status "Nova".
+
+        Prosledjen dokument se racuna kao vidjen i kad oznaka nije upisana: ta
+        polja postoje tek od 17.09., a istorija je prosledjivana i pre toga. Bez
+        ovoga bi prikaz "Nepregledano" prvog dana pokazao ceo arhiv.
+        """
+        return self.pregledano_at is None and self.forwarded_at is None
+
+    @property
     def is_credit_note(self) -> bool:
         return self.document_type is DocumentType.CREDIT_NOTE
 
