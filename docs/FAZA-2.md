@@ -871,3 +871,38 @@ treba tačno to.
   ne postoji (koristi se isto uparivanje po `BROJ_RN_DOB`)
 - predlog kompletnog artikla za `ARTIKLI` / `ARTPROD` / `DARTIKLI`
 - pod čijim imenom app upisuje u `RBR`, i šta sa `DebitNote` i avansima
+
+### Predlog nove šifre — izmereno pa napisano, 17.09.2026
+
+U odeljku 4 je stajalo „detaljan redosled i koja se polja gde pune — nije još
+razrađeno". Mereno na **300 poslednjih otvorenih šifara**:
+
+| Tabela | Koliko redova po artiklu | Gde |
+|---|---|---|
+| `ARTIKLI` | 18 (matični `099` + kopija po magacinu) | u 5 magacina (`001, 006, 012, 029, 099`) je preko 90 % novih |
+| `ARTPROD` | 21 | 21 prodajno mesto |
+| `DARTIKLI` | 1 | dopuna (opis, slike, uvoznik) |
+
+Stalne vrednosti, sve 300/300: `DECKOLIC=2`, `DECCENA=2`,
+`VLAGA=LOM=PRIMESE=NECISTO=0.00`, `PCENA=0.000`, `PROIZVODJAC='.'` (popuna, 294/300).
+`JEDMERE` je „kom" kod 42.843 od 43.491 artikla. Tarifa: 20 % → `002`, 10 % → `001`,
+0 % → `003` (`PTARIFE`).
+
+Spisak magacina i prodajnih mesta se **ne piše u kod** nego se čita iz ERP-a — gde su
+završili poslednji otvoreni artikli, i to samo ono što se ponavlja kod bar 90 % njih.
+Nova prodavnica tako uđe sama, a ugašena ispadne.
+
+### Šifru i dalje dodeljuje čovek
+
+Brojevi šifara ne prate pravilo koje bi se moglo pogoditi: ispod 90.000 ima 33.651
+šifara (najveća 89.817), između 90.000 i 999.999 još 9.673, a iznad milion 134 — do
+9.999.999. `MAX+1` bi dao deset miliona. Dok se ne sazna po čemu se bira, app šifru
+**ne dodeljuje** — predloži sve ostalo, a šifru upisuje Dušan.
+
+Jedna provera je već tu: ako barkod sa fakture **već ima šifru**, app to kaže i
+predlaže povezivanje umesto otvaranja nove.
+
+### Upisa nema
+
+`erp/artikal.py` ne upisuje ništa — ispiše `INSERT` naredbe da se vidi šta bi se
+desilo. Nalog namerno nema pravo pisanja po šifarniku.

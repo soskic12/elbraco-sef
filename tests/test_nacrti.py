@@ -150,3 +150,95 @@ def test_prazan_unos_sifre_ne_prolazi(db, podaci, monkeypatch):
 
     with pytest.raises(ValueError):
         nacrti.povezi_sifru(podaci, 1, "   ", korisnik="dusan")
+
+
+# --------------------------------------------------------------------------- #
+# predlog nove sifre artikla
+# --------------------------------------------------------------------------- #
+
+
+class LazniErp:
+    """ERP koji vrati spisak magacina i prodajnih mesta, bez prave baze."""
+
+    def __init__(self, barkod_postoji: str | None = None):
+        self.barkod_postoji = barkod_postoji
+
+    def connect(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, upit, params=None):
+        tekst = str(upit)
+        if "BARCODE" in tekst:
+            return _Rezultat(
+                [_Red(a="55555", n="Isti artikal")] if self.barkod_postoji else []
+            )
+        if "ARTPROD" in tekst:
+            return [_Red(m="001"), _Red(m="002")]
+        return [_Red(m="001"), _Red(m="099")]
+
+
+class _Red:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class _Rezultat:
+    def __init__(self, redovi):
+        self._redovi = redovi
+
+    def first(self):
+        return self._redovi[0] if self._redovi else None
+
+
+def test_predlog_uzima_sve_sto_faktura_zna(db, podaci):
+    from sefsync.erp.artikal import predlozi
+
+    predlog = predlozi(podaci, 1, engine=LazniErp())
+
+    assert predlog.naziv == "Frižider"
+    assert predlog.barkod == "8606012345678"
+    assert predlog.jedmere == "kom"          # H87 sa fakture
+    assert predlog.tarifa == "002"           # PDV 20% -> tarifa 002
+    assert predlog.magacini == ["001", "099"]
+    assert predlog.broj_redova == 2 + 2 + 1  # ARTIKLI + ARTPROD + DARTIKLI
+
+
+def test_poznat_barkod_ne_otvara_novu_sifru(db, podaci):
+    """Ako barkod vec ima sifru, greska bi bila otvoriti drugu za isti artikal."""
+    from sefsync.erp.artikal import predlozi
+
+    predlog = predlozi(podaci, 1, engine=LazniErp(barkod_postoji="55555"))
+
+    assert predlog.sifra == "55555"
+    assert any("već ima šifru" in n for n in predlog.napomene)
+
+
+def test_bez_sifre_nema_sql(db, podaci):
+    """App ne dodeljuje sifru sama - dok je nema, nema sta da se upise."""
+    import pytest as _pytest
+
+    from sefsync.erp.artikal import kao_sql, predlozi
+
+    predlog = predlozi(podaci, 1, engine=LazniErp())
+    with _pytest.raises(ValueError):
+        kao_sql(predlog)
+
+
+def test_sql_nosi_izmerene_stalne_vrednosti(db, podaci):
+    from sefsync.erp.artikal import kao_sql, predlozi
+
+    predlog = predlozi(podaci, 1, engine=LazniErp())
+    predlog.sifra = "86100"
+    sql = kao_sql(predlog)
+
+    assert sql.count("INSERT INTO dbo.ARTIKLI") == 2
+    assert sql.count("INSERT INTO dbo.ARTPROD") == 2
+    assert sql.count("INSERT INTO dbo.DARTIKLI") == 1
+    assert "'86100'" in sql
+    assert "DECKOLIC" in sql and "PROIZVODJAC" in sql

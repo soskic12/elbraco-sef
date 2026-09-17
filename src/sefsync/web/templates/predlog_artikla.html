@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Predlog artikla{% endblock %}
+{% block content %}
+<h1>Nova šifra artikla</h1>
+
+<div class="card">
+  <div class="row" style="align-items:baseline">
+    <b>{{ predlog.naziv or '—' }}</b>
+    <span class="spacer"></span>
+    <span class="muted small">{{ dobavljac }} · faktura
+      <a href="/dokument/{{ predlog.document_id }}">{{ broj }}</a>, stavka {{ predlog.line_no }}</span>
+  </div>
+</div>
+
+{% for n in predlog.napomene %}
+  <div class="card small" style="border-left:4px solid #f59e0b">{{ n }}</div>
+{% endfor %}
+
+<div class="card">
+  <h2 style="margin-top:0">Šta app zna sa fakture</h2>
+  <dl class="kv">
+    <dt>Naziv</dt><dd style="font-weight:400">{{ predlog.naziv or '—' }}</dd>
+    <dt>Barkod (EAN)</dt><dd style="font-weight:400">{{ predlog.barkod or '— nema na fakturi' }}</dd>
+    <dt>Jedinica mere</dt><dd style="font-weight:400">{{ predlog.jedmere }}</dd>
+    <dt>Tarifa</dt><dd style="font-weight:400">{{ predlog.tarifa }} (PDV {{ '%g'|format(predlog.pdv_stopa) }} %)</dd>
+    <dt>Nabavna cena</dt>
+    <dd style="font-weight:400">
+      {{ '%.2f'|format(predlog.nabavna_cena) if predlog.nabavna_cena is not none else '—' }}</dd>
+    <dt>Šifra</dt>
+    <dd style="font-weight:400">
+      {% if predlog.sifra %}{{ predlog.sifra }}
+      {% else %}<span class="muted">određuje je čovek — app je ne dodeljuje</span>{% endif %}</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Gde bi artikal bio otvoren</h2>
+  <p class="small muted" style="margin-top:0">
+    Mereno na 300 poslednjih otvorenih šifara — ovo su magacini i prodajna mesta
+    u kojima završi preko 90 % novih artikala. Ukupno <b>{{ predlog.broj_redova }}</b> redova.
+  </p>
+  <div class="small">
+    <div><b>ARTIKLI</b> ({{ predlog.magacini|length }}): {{ predlog.magacini|join(', ') }}</div>
+    <div><b>ARTPROD</b> ({{ predlog.prodajna_mesta|length }}): {{ predlog.prodajna_mesta|join(', ') }}</div>
+    <div><b>DARTIKLI</b>: 1 red (dopuna artikla)</div>
+  </div>
+</div>
+
+{% if sql %}
+<div class="card">
+  <h2 style="margin-top:0">Šta bi se upisalo</h2>
+  <pre class="small" style="overflow-x:auto;max-height:320px">{{ sql }}</pre>
+</div>
+{% endif %}
+
+<div class="card small muted">
+  Aplikacija još <b>ne upisuje</b> u šifarnik — nalog nema to pravo, i tako je namerno.
+  Šifru otvara Dušan u ERP-u, pa je ovde upiše u polje „Naša šifra"; veza se onda pamti
+  za sve buduće fakture tog dobavljača.
+</div>
+{% endblock %}

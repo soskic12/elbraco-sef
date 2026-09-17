@@ -661,6 +661,32 @@ def sifre_povezi(
     return _back("/sifre", f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")
 
 
+@app.get("/sifre/predlog/{document_id}/{line_no}", response_class=HTMLResponse)
+def sifre_predlog(
+    request: Request, document_id: int, line_no: int, user: Operater
+) -> HTMLResponse:
+    """Sve sto se sa fakture zna o novom artiklu, spremno za otvaranje sifre."""
+    from ..erp.artikal import kao_sql, predlozi
+
+    predlog = predlozi(document_id, line_no)
+    sql = kao_sql(predlog) if predlog.sifra else None
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        broj = doc.document_number if doc else ""
+        dobavljac = doc.supplier_name if doc else ""
+    return templates.TemplateResponse(
+        request,
+        "predlog_artikla.html",
+        {
+            "predlog": predlog,
+            "sql": sql,
+            "broj": broj,
+            "dobavljac": dobavljac,
+            "user": user,
+        },
+    )
+
+
 @app.post("/sifre/osvezi")
 def sifre_osvezi(user: Operater, background: BackgroundTasks) -> RedirectResponse:
     from ..services.nacrti import osvezi_sve
