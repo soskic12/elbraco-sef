@@ -783,3 +783,43 @@ Onih 16 nosi 40 nemapiranih stavki, 34 različite šifre dobavljača — dakle o
 razlika je što bi ga video na jednom mestu, sa svime što mu treba.
 
 Alat: `alati/meri_kalkulacije.py [broj_dana]`.
+
+
+---
+
+## Odakle maloprodajna cena — mereno 17.09.2026
+
+Predlog (Bane): uzeti `DARTIKLI.PMC`, koja je popunjena za veliku većinu artikala.
+Popunjenost se potvrdila — **96,1 %** artikala koji se pojavljuju u MP
+kalkulacijama ima `PMC`. Ali popunjenost nije isto što i tačnost.
+
+Poređeno sa `MPRULK.MALACENA` — cenom koju je poslovođa **stvarno upisao**, na
+20.751 stavci:
+
+| Izvor | Poklapa se |
+|---|---:|
+| `ARTPROD.CENAMALO` (tekuća cena objekta) | **66,8 %** |
+| `DARTIKLI.CENA` | 66,7 % |
+| `DARTIKLI.PMC` | **8,7 %** |
+| `DARTIKLI.SMC` | 5,4 % |
+
+`PMC` očigledno nije cena po kojoj se prodaje — verovatno preporučena cena
+dobavljača. Generator ostaje na `ARTPROD.CENAMALO`.
+
+**Ograda:** poređenje je istorijsko — stara kalkulacija se meri naspram *današnje*
+cene u šifarniku, pa je stvarno poklapanje više od izmerenog. Ranijih „80 %" iz
+faze 2 mereno je na svežijem uzorku.
+
+### Ali ideja o proveri nelogičnosti je dobra
+
+| Provera | Koliko bi se javljala |
+|---|---:|
+| prodajna **ispod** nabavne | **86 (0,41 %)** |
+| više od 20 % iznad `PMC` | 1.332 (6,4 %) |
+| više od 20 % ispod `PMC` | 831 (4,0 %) |
+
+Prva je retka i zato vredna — kad se javi, nešto stvarno ne valja. Druge dve bi se
+javljale na svakoj desetoj stavci, što je previše da bi se čitalo.
+
+**Odluka:** cena iz `ARTPROD.CENAMALO` kao predlog, upozorenje samo kad je predložena
+prodajna ispod nabavne. `PMC` se ne koristi kao cena.
