@@ -647,24 +647,29 @@ def cmd_mapiranje(
 @app.command("sifre-slobodne")
 def cmd_slobodne_sifre(
     koliko: int = typer.Option(12, help="Koliko rupa da ispiše."),
-    najmanja: int = typer.Option(100, help="Ne prikazuj rupe manje od toliko mesta."),
+    najmanja: int = typer.Option(
+        None, help="Prag veličine rupe (podrazumevano onaj koji koristi i predlog)."
+    ),
 ) -> None:
     """Gde u šifarniku ima slobodnih šifara — po opsezima."""
     _boot()
-    from .erp.artikal import GORNJA_GRANICA, rupe, slobodna_sifra
+    from .erp.artikal import GORNJA_GRANICA, MIN_RUPA, rupe, slobodna_sifra
     from .erp.connection import get_erp_engine
 
+    prag = najmanja if najmanja is not None else MIN_RUPA
     with get_erp_engine().connect() as conn:
-        nadjene = rupe(conn, najmanja=najmanja)
+        nadjene = rupe(conn, najmanja=prag)
         slobodno = sum(do - od + 1 for od, do in nadjene)
         typer.echo(
-            f"Rupa od bar {najmanja} mesta: {len(nadjene)}, "
+            f"Rupa od bar {prag} mesta: {len(nadjene)}, "
             f"ukupno {slobodno} slobodnih šifara ispod {GORNJA_GRANICA}."
         )
         for od, do in nadjene[:koliko]:
             typer.echo(f"  {od:>7} - {do:<7} ({do - od + 1} slobodnih)")
         typer.echo("")
-        typer.echo(f"Prva slobodna koja bi se predložila: {slobodna_sifra(conn) or '—'}")
+        # Isti prag mora da vazi i ovde - inace ispis mape i predlog govore razlicito.
+        sifra = slobodna_sifra(conn, najmanja_rupa=prag)
+        typer.echo(f"Prva slobodna koja bi se predložila: {sifra or '—'}")
 
 
 @app.command("nacrti")

@@ -924,13 +924,15 @@ ne sme dodeliti drugom artiklu.
 Najveće rupe ispod 100.000: `40411–45378` (4.968), `45380–50000` (4.621),
 `50019–54284` (4.266), `30299–34301` (4.003).
 
-**Pravilo koje je ugrađeno:** prva slobodna šifra iz **prve rupe od bar 100 mesta**,
+**Pravilo koje je ugrađeno:** prva slobodna šifra iz **prve rupe od bar 500 mesta**
+(odluka: Bane, 17.09.),
 uz obaveznu proveru baš te šifre pred dodelu (spisak je snimljen na početku, a
 šifru u međuvremenu može otvoriti neko drugi). Prag od 100 postoji da se nove šifre
 ne razbacuju po usamljenim rupama među starim artiklima — ima ih preko 800 veličine
-jedan. Po tom pravilu prva predložena šifra je danas **9015**.
+jedan; šifre iz istog perioda tako ostaju na okupu i vidi se po samom broju.
 
-Prag je jedan parametar (`najmanja_rupa`), pa se lako pomeri ako se odluči da nove
-šifre idu u veliki blok umesto u prvu rupu.
+Sa pragom 500 ima **26 rupa i 47.039 mesta**, a prva predložena šifra je danas
+**14445** (blok `14445–14999`). Pri tempu od oko 60 novih artikala mesečno, samo
+najveći blokovi (`40411–45378`, 4.968 mesta) traju godinama.
 
 `sefsync sifre-slobodne` ispisuje mapu rupa i šifru koja bi se predložila.

@@ -230,20 +230,21 @@ def test_poznat_barkod_ne_otvara_novu_sifru(db, podaci):
 
 
 def test_predlaze_prvu_slobodnu_iz_dovoljno_velike_rupe(db, podaci):
-    """Sifre 1,2,3 i 500 su zauzete - prva slobodna u bloku je 4."""
+    """Prag je 500 mesta: rupa 4-999 je dovoljna, pa predlog krece od 4."""
     from sefsync.erp.artikal import predlozi
 
-    predlog = predlozi(podaci, 1, engine=LazniErp(zauzete=(1, 2, 3, 500)))
+    predlog = predlozi(podaci, 1, engine=LazniErp(zauzete=(1, 2, 3, 1000)))
 
     assert predlog.predlozena_sifra == "4"
     assert predlog.sifra is None
 
 
-def test_usamljena_rupa_se_preskace(db, podaci):
-    """Rupa od jednog mesta medju starim artiklima se ne koristi."""
+def test_mala_rupa_se_preskace(db, podaci):
+    """Rupa ispod praga se ne dira - nove sifre idu u blok, ne medju stare."""
     from sefsync.erp.artikal import predlozi
 
-    # slobodno je samo 2 (rupa velicine 1), pa tek posle 10 dolazi veliki blok
+    # 2 je slobodno (rupa od 1), 4-9 takodje (rupa od 6) - obe su ispod praga od
+    # 500; prvi dovoljno veliki blok pocinje na 11
     predlog = predlozi(podaci, 1, engine=LazniErp(zauzete=(1, 3, 10, 5000)))
 
     assert predlog.predlozena_sifra == "11"

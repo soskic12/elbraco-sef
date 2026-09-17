@@ -39,8 +39,11 @@ MATICNI_MAGACIN = "099"
 
 # Sifre robe zive ispod 100.000; iznad toga su posebne (do 9.999.999).
 GORNJA_GRANICA = 100_000
-# Nove sifre idu u blok, ne u usamljene rupe medju starim artiklima.
-MIN_RUPA = 100
+# Nove sifre idu u blok, ne u usamljene rupe medju starim artiklima. Prag je
+# odluka (Bane, 17.09.): bar 500 slobodnih mesta u komadu. Mereno, takvih rupa
+# ima 26 sa ukupno 47.039 mesta - pri tempu od ~60 novih artikala mesecno to
+# traje godinama, a po sifri se vidi da su iz istog perioda.
+MIN_RUPA = 500
 
 # UN/ECE Rec 20 (sa fakture) -> JEDMERE (u ERP-u). Mereno: 42.843 od 43.491
 # artikla je "kom", pa je to i podrazumevano kad se jedinica ne prepozna.
