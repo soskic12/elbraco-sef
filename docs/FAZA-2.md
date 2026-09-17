@@ -877,11 +877,28 @@ treba tačno to.
 U odeljku 4 je stajalo „detaljan redosled i koja se polja gde pune — nije još
 razrađeno". Mereno na **300 poslednjih otvorenih šifara**:
 
-| Tabela | Koliko redova po artiklu | Gde |
-|---|---|---|
-| `ARTIKLI` | 18 (matični `099` + kopija po magacinu) | u 5 magacina (`001, 006, 012, 029, 099`) je preko 90 % novih |
-| `ARTPROD` | 21 | 21 prodajno mesto |
-| `DARTIKLI` | 1 | dopuna (opis, slike, uvoznik) |
+| Tabela | Koliko redova po artiklu |
+|---|---|
+| `ARTIKLI` | matični `099` + red po robnom magacinu |
+| `ARTPROD` | red po prodajnom mestu koje nije uslužno |
+| `DARTIKLI` | 1 — dopuna (opis, slike, uvoznik) |
+
+**Ispravka 17.09. (Bane):** merenje „18 redova u `ARTIKLI`, 21 u `ARTPROD`" je merilo
+pogrešnu stvar — gde artikli **završe posle upotrebe**, ne gde se otvaraju. Dule
+otvara šifru samo u `099`; u lokalne cenovnike je ERP kopira sam, kad korisnik krene
+da radi kalkulaciju a šifre tamo nema. Vidi se na televizoru `87187`: 6 magacina,
+među njima `002`, `012` i `051`, gde ga niko nije otvarao. Stari `16060` ih ima 25,
+nakupljenih godinama.
+
+Pošto app upisuje unapred (da poslovođa ne zapne), odredište je:
+
+- **magacini** — imenovani spisak: `001, 002, 005, 010, 012, 021, 023, 026, 029, 071, 099`.
+  Tehnički (izdata roba, rezervacije, inventarski, cenovnik, testni, avansni, 088)
+  izostavljeni — njih ERP puni sam. `022, 024, 025` izostavljeni jer ta mesta nemaju
+  izdvojen magacin nego robu drže na lageru prodajnog mesta (0 artikala u sva tri).
+- **prodajna mesta** — čitaju se iz `dbo.PRODAV`, sva osim uslužnih (naziv sadrži
+  „USLUGA"): 001–009, 071 pab, 090 internet, 092 nekretnine. Nova prodavnica tako uđe
+  sama, bez diranja koda.
 
 Stalne vrednosti, sve 300/300: `DECKOLIC=2`, `DECCENA=2`,
 `VLAGA=LOM=PRIMESE=NECISTO=0.00`, `PCENA=0.000`, `PROIZVODJAC='.'` (popuna, 294/300).

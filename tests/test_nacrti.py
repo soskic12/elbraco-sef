@@ -188,8 +188,8 @@ class LazniErp:
             return _Rezultat(
                 [_Red(a="55555", n="Isti artikal")] if self.barkod_postoji else []
             )
-        if "ARTPROD" in tekst:
-            return [_Red(m="001"), _Red(m="002")]
+        if "PRODAV" in tekst:                       # prodajna mesta bez usluznih
+            return [_Red(s="001"), _Red(s="002")]
         return [_Red(m="001"), _Red(m="099")]
 
 
@@ -215,8 +215,12 @@ def test_predlog_uzima_sve_sto_faktura_zna(db, podaci):
     assert predlog.barkod == "8606012345678"
     assert predlog.jedmere == "kom"          # H87 sa fakture
     assert predlog.tarifa == "002"           # PDV 20% -> tarifa 002
-    assert predlog.magacini == ["001", "099"]
-    assert predlog.broj_redova == 2 + 2 + 1  # ARTIKLI + ARTPROD + DARTIKLI
+    # magacini su imenovani spisak, prodajna mesta se citaju iz ERP-a
+    from sefsync.erp.artikal import MAGACINI
+
+    assert predlog.magacini == list(MAGACINI)
+    assert predlog.prodajna_mesta == ["001", "002"]
+    assert predlog.broj_redova == len(MAGACINI) + 2 + 1
 
 
 def test_poznat_barkod_ne_otvara_novu_sifru(db, podaci):
@@ -268,7 +272,9 @@ def test_sql_nosi_izmerene_stalne_vrednosti(db, podaci):
     predlog.predlozena_sifra = "86100"
     sql = kao_sql(predlog)
 
-    assert sql.count("INSERT INTO dbo.ARTIKLI") == 2
+    from sefsync.erp.artikal import MAGACINI
+
+    assert sql.count("INSERT INTO dbo.ARTIKLI") == len(MAGACINI)
     assert sql.count("INSERT INTO dbo.ARTPROD") == 2
     assert sql.count("INSERT INTO dbo.DARTIKLI") == 1
     assert "'86100'" in sql

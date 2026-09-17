@@ -4,13 +4,16 @@ Otvaranje sifre je do sada rucni posao: poslovodje slikaju ambalazu u Viber grup
 Dusan otvara sifru u ERP-u i javi u grupu. Ovde se priprema sve sto se sa fakture
 moze znati, da bi mu ostalo samo da pogleda i klikne.
 
-Sta ide gde - mereno 17.09.2026. na 300 najnovijih sifara:
+Sta ide gde:
 
-    ARTIKLI    maticni red (SIFRAMAG '099') + kopija po magacinu; novi artikal
-               dobije 18 redova, a u 5 magacina ('001','006','012','029','099')
-               je vise od 90 % njih
-    ARTPROD    red po prodajnom mestu - 21 mesto kod vecine novih
+    ARTIKLI    maticni red (SIFRAMAG '099') + red po robnom magacinu - imenovani
+               spisak, vidi MAGACINI nize
+    ARTPROD    red po prodajnom mestu koje nije usluzno (cita se iz dbo.PRODAV)
     DARTIKLI   tacno jedan red po artiklu (dopuna: opis, slike, uvoznik)
+
+ERP i sam kopira artikal iz 099 u lokalni cenovnik kad korisnik krene da radi
+kalkulaciju a sifre tamo nema. Mi upisujemo unapred u sva robna mesta, da
+poslovodja ne zapne.
 
 Stalne vrednosti koje ERP ocekuje (sve mereno, 300/300):
     DECKOLIC=2, DECCENA=2, VLAGA=LOM=PRIMESE=NECISTO=0.00, PCENA=0.000
@@ -154,36 +157,33 @@ def zauzeta(conn: Connection, sifra: str) -> bool:
     return False
 
 
-def _mesta(conn: Connection, prag: float = 0.9) -> tuple[list[str], list[str]]:
-    """Magacini i prodajna mesta u koja idu kopije novog artikla.
+# Magacini u koje ide nov artikal. Spisak je odluka (Bane, 17.09.), ne merenje:
+# tehnicke magacine (izdata roba, rezervacije, inventarski, cenovnik, testni,
+# avansni, 088) ERP puni sam kad zatrebaju - vidi se po televizoru 87187, koji je
+# dobio redove u 002, 012 i 051 iako ga tamo niko nije otvarao.
+#
+# 022, 024 i 025 su namerno izostavljeni: ta mesta nemaju izdvojen magacin nego
+# svu robu drze na lageru prodajnog mesta, pa su ti magacini prazni (0 artikala).
+MAGACINI = ("001", "002", "005", "010", "012", "021", "023", "026", "029", "071", "099")
 
-    Ne nagadja se: uzima se gde su zavrsili poslednji otvoreni artikli, i to samo
-    ono sto se ponavlja kod bar `prag` njih. Nova prodavnica tako udje sama, a
-    ugasena ispadne.
+
+def _mesta(conn: Connection) -> tuple[list[str], list[str]]:
+    """Magacini i prodajna mesta u koja ide nov artikal.
+
+    Magacini su imenovani spisak; prodajna mesta se citaju iz ERP-a, sva osim
+    usluznih ("PRODAJNO MESTO APATIN USLUGA") - tako nova prodavnica udje sama,
+    bez diranja koda.
     """
-    novi = """
-        select top 300 RTRIM(ARTIKAL) a from dbo.ARTIKLI
-        where RTRIM(SIFRAMAG)='099' and TRY_CAST(RTRIM(ARTIKAL) as bigint) is not null
-        order by TRY_CAST(RTRIM(ARTIKAL) as bigint) desc
-    """
-    granica = int(300 * prag)
-    magacini = [
-        r.m for r in conn.execute(
-            text(f"""select RTRIM(SIFRAMAG) m from dbo.ARTIKLI
-                     where RTRIM(ARTIKAL) in ({novi})
-                     group by RTRIM(SIFRAMAG) having count(*) >= :g order by RTRIM(SIFRAMAG)"""),
-            {"g": granica},
-        )
-    ]
     mesta = [
-        r.m for r in conn.execute(
-            text(f"""select RTRIM(SIFRAPRO) m from dbo.ARTPROD
-                     where RTRIM(ARTIKAL) in ({novi})
-                     group by RTRIM(SIFRAPRO) having count(*) >= :g order by RTRIM(SIFRAPRO)"""),
-            {"g": granica},
+        r.s
+        for r in conn.execute(
+            text(
+                "SELECT RTRIM(SIFRA) s FROM dbo.PRODAV "
+                "WHERE UPPER(NAZIV) NOT LIKE '%USLUG%' ORDER BY SIFRA"
+            )
         )
     ]
-    return magacini, mesta
+    return list(MAGACINI), mesta
 
 
 def predlozi(
