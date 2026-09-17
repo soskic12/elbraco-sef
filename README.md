@@ -270,6 +270,8 @@ Alternativno razdvojeno:
 | `sefsync subscribe` | pretplata na SEF notifikacije o promenama statusa |
 | `sefsync erp-check` / `erp-tables` | provera ERP baze (faza 2) |
 | `sefsync kalkulacija <id>` | nacrt ulazne kalkulacije u CSV (faza 2) |
+| `sefsync nacrti [--osvezi]` | šta je od kalkulacija spremno, a šta čeka šifru (faza 2) |
+| `sefsync mapiranje [--upisi]` | mapiranja artikala iz istorije (barkod + zaknjižene kalkulacije) |
 
 ---
 
@@ -337,6 +339,7 @@ src/sefsync/
   services/units.py  šifarnik poslovnih jedinica (CSV / tabela na serveru)
   web/               panel: prijava (SQL nalog), red operatera, ekran poslovođe
   services/workflow.py prosleđivanje, potvrda prijema, arhiva — i kuka za fazu 2
+  services/nacrti.py stanje kalkulacija koje app sklapa (šta čeka otvaranje šifre)
   erp/               konekcija na ERP (+ čitanje kredencijala iz user-secrets) i nacrt kalkulacije
 tests/               141 test (parser, pravila, klijent, tok, web, kalkulacija)
 docs/                zvanična SEF API dokumentacija

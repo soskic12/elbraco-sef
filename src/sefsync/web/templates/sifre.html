@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Šifre artikala{% endblock %}
+{% block content %}
+<h1>Kalkulacije koje čekaju šifru</h1>
+
+<div class="card small muted">
+  Aplikacija sklapa kalkulaciju za svaki razvrstan dokument. Ovde su oni kod kojih
+  nedostaje <b>naša šifra artikla</b> — dobavljač je poslao artikal koji još nije u šifarniku,
+  ili jeste ali ga nikad nismo povezali sa njegovom šifrom.
+  <br>
+  Kad upišeš šifru, veza se pamti <b>po dobavljaču i njegovoj šifri</b>, pa naredne fakture
+  tog dobavljača prolaze same. Zato je ovo najvredniji unos u celom toku.
+</div>
+
+<div class="card">
+  <div class="row" style="align-items:baseline;gap:18px">
+    <div><b>{{ broj.ceka_sifru }}</b> <span class="muted small">čeka šifru</span></div>
+    <div><b>{{ broj.spreman }}</b> <span class="muted small">kalkulacija spremno</span></div>
+    <div><b>{{ broj.problem }}</b> <span class="muted small">ima drugi problem</span></div>
+    <div><b>{{ broj.upisan }}</b> <span class="muted small">već u ERP-u</span></div>
+    <span class="spacer"></span>
+    <form class="inline" method="post" action="/sifre/osvezi">
+      <button class="ghost" type="submit">Preračunaj nacrte</button>
+    </form>
+  </div>
+  {% if racunato %}
+    <div class="muted small">poslednji put računato: {{ racunato.strftime('%d.%m.%Y %H:%M') }}</div>
+  {% endif %}
+</div>
+
+{% for nacrt in nacrti %}
+<div class="card">
+  <div class="row" style="align-items:baseline">
+    <h2 style="margin:0">
+      <a href="/dokument/{{ nacrt.document_id }}">{{ nacrt.document.document_number or '—' }}</a>
+    </h2>
+    <span class="muted">{{ nacrt.document.supplier_name }}</span>
+    <span class="spacer"></span>
+    <span class="tag">{{ nacrt.tabela }} · magacin {{ nacrt.magacin }}</span>
+    {% if nacrt.document.business_unit %}
+      <span class="tag">{{ nacrt.document.business_unit.code }}</span>
+    {% endif %}
+  </div>
+
+  {% if nacrt.problemi %}
+    <div class="small" style="color:#b91c1c">
+      {% for p in nacrt.problemi %}<div>{{ p }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <table class="small" style="width:100%;margin-top:8px">
+    <tr>
+      <th style="width:30px">#</th><th>Naziv sa fakture</th>
+      <th style="width:120px">Šifra dob.</th><th style="width:140px">EAN</th>
+      <th style="width:90px">Količina</th><th style="width:110px">Nab. cena</th>
+      <th style="width:260px">Naša šifra</th>
+    </tr>
+    {% for s in nacrt.nemapirane %}
+    <tr>
+      <td>{{ s.line_no }}</td>
+      <td>{{ s.naziv }}</td>
+      <td>{{ s.sifra_dobavljaca or '—' }}</td>
+      <td>{{ s.ean or '—' }}</td>
+      <td>{{ '%g'|format(s.kolicina) if s.kolicina is not none else '—' }} {{ s.jedinica }}</td>
+      <td>{{ '%.2f'|format(s.cena) if s.cena is not none else '—' }}</td>
+      <td>
+        <form class="inline" method="post" action="/sifre/povezi">
+          <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
+          <input type="hidden" name="line_no" value="{{ s.line_no }}">
+          <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345">
+          <button type="submit">Poveži</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card">Nema kalkulacija koje čekaju šifru.</div>
+{% endfor %}
+{% endblock %}

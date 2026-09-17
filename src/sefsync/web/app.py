@@ -39,10 +39,12 @@ from ..models import (
     DocumentType,
     MatchField,
     MatchOp,
+    NacrtKalkulacije,
     Notification,
     ProcessState,
     RoutingRule,
     SefStatus,
+    StanjeNacrta,
     SyncRun,
     UnitKind,
 )
@@ -601,6 +603,71 @@ def unit_save(
         unit.active = bool(active)
         unit.routable = bool(routable)
     return _back("/pj", "Poslovna jedinica je sačuvana.")
+
+
+# --------------------------------------------------------------------------- #
+# sifre artikala (faza 2): isti ekran operatera, drugi tab
+# --------------------------------------------------------------------------- #
+
+
+@app.get("/sifre", response_class=HTMLResponse)
+def sifre_page(request: Request, user: Operater) -> HTMLResponse:
+    """Kalkulacije kojima fali nasa sifra artikla.
+
+    Nina i Dule se menjaju, pa je ovo tab u istom ekranu, ne poseban nalog.
+    """
+    with session_scope() as session:
+        nacrti = list(
+            session.scalars(
+                select(NacrtKalkulacije)
+                .options(
+                    selectinload(NacrtKalkulacije.document).selectinload(
+                        Document.business_unit
+                    )
+                )
+                .where(NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU)
+                .order_by(NacrtKalkulacije.document_id.desc())
+            )
+        )
+        broj = {
+            stanje.value: session.scalar(
+                select(func.count())
+                .select_from(NacrtKalkulacije)
+                .where(NacrtKalkulacije.stanje == stanje)
+            )
+            for stanje in StanjeNacrta
+        }
+        racunato = session.scalar(select(func.max(NacrtKalkulacije.racunato_u)))
+    return templates.TemplateResponse(
+        request,
+        "sifre.html",
+        {"nacrti": nacrti, "broj": broj, "racunato": racunato, "user": user},
+    )
+
+
+@app.post("/sifre/povezi")
+def sifre_povezi(
+    user: Operater,
+    document_id: int = Form(...),
+    line_no: int = Form(...),
+    erp_item_code: str = Form(...),
+) -> RedirectResponse:
+    from ..services.nacrti import povezi_sifru
+
+    try:
+        povezi_sifru(document_id, line_no, erp_item_code, korisnik=user.login)
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
+        return _back("/sifre", str(exc), False)
+    return _back("/sifre", f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")
+
+
+@app.post("/sifre/osvezi")
+def sifre_osvezi(user: Operater, background: BackgroundTasks) -> RedirectResponse:
+    from ..services.nacrti import osvezi_sve
+
+    # Racunanje ide po ERP-u za svaki dokument, pa se ne ceka na odgovor.
+    background.add_task(osvezi_sve)
+    return _back("/sifre", "Preračunavanje je pokrenuto — osveži stranu za koji trenutak.")
 
 
 @app.get("/pravila", response_class=HTMLResponse)

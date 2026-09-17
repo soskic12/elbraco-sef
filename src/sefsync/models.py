@@ -532,3 +532,52 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, default=None)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class StanjeNacrta(str, enum.Enum):
+    """Dokle je stigla kalkulacija koju aplikacija sklapa."""
+
+    SPREMAN = "spreman"          # sve stoji, moze u ERP cim poslovodja potvrdi prijem
+    CEKA_SIFRU = "ceka_sifru"    # fali nasa sifra za jednu ili vise stavki
+    PROBLEM = "problem"          # nesto drugo (dobavljac van sifarnika, sifra bez artikla)
+    UPISAN = "upisan"            # vec je u ERP-u
+
+
+class NacrtKalkulacije(Base):
+    """Stanje kalkulacije koju aplikacija sklapa za jedan dokument.
+
+    Sam nacrt se uvek moze izvesti iznova iz dokumenta i ERP-a, ali to je desetak
+    upita po dokumentu - prespro za ekran koji se osvezava. Zato se ovde cuva
+    ishod poslednjeg racunanja, a puni nacrt se pravi tek kad zatreba.
+
+    Ono sto covek uradi ne cuva se ovde nego tamo gde i pripada: veza sifre ide u
+    `item_mapping`, pa vredi i za sve buduce fakture istog dobavljaca.
+    """
+
+    __tablename__ = "nacrt_kalkulacije"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
+    )
+    stanje: Mapped[StanjeNacrta] = mapped_column(
+        Enum(StanjeNacrta), default=StanjeNacrta.PROBLEM, index=True
+    )
+    magacin: Mapped[str | None] = mapped_column(String(10), default=None)
+    tabela: Mapped[str | None] = mapped_column(String(20), default=None)   # ULKALKUL / MKALKUL
+    iznos: Mapped[float | None] = mapped_column(Float, default=None)
+    # Sta zaustavlja, u obliku u kom se prikazuje coveku.
+    problemi: Mapped[list | None] = mapped_column(JSON, default=None)
+    # Po jedna stavka koja nema nasu sifru: line_no, naziv, sifra dobavljaca, EAN...
+    nemapirane: Mapped[list | None] = mapped_column(JSON, default=None)
+    racunato_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
+    # Upis u ERP (faza 2): broj kalkulacije i ko je pustio
+    erp_broj: Mapped[str | None] = mapped_column(String(20), default=None)
+    upisano_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    upisao: Mapped[str | None] = mapped_column(String(100), default=None)
+
+    document: Mapped[Document] = relationship()
+
+    @property
+    def broj_nemapiranih(self) -> int:
+        return len(self.nemapirane or [])

@@ -100,7 +100,7 @@ class Nacrt:
     zaglavlje: dict
     stavke: list[dict] = field(default_factory=list)
     problemi: list[str] = field(default_factory=list)
-    nemapirane: list[str] = field(default_factory=list)
+    nemapirane: list[dict] = field(default_factory=list)  # stavke bez nase sifre
 
     @property
     def spreman(self) -> bool:
@@ -298,9 +298,18 @@ def pripremi(
         for linija in linije:
             sifra, odakle = _nasa_sifra(session, conn, doc.supplier_vat, linija)
             if sifra is None:
+                # Ne recenica nego podaci: ekran na kom se otvara sifra treba
+                # tacno ovo - naziv, barkod, sifru dobavljaca, kolicinu i cenu.
                 nacrt.nemapirane.append(
-                    f"stavka {linija.line_no}: {linija.name or '-'} "
-                    f"(šifra dob. {linija.sellers_item_id or '-'}, EAN {linija.standard_item_id or '-'})"
+                    {
+                        "line_no": linija.line_no,
+                        "naziv": linija.name or "",
+                        "sifra_dobavljaca": linija.sellers_item_id or "",
+                        "ean": linija.standard_item_id or "",
+                        "kolicina": linija.quantity,
+                        "cena": linija.price,
+                        "jedinica": linija.unit_code or "",
+                    }
                 )
                 continue
             art = _artikal(conn, sifra)
@@ -450,7 +459,11 @@ def kao_sql(nacrt: Nacrt) -> str:
 def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
     """Upisuje nacrt. Podrazumevano u test bazu; produkcija trazi dozvolu."""
     if not nacrt.spreman:
-        prepreke = nacrt.problemi + [f"nemapirano: {x}" for x in nacrt.nemapirane]
+        prepreke = nacrt.problemi + [
+            f"stavka {x['line_no']} nema našu šifru: {x['naziv']} "
+            f"(šifra dob. {x['sifra_dobavljaca'] or '-'}, EAN {x['ean'] or '-'})"
+            for x in nacrt.nemapirane
+        ]
         raise ValueError("Kalkulacija nije spremna: " + "; ".join(prepreke[:5]))
 
     # Poslednja brana: knjizenje ide iskljucivo kroz ERP, jer povlaci glavnu

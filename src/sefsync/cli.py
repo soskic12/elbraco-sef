@@ -644,6 +644,42 @@ def cmd_mapiranje(
     typer.echo(f"Upisano: {nalaz.upisano}, već postojalo: {nalaz.vec_postojalo}")
 
 
+@app.command("nacrti")
+def cmd_nacrti(
+    osvezi: bool = typer.Option(
+        False, "--osvezi", help="Preračunaj nacrte (inače samo ispiše zatečeno stanje)."
+    ),
+    limit: int = typer.Option(None, help="Samo toliko najnovijih dokumenata."),
+) -> None:
+    """Stanje kalkulacija koje aplikacija sklapa: šta je spremno, a šta čeka čoveka."""
+    _boot()
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+
+    from .models import NacrtKalkulacije, StanjeNacrta
+
+    if osvezi:
+        from .services.nacrti import osvezi_sve
+
+        typer.echo("Računam nacrte (za svaki dokument se pita ERP)...")
+        brojac = osvezi_sve(limit=limit)
+    else:
+        with session_scope() as session:
+            brojac = {
+                s.value: session.scalar(
+                    _select(_func.count()).select_from(NacrtKalkulacije)
+                    .where(NacrtKalkulacije.stanje == s)
+                )
+                for s in StanjeNacrta
+            }
+
+    for kljuc, vrednost in brojac.items():
+        typer.echo(f"  {kljuc.replace('_', ' '):<12} {vrednost}")
+    if not osvezi:
+        typer.echo("")
+        typer.echo("Za ponovno računanje: sefsync nacrti --osvezi")
+
+
 @app.command("osvezi-ubl")
 def cmd_reparse(
     dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),

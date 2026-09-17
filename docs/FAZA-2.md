@@ -823,3 +823,51 @@ javljale na svakoj desetoj stavci, što je previše da bi se čitalo.
 
 **Odluka:** cena iz `ARTPROD.CENAMALO` kao predlog, upozorenje samo kad je predložena
 prodajna ispod nabavne. `PMC` se ne koristi kao cena.
+
+
+---
+
+## Faza 2− : app sklapa kalkulaciju, čovek dopunjava — 17.09.2026
+
+Dogovor sa Banetom, umesto skoka na automatsko otvaranje šifara.
+
+**Tok koji već postoji u firmi:** e-faktura na SEF-u → Nina razvrstava → mejl objektu
+→ poslovođa proverava da li je roba stigla i pravi kalkulaciju → potvrđuje Nini →
+Nina prihvata na SEF-u. Kad naiđe nov artikal, poslovođe slikaju ambalažu u Viber
+grupu (EAN i zemlja porekla), Dušan otvara šifru i javi, pa poslovođa nastavi.
+
+**Šta app preuzima:** sklapa kalkulaciju čim je dokument razvrstan. Ako je kompletna,
+čeka potvrdu prijema. Ako nije, prikazuje se na ekranu gde piše tačno šta joj fali.
+
+### Urađeno u ovom koraku
+
+| | |
+|---|---|
+| `NacrtKalkulacije` | stanje kalkulacije po dokumentu (spreman / čeka šifru / problem / upisan) |
+| `services/nacrti.py` | računa i pamti stanje; `povezi_sifru` upisuje vezu u `item_mapping` |
+| tab **Šifre** | u istom ekranu operatera — Nina i Dule se menjaju, pa oboje vide oba posla |
+| `sefsync nacrti [--osvezi]` | isto iz komandne linije |
+
+Nacrt se ne čuva ceo — uvek se može izvesti iznova. Čuva se **ishod** računanja, jer
+je to desetak upita ka ERP-u po dokumentu, prespro za ekran. Ono što čovek uradi
+čuva se tamo gde vredi i ubuduće: veza šifre ide u `item_mapping`, ne u nacrt.
+
+Generator sada vraća nemapirane stavke kao **podatke** (broj stavke, naziv, šifra
+dobavljača, EAN, količina, cena), ne kao rečenicu — ekran na kom se otvara šifra
+treba tačno to.
+
+### Odluke (Bane, 17.09.)
+
+1. **Upis u ERP tek kad poslovođa potvrdi prijem robe.** Poslovođe i sada prave
+   kalkulacije ručno; dok app upisuje ranije, pretekla bi ih i nastale bi dve
+   kalkulacije za istu fakturu.
+2. **Nove šifre: app predlaže kompletan artikal**, Dušan klikne „otvori".
+3. **MP cena:** `ARTPROD.CENAMALO` kao predlog (mereno 66,8 %, `PMC` samo 8,7 %),
+   upozorenje kad je prodajna ispod nabavne (mereno: 0,41 % slučajeva).
+
+### Ostaje za sledeći korak
+
+- upis u ERP na potvrdu prijema, uz proveru da kalkulacija za taj broj računa već
+  ne postoji (koristi se isto uparivanje po `BROJ_RN_DOB`)
+- predlog kompletnog artikla za `ARTIKLI` / `ARTPROD` / `DARTIKLI`
+- pod čijim imenom app upisuje u `RBR`, i šta sa `DebitNote` i avansima
