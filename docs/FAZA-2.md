@@ -743,3 +743,43 @@ pa su ta dva šablona isto pravilo i moraju imati isto stanje.
 Razlika između razvojne i produkcione baze nije samo u brzini. `tests/test_mssql_saglasnost.py`
 je napravljen posle `IS FALSE` koji SQLite prima a MS SQL odbija; ovo je isti rod
 greške, samo tiši — ništa ne puca, nego se tiho radi nad pogrešnim redom.
+
+
+---
+
+## Usluge nemaju stavke — 17.09.2026
+
+Merenjem koliko bi kalkulacija aplikacija sklopila sama ispalo je da polovina čeka
+otvaranje šifre. Pogledom u spisak: „Naknada za transakcije na POS terminalu",
+„Saobraćaj", „Provizija" — dakle bankarske naknade i usluge, za koje šifra artikla
+nikad neće ni postojati.
+
+Provereno u ERP-u, i to je pravilo a ne običaj:
+
+| Magacin | Zaglavlja | Sa stavkama | `STAVKE` |
+|---|---:|---:|---|
+| 088 | 3.016 | **0** | `Ne` |
+| 010 | 587 | 587 | `Da` |
+| 021 | 273 | 273 | `Da` |
+
+`ROBNO_ZADUZ` je **0 u svih 3.016** zaglavlja na 088; iznos nosi `IZNOS_ZA_NAP`, a
+PDV `PDV`. U `MKALKUL` je polje `STAVKE` uvek prazno (4.734 reda).
+
+Generator je ispravljen: kad je magacin 088, stavke se uopšte ne čitaju, iznosi se
+uzimaju iz zaglavlja fakture, a `STAVKE` dobija `Ne` (do sada je pisalo prazno, što
+se u `ULKALKUL` ne javlja nijednom).
+
+### Efekat na spremnost kalkulacija
+
+Mereno na 204 razvrstana dokumenta iz poslednjih 14 dana:
+
+| | Pre | Posle |
+|---|---:|---:|
+| kalkulacija spremna za upis | 103 (50,5 %) | **188 (92,2 %)** |
+| čeka otvaranje šifre | 101 (49,5 %) | **16 (7,8 %)** |
+
+Onih 16 nosi 40 nemapiranih stavki, 34 različite šifre dobavljača — dakle oko
+**jedan dokument i dve-tri nove šifre dnevno**. To je posao koji Dušan ionako radi;
+razlika je što bi ga video na jednom mestu, sa svime što mu treba.
+
+Alat: `alati/meri_kalkulacije.py [broj_dana]`.

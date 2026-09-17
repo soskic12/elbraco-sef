@@ -276,8 +276,17 @@ def pripremi(
         # Knjizno odobrenje ulazi minusom - kolicine i iznosi su negativni.
         predznak = -1.0 if (doc.document_type and "credit" in str(doc.document_type.value).lower()) else 1.0
 
+        # Kalkulacija na magacinu 088 nema stavke. Nije stvar izbora nego pravilo
+        # ERP-a: mereno 16.09., svih 3.016 zaglavlja na 088 nema nijedan red u
+        # PRULKALK, a ROBNO_ZADUZ je u svima 0. Bez ovoga generator trazi sifru
+        # artikla za "Naknada za transakcije na POS terminalu" - a takva sifra
+        # nikad nece ni postojati, pa bi kalkulacija zauvek cekala coveka.
+        bez_stavki = magacin == MAGACIN_ULAZNI_RACUN
+
         linije = (
-            session.query(DocumentLine)
+            []
+            if bez_stavki
+            else session.query(DocumentLine)
             .filter(DocumentLine.document_id == document_id)
             .order_by(DocumentLine.line_no)
             .all()
@@ -363,6 +372,13 @@ def pripremi(
             pdv_ukupno += pdv
             nacrt.stavke.append(stavka)
 
+        if bez_stavki:
+            # Iznosi dolaze iz zaglavlja fakture, jer stavaka nema.
+            pdv_ukupno = float(doc.vat_amount or 0) * predznak
+            za_naplatu = round(float(doc.amount or 0) * predznak, 2)
+        else:
+            za_naplatu = round(osnovica + pdv_ukupno, 2)
+
         rok = clarion_dan(doc.due_date) if doc.due_date else 0
         nacrt.zaglavlje = {
             "LASTUSER": 1,
@@ -377,7 +393,7 @@ def pripremi(
             "DATUM_PRIJEM": dan,
             "ROBNO_ZADUZ": round(osnovica, 2),
             "PDV": round(pdv_ukupno, 2),
-            "IZNOS_ZA_NAP": round(osnovica + pdv_ukupno, 2),
+            "IZNOS_ZA_NAP": za_naplatu,
             "MENJA_CENU": "Da" if maloprodaja else "",
             "OBRACUN_MALO": "",
             "MODEL": 0,
@@ -386,7 +402,9 @@ def pripremi(
             "OZNAKA": "EUR",
             "TM": "000000",
             "IZVOREPP": IZVOR,
-            "STAVKE": "Da" if (nacrt.stavke and not maloprodaja) else "",
+            # Mereno: u MKALKUL je polje uvek prazno, u ULKALKUL je "Da" kad ima
+            # stavki (010, 021) i "Ne" na 088. Prazno se u ULKALKUL ne javlja.
+            "STAVKE": "" if maloprodaja else ("Da" if nacrt.stavke else "Ne"),
         }
         if maloprodaja:
             nacrt.zaglavlje["IZN_RUCM"] = round(mp_vrednost - mp_pdv - osnovica, 2)
