@@ -999,3 +999,31 @@ nacrt se tad preskače uz zapis u log.
 kalkulaciju (`MKALKUL 005/00499`) sa **tri od pet stavki** — fale baš one dve kojima
 šifra ne postoji. To je greška koju faza 2− treba da spreči: app kaže da kalkulacija
 nije kompletna dok se šifra ne otvori.
+
+
+---
+
+## Slike sa objekta umesto Viber grupe — 17.09.2026
+
+Podaci za otvaranje nove šifre (barkod, zemlja porekla) do sada stižu kao slike u
+Viber grupu. Provereno: **Viber nema API za grupe** — postoji samo Public Account /
+bot, u koji obična grupa ne spada, i bot ne može da uđe u nju. Čitanje lokalne baze
+Viber Desktopa je jedina druga mogućnost, ali zavisi od upaljenog klijenta i menja se
+sa svakom verzijom — rešenje koje pukne kad neko klikne „update".
+
+Zato slika ide tamo gde joj je mesto: **uz stavku kojoj fali šifra**.
+
+- `Slika` (tabela `slika`): dokument, opciono broj stavke, putanja, napomena, ko i kada
+- fajl na disku (`STORAGE_DIR/slike/<godina>/<mesec>/`), u bazi samo putanja — kao UBL
+- prima se samo slika (JPG, PNG, HEIC, WEBP), najviše 12 MB; ulaz koristi neko van
+  kancelarije, pa se ne veruje onome što je poslato
+- poslovođa vidi svoje dokumente, tuđi vraćaju 403
+- Dušan slike vidi **na tabu „Šifre"**, uz red sa EAN-om i nazivom
+
+### Ekran poslovođe radi na telefonu
+
+Slikanje radi poslovođa na licu mesta, pa ceo njegov deo mora da radi palcem.
+Dodat je `@media (max-width: 720px)`: tabele postaju kartice (svaka ćelija dobija
+naslov iz `data-naslov`), dugmad i polja imaju najmanje 42 px visine, `dl.kv` prelazi
+u jednu kolonu. Polje za sliku koristi `capture="environment"`, pa telefon otvara
+kameru umesto galerije.

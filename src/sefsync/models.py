@@ -598,3 +598,31 @@ class NacrtKalkulacije(Base):
     @property
     def broj_nemapiranih(self) -> int:
         return len(self.nemapirane or [])
+
+
+class Slika(Base):
+    """Slika koju je poslovodja poslao uz dokument - najcesce ambalaza novog artikla.
+
+    Do sada su te slike isle u Viber grupu, gde nisu vezane ni za sta: covek koji
+    otvara sifru mora sam da spoji sliku sa fakturom. Viber nema API za grupe, pa
+    se slika prima tamo gde joj je mesto - uz stavku kojoj fali nasa sifra.
+
+    Fajl stoji na disku (`STORAGE_DIR/slike/<godina>/<mesec>/`), u bazi je samo
+    putanja - isto kao UBL i PDF prilozi.
+    """
+
+    __tablename__ = "slika"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), index=True
+    )
+    # Koja stavka, kad se zna - tako Dusan vidi sliku bas uz artikal koji otvara.
+    line_no: Mapped[int | None] = mapped_column(Integer, default=None)
+    putanja: Mapped[str] = mapped_column(String(400))
+    naziv_fajla: Mapped[str | None] = mapped_column(String(260), default=None)
+    napomena: Mapped[str | None] = mapped_column(String(300), default=None)
+    poslao: Mapped[str] = mapped_column(String(100))
+    poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    document: Mapped[Document] = relationship()

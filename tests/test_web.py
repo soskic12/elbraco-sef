@@ -517,3 +517,81 @@ def test_prosledjena_istorija_ne_zatrpava_prikaz_novih(client, podaci, db):
     odgovor = client.get("/red?prikaz=nepregledano")
 
     assert "26-30F-087050" not in odgovor.text
+
+
+# --------------------------------------------------------------------------- #
+# slike sa objekta (zamena za Viber grupu)
+# --------------------------------------------------------------------------- #
+
+MALI_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+    "01f15c4890000000a49444154789c6360000002000100ffff03000006"
+    "000557bfabd40000000049454e44ae426082"
+)
+
+
+def _prosledi(db, doc_id):
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, doc_id)
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+
+
+def test_poslovodja_salje_sliku_ambalaze(client, podaci, db):
+    """Slikanje radi poslovodja na licu mesta - zato slika ide uz dokument, ne u Viber."""
+    from sefsync.models import Slika
+
+    _prosledi(db, podaci["doc"])
+    prijavi(client, POSLOVODJA)
+
+    odgovor = client.post(
+        f"/dokument/{podaci['doc']}/slika",
+        files={"slika": ("ambalaza.png", MALI_PNG, "image/png")},
+        data={"line_no": "1", "napomena": "zemlja porekla Turska"},
+        follow_redirects=False,
+    )
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        sl = session.scalar(select(Slika))
+        assert sl.document_id == podaci["doc"]
+        assert sl.line_no == 1
+        assert sl.poslao == "predrag"
+        assert sl.napomena == "zemlja porekla Turska"
+        from pathlib import Path
+
+        assert Path(sl.putanja).exists()
+
+
+def test_tudj_dokument_ne_prima_sliku(client, podaci, db):
+    _prosledi(db, podaci["doc"])
+    prijavi(client, TUDJ)          # poslovodja drugog objekta
+
+    odgovor = client.post(
+        f"/dokument/{podaci['doc']}/slika",
+        files={"slika": ("x.png", MALI_PNG, "image/png")},
+        follow_redirects=False,
+    )
+
+    assert odgovor.status_code == 403
+
+
+def test_prima_se_samo_slika(client, podaci, db):
+    """Ulaz koji koristi neko van kancelarije ne veruje onome sto je poslato."""
+    _prosledi(db, podaci["doc"])
+    prijavi(client, POSLOVODJA)
+
+    odgovor = client.post(
+        f"/dokument/{podaci['doc']}/slika",
+        files={"slika": ("virus.exe", b"MZ\x90\x00", "application/x-msdownload")},
+        follow_redirects=False,
+    )
+
+    assert odgovor.status_code == 303
+    assert "GRE" in odgovor.headers["location"]      # poruka o gresci
+    from sefsync.models import Slika
+
+    with db.session_scope() as session:
+        assert session.scalar(select(Slika)) is None

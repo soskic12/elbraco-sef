@@ -48,6 +48,18 @@
     </div>
   {% endif %}
 
+  {% set njene = slike.get(nacrt.document_id, []) %}
+  {% if njene %}
+    <div class="row" style="margin:8px 0">
+      {% for sl in njene %}
+        <a href="/slika/{{ sl.id }}" target="_blank" title="{{ sl.napomena or sl.naziv_fajla }}">
+          <img src="/slika/{{ sl.id }}" alt=""
+               style="height:90px;border-radius:6px;border:1px solid var(--line)"></a>
+      {% endfor %}
+      <span class="muted small" style="align-self:center">slike sa objekta</span>
+    </div>
+  {% endif %}
+
   <table class="small" style="width:100%;margin-top:8px">
     <tr>
       <th style="width:30px">#</th><th>Naziv sa fakture</th>

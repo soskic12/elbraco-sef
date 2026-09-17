@@ -158,6 +158,63 @@
 </div>
 {% endif %}
 
+{% if doc.forwarded_at or user.is_operator %}
+<div class="card">
+  <h2 style="margin-top:0">Slike</h2>
+  <p class="small muted" style="margin-top:0">
+    Slikaj ambalažu tako da se vide <b>barkod (EAN)</b> i <b>zemlja porekla</b> — to je ono
+    što treba za otvaranje nove šifre. Slika ostaje uz ovu fakturu, pa niko ne mora da je
+    traži po Viberu.
+  </p>
+
+  <form method="post" action="/dokument/{{ doc.id }}/slika" enctype="multipart/form-data">
+    <div class="row">
+      <div class="field" style="flex:1;min-width:220px">
+        <label>Slika</label>
+        <input type="file" name="slika" accept="image/*" capture="environment" required>
+      </div>
+      <div class="field">
+        <label>Stavka (opciono)</label>
+        <select name="line_no">
+          <option value="">— cela faktura —</option>
+          {% for l in lines %}
+            <option value="{{ l.line_no }}">{{ l.line_no }}. {{ (l.name or '')[:40] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:180px">
+        <label>Napomena (opciono)</label>
+        <input type="text" name="napomena" placeholder="npr. zemlja porekla Turska">
+      </div>
+      <button type="submit">Pošalji sliku</button>
+    </div>
+  </form>
+
+  {% if slike %}
+  <div class="row" style="margin-top:12px;align-items:flex-start">
+    {% for s in slike %}
+      <div style="width:190px">
+        <a href="/slika/{{ s.id }}" target="_blank">
+          <img src="/slika/{{ s.id }}" alt="{{ s.naziv_fajla }}"
+               style="width:100%;border-radius:6px;border:1px solid var(--line)"></a>
+        <div class="small muted">
+          {% if s.line_no %}stavka {{ s.line_no }} · {% endif %}{{ s.poslao }},
+          {{ s.poslato_u.strftime('%d.%m. %H:%M') }}
+          {% if s.napomena %}<div>{{ s.napomena }}</div>{% endif %}
+        </div>
+        {% if user.is_operator %}
+          <form method="post" action="/slika/{{ s.id }}/obrisi">
+            <input type="hidden" name="povratak" value="/dokument/{{ doc.id }}">
+            <button class="ghost small" type="submit">obriši</button></form>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+
 <div class="card">
   <h2 style="margin-top:0">Stavke ({{ lines | length }})</h2>
   {% if lines %}

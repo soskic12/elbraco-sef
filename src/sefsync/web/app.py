@@ -22,7 +22,18 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request, status
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
@@ -44,6 +55,7 @@ from ..models import (
     ProcessState,
     RoutingRule,
     SefStatus,
+    Slika,
     StanjeNacrta,
     SyncRun,
     UnitKind,
@@ -452,12 +464,18 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 select(AuditLog).where(AuditLog.document_id == doc_id).order_by(AuditLog.id.desc())
             )
         )
+        slike = list(
+            session.scalars(
+                select(Slika).where(Slika.document_id == doc_id).order_by(Slika.id)
+            )
+        )
         return templates.TemplateResponse(
             request,
             "document.html",
             {
                 "doc": doc,
                 "lines": doc.lines,
+                "slike": slike,
                 "units": units,
                 "notifications": notifications,
                 "audit": audit,
@@ -482,6 +500,68 @@ def document_ubl(doc_id: int, user: Korisnik) -> FileResponse:
             media_type="application/xml",
             filename=f"{doc.document_number or doc.sef_invoice_id}.xml",
         )
+
+
+@app.post("/dokument/{doc_id}/slika")
+async def dodaj_sliku(
+    doc_id: int,
+    user: Korisnik,
+    slika: Annotated[UploadFile, File()],
+    line_no: Annotated[str, Form()] = "",
+    napomena: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    """Poslovodja salje sliku ambalaze sa telefona, uz dokument (i stavku)."""
+    from ..services.slike import sacuvaj
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Dokument ne postoji.")
+        if not user.is_operator:
+            moja = _unit_for(session, user)
+            if moja is None or doc.business_unit_id != moja.id:
+                raise HTTPException(403, "Nije tvoj dokument.")
+
+    try:
+        sacuvaj(
+            doc_id,
+            await slika.read(),
+            mime=slika.content_type,
+            naziv_fajla=slika.filename,
+            korisnik=user.login,
+            line_no=_broj(line_no) or None,
+            napomena=napomena,
+        )
+    except ValueError as exc:
+        return _back(f"/dokument/{doc_id}", str(exc), False)
+    return _back(f"/dokument/{doc_id}", "Slika je sačuvana.")
+
+
+@app.get("/slika/{slika_id}")
+def prikazi_sliku(slika_id: int, user: Korisnik) -> FileResponse:
+    with session_scope() as session:
+        red = session.get(Slika, slika_id)
+        if red is None or not Path(red.putanja).exists():
+            raise HTTPException(404, "Slika nije dostupna.")
+        doc = session.get(Document, red.document_id)
+        if not user.is_operator:
+            moja = _unit_for(session, user)
+            if moja is None or doc is None or doc.business_unit_id != moja.id:
+                raise HTTPException(403, "Nije tvoj dokument.")
+        return FileResponse(red.putanja, filename=red.naziv_fajla or "slika.jpg")
+
+
+@app.post("/slika/{slika_id}/obrisi")
+def obrisi_sliku(
+    slika_id: int, user: Operater, povratak: Annotated[str, Form()] = ""
+) -> RedirectResponse:
+    from ..services.slike import obrisi
+
+    with session_scope() as session:
+        red = session.get(Slika, slika_id)
+        doc_id = red.document_id if red else 0
+    obrisi(slika_id, korisnik=user.login)
+    return _back(povratak or f"/dokument/{doc_id}", "Slika je obrisana.")
 
 
 # --------------------------------------------------------------------------- #
@@ -655,12 +735,23 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
             for stanje in StanjeNacrta
         }
         racunato = session.scalar(select(func.max(NacrtKalkulacije.racunato_u)))
+        # Slike koje su poslovodje poslale uz te dokumente - ambalaza sa barkodom
+        # je ono zbog cega se dosad gledalo u Viber grupu.
+        slike_po_dokumentu: dict[int, list] = {}
+        if nacrti:
+            for red in session.scalars(
+                select(Slika).where(
+                    Slika.document_id.in_([n.document_id for n in nacrti])
+                ).order_by(Slika.id)
+            ):
+                slike_po_dokumentu.setdefault(red.document_id, []).append(red)
     return templates.TemplateResponse(
         request,
         "sifre.html",
         {
             "nacrti": nacrti,
             "zapeli": zapeli,
+            "slike": slike_po_dokumentu,
             "broj": broj,
             "racunato": racunato,
             "user": user,

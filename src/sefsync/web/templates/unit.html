@@ -24,13 +24,13 @@
   <tbody>
   {% for d in documents %}
     <tr>
-      <td><a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
+      <td data-naslov="Faktura"><a href="/dokument/{{ d.id }}"><b>{{ d.document_number or d.sef_invoice_id }}</b></a>
           <div class="small">{{ d.supplier_name or '-' }}</div></td>
-      <td class="small">{{ d.document_type | tip }}</td>
-      <td class="small">{{ d.delivery_date.strftime('%d.%m.%Y') if d.delivery_date else '-' }}</td>
-      <td class="num"><b>{{ novac(d.amount, d.currency) }}</b></td>
-      <td class="num">{{ d.lines | length }}</td>
-      <td class="small">{{ d.forwarded_at.strftime('%d.%m. %H:%M') if d.forwarded_at else '' }}</td>
+      <td class="small" data-naslov="Vrsta">{{ d.document_type | tip }}</td>
+      <td class="small" data-naslov="Datum prometa">{{ d.delivery_date.strftime('%d.%m.%Y') if d.delivery_date else '-' }}</td>
+      <td class="num" data-naslov="Iznos"><b>{{ novac(d.amount, d.currency) }}</b></td>
+      <td class="num" data-naslov="Stavki">{{ d.lines | length }}</td>
+      <td class="small" data-naslov="Prosleđeno">{{ d.forwarded_at.strftime('%d.%m. %H:%M') if d.forwarded_at else '' }}</td>
       <td>
         {% if d.received_at %}
           <span class="tag ok">prijem potvrdio {{ d.received_by }}</span>
