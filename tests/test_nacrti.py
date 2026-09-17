@@ -325,3 +325,68 @@ def test_nacrt_nastaje_cim_operater_razvrsta_dokument(db, podaci, monkeypatch):
         red = session.get(NacrtKalkulacije, podaci)
         assert red is not None, "razvrstavanje mora da napravi nacrt"
         assert red.stanje is StanjeNacrta.CEKA_SIFRU
+
+
+# --------------------------------------------------------------------------- #
+# isti artikal na vise objekata
+# --------------------------------------------------------------------------- #
+
+
+def test_otvorena_sifra_resava_i_fakture_drugih_objekata(db, podaci, monkeypatch):
+    """Dusan kaze sifru jednom, a ceka je vise objekata sa istim artiklom.
+
+    Bez ovoga bi poslovodja u drugom objektu i dalje gledao "ceka sifru" za nesto
+    sto je vec reseno, dok neko rucno ne preracuna nacrte.
+    """
+    from sefsync.models import Document, DocumentLine, NacrtKalkulacije, SefStatus, StanjeNacrta
+    from sefsync.services import nacrti
+
+    with db.session_scope() as session:
+        prvi = session.get(Document, podaci)
+        drugi = Document(
+            sef_invoice_id=500999, document_number="FA-2650/26",
+            supplier_name="EWE COMP DOO", supplier_vat="100042618",
+            amount=50000.0, sef_status=SefStatus.SEEN,
+            business_unit_id=prvi.business_unit_id,
+        )
+        drugi.lines.append(
+            DocumentLine(line_no=1, name="Frižider", sellers_item_id="EW-9911",
+                         standard_item_id="8606012345678", quantity=1.0, price=50000.0)
+        )
+        session.add(drugi)
+        session.flush()
+        drugi_id = drugi.id
+
+    monkeypatch.setattr(
+        nacrti, "pripremi", lambda *a, **k: LazniNacrt(nemapirane=[STAVKA_BEZ_SIFRE])
+    )
+    nacrti.osvezi(podaci)
+    nacrti.osvezi(drugi_id)
+
+    # od trenutka kad sifra postoji, generator je nalazi za obe fakture
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    nacrti.povezi_sifru(podaci, 1, "12345", korisnik="dusan")
+
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, drugi_id).stanje is StanjeNacrta.SPREMAN
+
+
+def test_slika_jednog_objekta_vidi_se_na_fakturi_drugog(db, podaci):
+    """Slika je o artiklu, ne o fakturi - drugi poslovodja ne treba da slika ponovo."""
+    from sefsync.services.slike import sacuvaj, za_artikal
+
+    MALI_PNG = bytes.fromhex(
+        "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+        "01f15c4890000000a49444154789c6360000002000100ffff03000006"
+        "000557bfabd40000000049454e44ae426082"
+    )
+    sacuvaj(podaci, MALI_PNG, mime="image/png", naziv_fajla="a.png",
+            korisnik="predrag", line_no=1)
+
+    with db.session_scope() as session:
+        nadjene = za_artikal(
+            session, ean="8606012345678", sifra_dobavljaca=None, supplier_vat=None
+        )
+    assert len(nadjene) == 1
+    assert nadjene[0].poslao == "predrag"
+    assert nadjene[0].naziv_artikla == "Frižider"

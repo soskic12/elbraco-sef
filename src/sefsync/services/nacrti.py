@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from ..db import session_scope
 from ..erp.kalkulacija import pripremi
@@ -146,4 +146,53 @@ def povezi_sifru(
             postoji.confirmed_by = korisnik
             postoji.active = True
 
-    return osvezi(document_id, korisnik=korisnik, engine=engine)
+    osvezeni = osvezi(document_id, korisnik=korisnik, engine=engine)
+
+    # Isti artikal stize na vise objekata. Kad se sifra jednom kaze, sve ostale
+    # fakture koje ga cekaju moraju da prodju same - inace poslovodja u drugom
+    # objektu i dalje gleda "ceka sifru" za nesto sto je vec reseno.
+    for drugi in _cekaju_isti_artikal(document_id, line_no):
+        try:
+            osvezi(drugi, korisnik=korisnik, engine=engine)
+        except Exception as exc:  # noqa: BLE001 - jedan dokument ne sme da obori ostale
+            log.warning("Nacrt za #%s nije osvezen: %s", drugi, exc)
+    return osvezeni
+
+
+def _cekaju_isti_artikal(document_id: int, line_no: int) -> list[int]:
+    """Dokumenti koji cekaju sifru za isti artikal (po barkodu ili sifri dobavljaca)."""
+    with session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(
+                DocumentLine.document_id == document_id, DocumentLine.line_no == line_no
+            )
+        )
+        if linija is None:
+            return []
+        doc = session.get(Document, document_id)
+        uslovi = []
+        if linija.standard_item_id:
+            uslovi.append(DocumentLine.standard_item_id == linija.standard_item_id)
+        if linija.sellers_item_id and doc is not None and doc.supplier_vat:
+            uslovi.append(
+                and_(
+                    DocumentLine.sellers_item_id == linija.sellers_item_id,
+                    Document.supplier_vat == doc.supplier_vat,
+                )
+            )
+        if not uslovi:
+            return []
+        return list(
+            session.scalars(
+                select(Document.id)
+                .join(DocumentLine, DocumentLine.document_id == Document.id)
+                .join(NacrtKalkulacije, NacrtKalkulacije.document_id == Document.id)
+                .where(
+                    Document.id != document_id,
+                    Document.archived == False,  # noqa: E712
+                    NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+                    or_(*uslovi),
+                )
+                .distinct()
+            )
+        )

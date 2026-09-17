@@ -1027,3 +1027,24 @@ Dodat je `@media (max-width: 720px)`: tabele postaju kartice (svaka ćelija dobi
 naslov iz `data-naslov`), dugmad i polja imaju najmanje 42 px visine, `dl.kv` prelazi
 u jednu kolonu. Polje za sliku koristi `capture="environment"`, pa telefon otvara
 kameru umesto galerije.
+
+### Isti artikal stiže na više objekata — 17.09.2026
+
+Pitanje (Bane): ako poslovođa 1 slika artikal, kako poslovođa N zna da ne mora i on?
+I šta se dešava sa njegovom fakturom kad Dušan otvori šifru?
+
+Odgovor je u tome čemu slika i šifra **pripadaju**: artiklu, ne fakturi.
+
+**Slika.** Uz sliku se prepisuje barkod, šifra dobavljača i PIB sa stavke. Na strani
+dokumenta svaka stavka bez naše šifre nosi oznaku „čeka šifru", a ako je artikal već
+neko slikao — makar sa druge fakture i iz drugog objekta — piše **ko je i kada slikao,
+sa linkom na sliku**. Traži se prvo po barkodu (isti je svuda), pa po šifri dobavljača
+uz njegov PIB.
+
+**Šifra.** Kad Dušan poveže šifru, veza ide u `item_mapping`, a odmah zatim se
+**preračunavaju nacrti svih ostalih faktura** koje čekaju isti artikal (po barkodu ili
+po šifri dobavljača + PIB). Poslovođa u drugom objektu time dobija spremnu kalkulaciju
+bez ijednog poteza — ranije bi mu stajalo „čeka šifru" dok neko ručno ne preračuna.
+
+Dva testa: da otvorena šifra rešava i tuđu fakturu, i da se slika jednog objekta vidi
+na fakturi drugog.

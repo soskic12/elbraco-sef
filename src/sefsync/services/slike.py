@@ -71,9 +71,15 @@ def sacuvaj(
         putanja = folder / ime
         putanja.write_bytes(sadrzaj)
 
+        linija = next((x for x in doc.lines if x.line_no == line_no), None) if line_no else None
         red = Slika(
             document_id=document_id,
             line_no=line_no,
+            # prepisuje se sa stavke, da se slika kasnije nadje po artiklu
+            ean=(linija.standard_item_id or None) if linija else None,
+            sifra_dobavljaca=(linija.sellers_item_id or None) if linija else None,
+            supplier_vat=doc.supplier_vat,
+            naziv_artikla=((linija.name or "")[:300] or None) if linija else None,
             putanja=str(putanja),
             naziv_fajla=_bezbedno_ime(naziv_fajla),
             napomena=(napomena or "").strip()[:300] or None,
@@ -93,6 +99,33 @@ def sacuvaj(
         session.flush()
         session.expunge(red)
         return red
+
+
+def za_artikal(session, *, ean: str | None, sifra_dobavljaca: str | None,
+               supplier_vat: str | None) -> list[Slika]:
+    """Sve slike tog artikla, sa bilo koje fakture i bilo kog objekta.
+
+    Prvo po barkodu - on je isti kod svih dobavljaca i svih objekata. Kad ga
+    nema, po dobavljacevoj sifri, koja vazi samo uz njegov PIB.
+    """
+    from sqlalchemy import select
+
+    if ean:
+        red = list(session.scalars(select(Slika).where(Slika.ean == ean).order_by(Slika.id)))
+        if red:
+            return red
+    if sifra_dobavljaca and supplier_vat:
+        return list(
+            session.scalars(
+                select(Slika)
+                .where(
+                    Slika.sifra_dobavljaca == sifra_dobavljaca,
+                    Slika.supplier_vat == supplier_vat,
+                )
+                .order_by(Slika.id)
+            )
+        )
+    return []
 
 
 def obrisi(slika_id: int, korisnik: str) -> bool:

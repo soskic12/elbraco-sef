@@ -621,6 +621,13 @@ class Slika(Base):
     line_no: Mapped[int | None] = mapped_column(Integer, default=None)
     putanja: Mapped[str] = mapped_column(String(400))
     naziv_fajla: Mapped[str | None] = mapped_column(String(260), default=None)
+    # Slika je o ARTIKLU, a ne o fakturi: isti artikal stize na vise objekata, pa
+    # kad ga jedan poslovodja slika, ostali to moraju da vide i da ne slikaju
+    # ponovo. Zato se prepisuje ono po cemu se artikal prepoznaje.
+    ean: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
+    sifra_dobavljaca: Mapped[str | None] = mapped_column(String(100), default=None)
+    supplier_vat: Mapped[str | None] = mapped_column(String(20), default=None)
+    naziv_artikla: Mapped[str | None] = mapped_column(String(300), default=None)
     napomena: Mapped[str | None] = mapped_column(String(300), default=None)
     poslao: Mapped[str] = mapped_column(String(100))
     poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

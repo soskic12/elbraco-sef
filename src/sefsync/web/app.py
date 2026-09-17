@@ -469,6 +469,23 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 select(Slika).where(Slika.document_id == doc_id).order_by(Slika.id)
             )
         )
+        # Za svaku stavku: da li je neko vec slikao taj artikal, makar sa druge
+        # fakture i iz drugog objekta. Bez toga svaki poslovodja slika isti
+        # artikal iznova.
+        from ..services.slike import za_artikal
+
+        slikano = {}
+        for linija in doc.lines:
+            if linija.erp_item_code:
+                continue
+            nadjene = za_artikal(
+                session,
+                ean=linija.standard_item_id,
+                sifra_dobavljaca=linija.sellers_item_id,
+                supplier_vat=doc.supplier_vat,
+            )
+            if nadjene:
+                slikano[linija.line_no] = nadjene
         return templates.TemplateResponse(
             request,
             "document.html",
@@ -476,6 +493,7 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "doc": doc,
                 "lines": doc.lines,
                 "slike": slike,
+                "slikano": slikano,
                 "units": units,
                 "notifications": notifications,
                 "audit": audit,

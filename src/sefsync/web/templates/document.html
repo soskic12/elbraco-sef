@@ -220,16 +220,29 @@
   {% if lines %}
   <table>
     <thead><tr>
-      <th>#</th><th>Naziv</th><th>Šifra dob.</th><th>Barkod</th>
+      <th>#</th><th>Naziv</th><th>Naša šifra</th><th>Šifra dob.</th><th>Barkod</th>
       <th class="num">Količina</th><th>JM</th><th class="num">Cena</th>
       <th class="num">Rabat</th><th class="num">Osnovica</th><th class="num">PDV %</th>
     </tr></thead>
     <tbody>
       {% for l in lines %}
       <tr>
-        <td>{{ l.line_no }}</td>
-        <td>{{ l.name or '-' }}</td>
-        <td class="small">{{ l.sellers_item_id or l.line_ref or '-' }}</td>
+        <td data-naslov="#">{{ l.line_no }}</td>
+        <td data-naslov="Naziv">{{ l.name or '-' }}</td>
+        <td class="small" data-naslov="Naša šifra">
+          {% if l.erp_item_code %}
+            <span class="tag ok">{{ l.erp_item_code }}</span>
+          {% else %}
+            <span class="tag warn">čeka šifru</span>
+            {% set sl = slikano.get(l.line_no) %}
+            {% if sl %}
+              <div class="small muted">slikao {{ sl[0].poslao }},
+                {{ sl[0].poslato_u.strftime('%d.%m. %H:%M') }} — ne treba ponovo
+                <a href="/slika/{{ sl[0].id }}" target="_blank">vidi</a></div>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="small" data-naslov="Šifra dob.">{{ l.sellers_item_id or l.line_ref or '-' }}</td>
         <td class="small">{{ l.standard_item_id or '-' }}</td>
         <td class="num">{{ '%g' % l.quantity if l.quantity is not none else '-' }}</td>
         <td>{{ l.unit_code or '' }}</td>
