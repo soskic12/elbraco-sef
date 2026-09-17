@@ -163,9 +163,13 @@ def load_person(login: str, settings: Settings | None = None) -> User:
             "pa se ne zna čije dokumente bi video."
         )
     if operateri:
+        # Prijava se ispisuje namerno: spisak operatera se pise rukom, pa je
+        # neslaganje sa stvarnim nalogom najcesci uzrok. Bez nje covek javi ime,
+        # a u spisku stoji nesto trece ("SelakDusan" naspram "DusanSelak").
         raise AuthError(
-            "Nalog radi, ali nema pristup ovoj aplikaciji. Za rad u panelu "
-            "potrebno je da te upišu u spisak operatera."
+            f"Nalog „{login.strip()}“ radi, ali nema pristup ovoj aplikaciji. "
+            f"Za rad u panelu treba da te upišu u spisak operatera — pod tačno "
+            f"tim imenom."
         )
     return User(login.strip(), row["ime"], Role.OPERATER, None, funkcija)
 

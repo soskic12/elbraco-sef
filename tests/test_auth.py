@@ -99,3 +99,44 @@ def test_lozinka_ne_ostaje_u_osnovnoj_vezi():
 
     assert veza.startswith("mssql+pyodbc://nina:taj%40na@srv:1433/ELBS_2026")
     assert "sluzbeni" not in veza and "stara" not in veza
+
+
+def test_poruka_kaze_pod_kojom_prijavom_je_pokusano(monkeypatch):
+    """Spisak operatera se pise rukom, pa neslaganje imena mora da se vidi iz poruke.
+
+    17.09. je Dusan ostao bez pristupa jer je u .env upisano "DusanSelak", a
+    njegov nalog je "SelakDusan" - poruka to nije pokazivala.
+    """
+    import sefsync.web.auth as auth
+
+    class LazniRed(dict):
+        pass
+
+    class LazniConn:
+        def execute(self, *a, **k):
+            return self
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"ime": "Selak Dušan", "funkcija": "PODRSKA", "objekat": "", "aktivan": True}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class LazniEngine:
+        def connect(self):
+            return LazniConn()
+
+    monkeypatch.setattr(auth, "get_erp_engine", lambda: LazniEngine())
+    podesavanja = get_settings()
+    monkeypatch.setattr(podesavanja, "web_operators", "NinaR,DusanSelak")
+
+    with pytest.raises(auth.AuthError) as greska:
+        auth.load_person("SelakDusan", settings=podesavanja)
+
+    assert "SelakDusan" in str(greska.value)
