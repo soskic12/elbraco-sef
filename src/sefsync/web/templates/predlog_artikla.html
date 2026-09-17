@@ -28,8 +28,10 @@
       {{ '%.2f'|format(predlog.nabavna_cena) if predlog.nabavna_cena is not none else '—' }}</dd>
     <dt>Šifra</dt>
     <dd style="font-weight:400">
-      {% if predlog.sifra %}{{ predlog.sifra }}
-      {% else %}<span class="muted">određuje je čovek — app je ne dodeljuje</span>{% endif %}</dd>
+      {% if predlog.sifra %}{{ predlog.sifra }} <span class="muted small">(postojeća, po barkodu)</span>
+      {% elif predlog.predlozena_sifra %}{{ predlog.predlozena_sifra }}
+        <span class="muted small">— prva slobodna; proverena je zauzetost u sve tri tabele</span>
+      {% else %}<span class="muted">nije određena</span>{% endif %}</dd>
   </dl>
 </div>
 

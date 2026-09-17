@@ -906,3 +906,31 @@ predlaže povezivanje umesto otvaranja nove.
 
 `erp/artikal.py` ne upisuje ništa — ispiše `INSERT` naredbe da se vidi šta bi se
 desilo. Nalog namerno nema pravo pisanja po šifarniku.
+
+### Rupe u šifarniku — odakle nova šifra (17.09.2026)
+
+Šifre nisu nizale redom pa `MAX+1` ne radi, ali slobodnog mesta ima napretek.
+Zauzetost je merena kao **unija sve tri tabele** (`ARTIKLI`, `ARTPROD`, `DARTIKLI`) —
+šifra ume da postoji u `DARTIKLI` a da je u matičnom magacinu više nema, i takva se
+ne sme dodeliti drugom artiklu.
+
+| | |
+|---|---:|
+| zauzetih brojčanih šifara | 43.483 |
+| rupa ukupno | 872 |
+| slobodnih mesta ispod 100.000 | **56.890** |
+| rupa od bar 100 mesta | 46 (52.566 mesta) |
+
+Najveće rupe ispod 100.000: `40411–45378` (4.968), `45380–50000` (4.621),
+`50019–54284` (4.266), `30299–34301` (4.003).
+
+**Pravilo koje je ugrađeno:** prva slobodna šifra iz **prve rupe od bar 100 mesta**,
+uz obaveznu proveru baš te šifre pred dodelu (spisak je snimljen na početku, a
+šifru u međuvremenu može otvoriti neko drugi). Prag od 100 postoji da se nove šifre
+ne razbacuju po usamljenim rupama među starim artiklima — ima ih preko 800 veličine
+jedan. Po tom pravilu prva predložena šifra je danas **9015**.
+
+Prag je jedan parametar (`najmanja_rupa`), pa se lako pomeri ako se odluči da nove
+šifre idu u veliki blok umesto u prvu rupu.
+
+`sefsync sifre-slobodne` ispisuje mapu rupa i šifru koja bi se predložila.

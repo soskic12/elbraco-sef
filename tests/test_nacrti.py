@@ -158,9 +158,14 @@ def test_prazan_unos_sifre_ne_prolazi(db, podaci, monkeypatch):
 
 
 class LazniErp:
-    """ERP koji vrati spisak magacina i prodajnih mesta, bez prave baze."""
+    """Mali sifarnik umesto prave ERP baze.
 
-    def __init__(self, barkod_postoji: str | None = None):
+    `zauzete` su brojcane sifre koje vec postoje - iz njih se racunaju rupe, pa
+    se vidi i da li predlog ume da nadje prvu slobodnu.
+    """
+
+    def __init__(self, zauzete=(1, 2, 3, 500), barkod_postoji: str | None = None):
+        self.zauzete = {str(x) for x in zauzete}
         self.barkod_postoji = barkod_postoji
 
     def connect(self):
@@ -174,6 +179,11 @@ class LazniErp:
 
     def execute(self, upit, params=None):
         tekst = str(upit)
+        if "TOP 1 1" in tekst:                      # provera zauzetosti jedne sifre
+            sifra = (params or {}).get("s", "")
+            return _Rezultat([_Red(x=1)] if sifra in self.zauzete else [])
+        if "DISTINCT TRY_CAST" in tekst:            # spisak zauzetih
+            return [_Red(v=int(x)) for x in self.zauzete]
         if "BARCODE" in tekst:
             return _Rezultat(
                 [_Red(a="55555", n="Isti artikal")] if self.barkod_postoji else []
@@ -219,22 +229,42 @@ def test_poznat_barkod_ne_otvara_novu_sifru(db, podaci):
     assert any("već ima šifru" in n for n in predlog.napomene)
 
 
-def test_bez_sifre_nema_sql(db, podaci):
-    """App ne dodeljuje sifru sama - dok je nema, nema sta da se upise."""
-    import pytest as _pytest
+def test_predlaze_prvu_slobodnu_iz_dovoljno_velike_rupe(db, podaci):
+    """Sifre 1,2,3 i 500 su zauzete - prva slobodna u bloku je 4."""
+    from sefsync.erp.artikal import predlozi
 
-    from sefsync.erp.artikal import kao_sql, predlozi
+    predlog = predlozi(podaci, 1, engine=LazniErp(zauzete=(1, 2, 3, 500)))
 
-    predlog = predlozi(podaci, 1, engine=LazniErp())
-    with _pytest.raises(ValueError):
-        kao_sql(predlog)
+    assert predlog.predlozena_sifra == "4"
+    assert predlog.sifra is None
+
+
+def test_usamljena_rupa_se_preskace(db, podaci):
+    """Rupa od jednog mesta medju starim artiklima se ne koristi."""
+    from sefsync.erp.artikal import predlozi
+
+    # slobodno je samo 2 (rupa velicine 1), pa tek posle 10 dolazi veliki blok
+    predlog = predlozi(podaci, 1, engine=LazniErp(zauzete=(1, 3, 10, 5000)))
+
+    assert predlog.predlozena_sifra == "11"
+
+
+def test_zauzeta_sifra_se_ne_predlaze(db, podaci):
+    """Spisak je snimljen ranije, pa se pred dodelu pita jos jednom."""
+    from sefsync.erp.artikal import slobodna_sifra
+
+    erp = LazniErp(zauzete=(1, 3, 10, 5000))
+    erp.zauzete.add("11")          # neko ju je otvorio u medjuvremenu
+
+    with erp.connect() as conn:
+        assert slobodna_sifra(conn) == "12"
 
 
 def test_sql_nosi_izmerene_stalne_vrednosti(db, podaci):
     from sefsync.erp.artikal import kao_sql, predlozi
 
     predlog = predlozi(podaci, 1, engine=LazniErp())
-    predlog.sifra = "86100"
+    predlog.predlozena_sifra = "86100"
     sql = kao_sql(predlog)
 
     assert sql.count("INSERT INTO dbo.ARTIKLI") == 2

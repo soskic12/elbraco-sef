@@ -644,6 +644,29 @@ def cmd_mapiranje(
     typer.echo(f"Upisano: {nalaz.upisano}, već postojalo: {nalaz.vec_postojalo}")
 
 
+@app.command("sifre-slobodne")
+def cmd_slobodne_sifre(
+    koliko: int = typer.Option(12, help="Koliko rupa da ispiše."),
+    najmanja: int = typer.Option(100, help="Ne prikazuj rupe manje od toliko mesta."),
+) -> None:
+    """Gde u šifarniku ima slobodnih šifara — po opsezima."""
+    _boot()
+    from .erp.artikal import GORNJA_GRANICA, rupe, slobodna_sifra
+    from .erp.connection import get_erp_engine
+
+    with get_erp_engine().connect() as conn:
+        nadjene = rupe(conn, najmanja=najmanja)
+        slobodno = sum(do - od + 1 for od, do in nadjene)
+        typer.echo(
+            f"Rupa od bar {najmanja} mesta: {len(nadjene)}, "
+            f"ukupno {slobodno} slobodnih šifara ispod {GORNJA_GRANICA}."
+        )
+        for od, do in nadjene[:koliko]:
+            typer.echo(f"  {od:>7} - {do:<7} ({do - od + 1} slobodnih)")
+        typer.echo("")
+        typer.echo(f"Prva slobodna koja bi se predložila: {slobodna_sifra(conn) or '—'}")
+
+
 @app.command("nacrti")
 def cmd_nacrti(
     osvezi: bool = typer.Option(

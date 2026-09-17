@@ -37,6 +37,11 @@ log = logging.getLogger(__name__)
 
 MATICNI_MAGACIN = "099"
 
+# Sifre robe zive ispod 100.000; iznad toga su posebne (do 9.999.999).
+GORNJA_GRANICA = 100_000
+# Nove sifre idu u blok, ne u usamljene rupe medju starim artiklima.
+MIN_RUPA = 100
+
 # UN/ECE Rec 20 (sa fakture) -> JEDMERE (u ERP-u). Mereno: 42.843 od 43.491
 # artikla je "kom", pa je to i podrazumevano kad se jedinica ne prepozna.
 JEDINICE = {
@@ -67,7 +72,8 @@ class PredlogArtikla:
 
     document_id: int
     line_no: int
-    sifra: str | None = None          # coveku ostaje da je odredi
+    sifra: str | None = None          # popunjeno samo kad barkod vec ima sifru
+    predlozena_sifra: str | None = None   # prva slobodna, ako se otvara nova
     naziv: str = ""
     barkod: str = ""
     jedmere: str = "kom"
@@ -82,6 +88,67 @@ class PredlogArtikla:
     def broj_redova(self) -> int:
         """Koliko redova bi nastalo: ARTIKLI + ARTPROD + jedan DARTIKLI."""
         return len(self.magacini) + len(self.prodajna_mesta) + 1
+
+
+def _zauzete(conn: Connection) -> set[int]:
+    """Sve brojcane sifre koje postoje u bilo kojoj od tri tabele.
+
+    Namerno unija, ne samo ARTIKLI/099: sifra ume da postoji u DARTIKLI a da u
+    maticnom magacinu vise nije, i takvu ne smemo dodeliti drugom artiklu.
+    """
+    zauzete: set[int] = set()
+    for tabela in ("ARTIKLI", "ARTPROD", "DARTIKLI"):
+        zauzete |= {
+            r.v
+            for r in conn.execute(
+                text(f"SELECT DISTINCT TRY_CAST(RTRIM(ARTIKAL) AS bigint) v FROM dbo.{tabela}")
+            )
+            if r.v is not None
+        }
+    return zauzete
+
+
+def rupe(conn: Connection, *, do: int = GORNJA_GRANICA, najmanja: int = 1) -> list[tuple[int, int]]:
+    """Opsezi slobodnih sifara, redom. Vraca (od, do) ukljucivo.
+
+    Mereno 17.09.2026: ispod 100.000 ima 43.110 zauzetih i **56.890 slobodnih**
+    mesta u 829 rupa. Najvece su 40411-45378 (4.968) i 45380-50000 (4.621).
+    """
+    zauzete = sorted(x for x in _zauzete(conn) if 0 < x < do)
+    nadjene = []
+    for a, b in zip(zauzete, zauzete[1:]):
+        if b - a - 1 >= najmanja:
+            nadjene.append((a + 1, b - 1))
+    return nadjene
+
+
+def slobodna_sifra(conn: Connection, *, najmanja_rupa: int = MIN_RUPA) -> str | None:
+    """Prva slobodna sifra iz prve dovoljno velike rupe.
+
+    `najmanja_rupa` postoji da se nove sifre ne razbacuju po usamljenim rupama
+    medju starim artiklima (ima ih 800+ velicine jedan), nego da idu redom u
+    jednom bloku - tako se i po samoj sifri vidi da su iz istog perioda.
+
+    Zauzetost se proverava jos jednom, upitom za bas tu sifru: spisak je snimljen
+    na pocetku, a sifru u medjuvremenu moze otvoriti neko drugi.
+    """
+    for od, do_ in rupe(conn, najmanja=najmanja_rupa):
+        for kandidat in range(od, do_ + 1):
+            if not zauzeta(conn, str(kandidat)):
+                return str(kandidat)
+    return None
+
+
+def zauzeta(conn: Connection, sifra: str) -> bool:
+    """Postoji li ta sifra igde u sifarniku."""
+    for tabela in ("ARTIKLI", "ARTPROD", "DARTIKLI"):
+        red = conn.execute(
+            text(f"SELECT TOP 1 1 FROM dbo.{tabela} WHERE RTRIM(ARTIKAL) = :s"),
+            {"s": sifra.strip()},
+        ).first()
+        if red is not None:
+            return True
+    return False
 
 
 def _mesta(conn: Connection, prag: float = 0.9) -> tuple[list[str], list[str]]:
@@ -168,17 +235,25 @@ def predlozi(
                     f"ne otvarati novu, nego povezati."
                 )
 
+        if predlog.sifra is None:
+            predlog.predlozena_sifra = slobodna_sifra(conn)
+            if predlog.predlozena_sifra is None:
+                predlog.napomene.append(
+                    "Nema slobodnog bloka šifara ispod 100.000 — šifru odrediti ručno."
+                )
+
         predlog.magacini, predlog.prodajna_mesta = _mesta(conn)
         return predlog
 
 
 def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
     """Redovi koje bi trebalo upisati, po tabelama. Bez sifre se ne moze."""
-    if not predlog.sifra:
+    sifra = predlog.sifra or predlog.predlozena_sifra
+    if not sifra:
         raise ValueError("Šifra artikla nije određena.")
 
     osnova = {
-        "ARTIKAL": predlog.sifra,
+        "ARTIKAL": sifra,
         "NAZIV": predlog.naziv,
         "BARCODE": predlog.barkod,
         "JEDMERE": predlog.jedmere,
@@ -190,7 +265,7 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
         {
             "SIFRAPRO": m,
             "SIFRAMAG": MATICNI_MAGACIN,
-            "ARTIKAL": predlog.sifra,
+            "ARTIKAL": sifra,
             "NAZIV": predlog.naziv,
             "BARCODE": predlog.barkod,
             "JEDMERE": predlog.jedmere,
@@ -204,7 +279,7 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
     dartikli = [
         {
             "SIFRAMAG": MATICNI_MAGACIN,
-            "ARTIKAL": predlog.sifra,
+            "ARTIKAL": sifra,
             "NAZIV": predlog.naziv,
             "BARCODE": predlog.barkod,
             "PROIZVODJAC": ".",
