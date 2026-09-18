@@ -1189,3 +1189,26 @@ odobrenju govori **iz kog objekta je povraćaj**, a ne kome dokument pripada.
 
 Poslednja je i ugrađena: **greške prepolovljene, bez ijednog dodatnog ljudskog
 poteza**. Prevod radi samo za `CreditNote`; faktura i dalje ide objektu.
+
+---
+
+## Knjižna zaduženja i avansi — izmereno 18.09.2026
+
+Otvoreno pitanje iz odeljka 5 („16 `DebitNote` i 39 avansa: imaju li svoju kalkulaciju
+ili idu računovodstvu mimo ovoga?") — sada ima odgovor iz podataka.
+
+**Knjižno zaduženje (`DebitNote`, šifra 383)** je obrnuto od odobrenja: dobavljač
+naknadno **poveća** dug. Svih 16 u istoriji su **prefakturisani troškovi** — zakup
+(VLAMA), struja (EPS), voda, taksa za medijski servis. **15 od 16 je u ERP-u na
+magacinu 088**, dakle ulazni račun bez stavki; jedan nema kalkulaciju.
+
+Razvrstavanje ih već rešava: 15 sa poznatim odgovorom, **12 tačno, nula grešaka**,
+3 neodlučena. Ništa se nije menjalo.
+
+**Avansni račun (`Prepayment`, šifra 386) ne ide kroz kalkulaciju uopšte** — od 39
+u istoriji **nijedan** nema kalkulaciju u ERP-u. A generator bi im napravio nacrt i
+rekao „spremna", pa bi app kasnije upisala dokument koji u knjigama ne postoji.
+
+Ugrađeno: avans se odbija **pre nego što se ERP uopšte dodirne**, a nacrt dobija
+stanje `NE_TREBA` — ne stoji na spisku kao da nešto čeka. Dva testa, od kojih jedan
+pada ako se za avans uopšte otvori veza ka ERP-u.

@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
-from ..models import Document, DocumentLine, ItemMapping, UnitKind
+from ..models import Document, DocumentLine, DocumentType, ItemMapping, UnitKind
 from .connection import erp_engine_za_upis, get_erp_engine
 
 log = logging.getLogger(__name__)
@@ -240,6 +240,17 @@ def pripremi(
     datum: dt.date | None = None,
     engine: Engine | None = None,
 ) -> Nacrt:
+    # Avans se odbija pre nego sto se ERP uopste dodirne. Mereno 18.09.: nijedan
+    # od 39 avansa u istoriji nema kalkulaciju - da je app napravi, nastao bi
+    # dokument koji u knjigama ne postoji.
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is not None and doc.document_type is DocumentType.PREPAYMENT:
+            return Nacrt(
+                document_id, "", "", "", {},
+                problemi=["Avansni račun ne ide kroz kalkulaciju."],
+            )
+
     eng = engine or get_erp_engine()
     danas = datum or dt.date.today()
     dan = clarion_dan(danas)

@@ -563,6 +563,9 @@ class StanjeNacrta(str, enum.Enum):
     CEKA_SIFRU = "ceka_sifru"    # fali nasa sifra za jednu ili vise stavki
     PROBLEM = "problem"          # nesto drugo (dobavljac van sifarnika, sifra bez artikla)
     UPISAN = "upisan"            # vec je u ERP-u
+    # Avansni racun ne prolazi kroz kalkulaciju - mereno 18.09.: nijedan od 39
+    # avansa u istoriji nema kalkulaciju u ERP-u, idu pravo racunovodstvu.
+    NE_TREBA = "ne_treba"
 
 
 class NacrtKalkulacije(Base):

@@ -23,6 +23,7 @@ from ..models import (
     AuditLog,
     Document,
     DocumentLine,
+    DocumentType,
     ItemMapping,  # noqa: F401 - koristi se u razlozi_cekanja
     NacrtKalkulacije,
     ProcessState,
@@ -138,6 +139,13 @@ def _stanje(nacrt) -> StanjeNacrta:
 
 def osvezi(document_id: int, *, korisnik: str = "app", engine=None) -> NacrtKalkulacije | None:
     """Ponovo sklopi nacrt za jedan dokument i upise ishod. Ne dira ERP upisom."""
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        avans = doc is not None and doc.document_type is DocumentType.PREPAYMENT
+    if avans:
+        # Ne troši se ni jedan upit ka ERP-u: avans nema sta da trazi u kalkulaciji.
+        return _upisi_stanje(document_id, StanjeNacrta.NE_TREBA)
+
     nacrt = pripremi(document_id, korisnik=korisnik, engine=engine)
 
     with session_scope() as session:
@@ -154,6 +162,21 @@ def osvezi(document_id: int, *, korisnik: str = "app", engine=None) -> NacrtKalk
         red.iznos = nacrt.zaglavlje.get("IZNOS_ZA_NAP")
         red.problemi = list(nacrt.problemi) or None
         red.nemapirane = list(nacrt.nemapirane) or None
+        red.racunato_u = utcnow()
+        session.flush()
+        session.expunge(red)
+        return red
+
+
+def _upisi_stanje(document_id: int, stanje: StanjeNacrta) -> NacrtKalkulacije:
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None:
+            red = NacrtKalkulacije(document_id=document_id)
+            session.add(red)
+        red.stanje = stanje
+        red.problemi = None
+        red.nemapirane = None
         red.racunato_u = utcnow()
         session.flush()
         session.expunge(red)

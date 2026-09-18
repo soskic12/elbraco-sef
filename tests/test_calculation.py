@@ -138,3 +138,62 @@ def test_nacrt_podrazumevano_nije_zaknjizen():
     # vrednost se ne sme zakucavati brojem na mestu gradjenja zaglavlja
     assert '"PROKNJIZENO": PROKNJIZENO_NIJE' in kod
     assert '"PROKNJIZENO": 1' not in kod
+
+
+def test_avansni_racun_ne_ide_kroz_kalkulaciju(db):
+    """Mereno: nijedan od 39 avansa u istoriji nema kalkulaciju u ERP-u.
+
+    Da je app napravi, nastao bi dokument koji u knjigama ne postoji.
+    """
+    from sefsync.erp.kalkulacija import pripremi
+    from sefsync.models import BusinessUnit, Document, DocumentType, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777001, document_number="AV-1/26", supplier_name="X",
+            supplier_vat="100000000", amount=1000.0, sef_status=SefStatus.SEEN,
+            document_type=DocumentType.PREPAYMENT, business_unit_id=pj.id,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    nacrt = pripremi(doc_id, korisnik="test", engine=None)
+
+    assert nacrt.spreman is False
+    assert "Avansni" in nacrt.problemi[0]
+
+
+def test_avans_dobija_stanje_ne_treba(db, monkeypatch):
+    """Na ekranu ne sme da stoji kao da ceka nesto - ne treba mu kalkulacija."""
+    from sefsync.models import (
+        BusinessUnit, Document, DocumentType, NacrtKalkulacije, SefStatus,
+        StanjeNacrta, UnitKind,
+    )
+    from sefsync.services import nacrti
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777002, document_number="AV-2/26", supplier_name="X",
+            supplier_vat="100000000", amount=1000.0, sef_status=SefStatus.SEEN,
+            document_type=DocumentType.PREPAYMENT, business_unit_id=pj.id,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    def ne_sme_da_se_zove(*a, **k):
+        raise AssertionError("za avans se ERP ne dira")
+
+    monkeypatch.setattr(nacrti, "pripremi", ne_sme_da_se_zove)
+    red = nacrti.osvezi(doc_id)
+
+    assert red.stanje is StanjeNacrta.NE_TREBA
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, doc_id).stanje is StanjeNacrta.NE_TREBA
