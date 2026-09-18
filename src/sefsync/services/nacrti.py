@@ -86,6 +86,28 @@ def osvezi_sve(*, samo_razvrstane: bool = True, limit: int | None = None, engine
     return brojac
 
 
+def oznaci_nije_artikal(
+    document_id: int, line_no: int, *, korisnik: str, vrati: bool = False, engine=None
+) -> NacrtKalkulacije | None:
+    """Stavka koja nikad nece imati nasu sifru (odobrenje po saglasnosti, troskovi).
+
+    Ne otvara se sifra i ne ceka se - stavka prosto izlazi iz kalkulacije. `vrati`
+    ponistava oznaku, ako je neko pogresio.
+    """
+    with session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(
+                DocumentLine.document_id == document_id, DocumentLine.line_no == line_no
+            )
+        )
+        if linija is None:
+            raise ValueError(f"Stavka {line_no} ne postoji na dokumentu #{document_id}.")
+        linija.nije_artikal = not vrati
+        linija.nije_artikal_by = None if vrati else korisnik
+
+    return osvezi(document_id, korisnik=korisnik, engine=engine)
+
+
 def povezi_sifru(
     document_id: int,
     line_no: int,

@@ -296,6 +296,10 @@ def pripremi(
         trenutak = dt.datetime.now()
 
         for linija in linije:
+            if linija.nije_artikal:
+                # Covek je rekao da to nije artikal - ne trazi se sifra i ne ulazi
+                # u kalkulaciju. Vidi se na strani dokumenta, uz stavku.
+                continue
             sifra, odakle = _nasa_sifra(session, conn, doc.supplier_vat, linija)
             if sifra is None:
                 # Ne recenica nego podaci: ekran na kom se otvara sifra treba

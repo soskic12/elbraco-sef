@@ -1105,3 +1105,16 @@ Kod ostalih dobavljača je jednostavnije: odobrenje navodi artikal.
 **Odluka: ne rešava se sada.** Ti dokumenti ostaju na spisku „čeka šifru" i Dušan ih
 preskače. Ako počnu da smetaju, najmanji zahvat je dugme „ovo nije artikal", koje
 stavku skida sa spiska bez otvaranja šifre.
+
+### „Za slikanje" — kartica poslovođe, i „nije artikal" — dugme za Dušana (18.09.)
+
+**Poslovođa** je do sada morao da otvara fakturu po fakturu da bi video šta je novo.
+Sada ima svoju karticu **„Za slikanje"** sa brojačem: spisak artikala sa njegovih
+faktura kojima fali naša šifra, sa nazivom, količinom i EAN-om, i dugmetom koje otvara
+kameru odmah tu. Ako je artikal već neko slikao, umesto dugmeta stoji slika i „već
+slikano — ko".
+
+**Dušan** je dobio dugme **„nije artikal"** na tabu Šifre. Stavka tipa „Odobrenje po
+Saglasnosti broj 277102/2026" (Eurotehna) ili troškovi transporta nikad neće imati
+našu šifru; dugme je skida sa spiska i iz kalkulacije, uz zapis ko je to rekao.
+Poništava se na strani dokumenta („vrati").

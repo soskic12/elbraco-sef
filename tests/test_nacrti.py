@@ -390,3 +390,40 @@ def test_slika_jednog_objekta_vidi_se_na_fakturi_drugog(db, podaci):
     assert len(nadjene) == 1
     assert nadjene[0].poslao == "predrag"
     assert nadjene[0].naziv_artikla == "Frižider"
+
+
+def test_stavka_koja_nije_artikal_izlazi_sa_spiska(db, podaci, monkeypatch):
+    """Eurotehna na odobrenju pise "Odobrenje po Saglasnosti broj ..." - to nije artikal.
+
+    Bez ovoga takva stavka zauvek stoji na Dusanovom spisku i zatrpava ga.
+    """
+    from sefsync.models import DocumentLine, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+
+    monkeypatch.setattr(
+        nacrti, "pripremi", lambda *a, **k: LazniNacrt(nemapirane=[STAVKA_BEZ_SIFRE])
+    )
+    nacrti.osvezi(podaci)
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    nacrti.oznaci_nije_artikal(podaci, 1, korisnik="dusan")
+
+    with db.session_scope() as session:
+        linija = session.scalar(select(DocumentLine))
+        assert linija.nije_artikal is True
+        assert linija.nije_artikal_by == "dusan"
+        assert session.get(NacrtKalkulacije, podaci).stanje is StanjeNacrta.SPREMAN
+
+
+def test_oznaka_se_moze_vratiti(db, podaci, monkeypatch):
+    from sefsync.models import DocumentLine
+    from sefsync.services import nacrti
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    nacrti.oznaci_nije_artikal(podaci, 1, korisnik="dusan")
+    nacrti.oznaci_nije_artikal(podaci, 1, korisnik="dusan", vrati=True)
+
+    with db.session_scope() as session:
+        linija = session.scalar(select(DocumentLine))
+        assert linija.nije_artikal is False
+        assert linija.nije_artikal_by is None

@@ -12,8 +12,59 @@
   <a href="/moja-jedinica?prikaz=novo" class="{% if prikaz == 'novo' %}izabran{% endif %}">
     Za potvrdu <b>{{ ceka }}</b></a>
   <a href="/moja-jedinica?prikaz=sve" class="{% if prikaz == 'sve' %}izabran{% endif %}">Sve prosleđeno</a>
+  <a href="/moja-jedinica?prikaz=slikanje" class="{% if prikaz == 'slikanje' %}izabran{% endif %}">
+    Za slikanje <b>{{ koliko_za_slikanje }}</b></a>
 </div>
 
+{% if prikaz == 'slikanje' %}
+<div class="card small muted">
+  Ovo su artikli sa tvojih faktura koje kancelarija ne može da uknjiži jer nemaju našu šifru.
+  Slikaj <b>ambalažu</b> tako da se vide <b>barkod</b> i <b>zemlja porekla</b> — Dušan po tome
+  otvara šifru. Ako uz artikal već piše da je slikan, ne treba ponovo.
+</div>
+
+{% for red in za_slikanje %}
+  {% set s = red.stavka %}
+  <div class="card">
+    <div><b>{{ s.naziv or '—' }}</b></div>
+    <div class="small muted">
+      faktura <a href="/dokument/{{ red.nacrt.document_id }}">{{ red.nacrt.document.document_number }}</a>
+      · {{ red.nacrt.document.supplier_name }}
+      · količina {{ '%g'|format(s.kolicina) if s.kolicina is not none else '—' }}
+      {% if s.ean %} · EAN {{ s.ean }}{% endif %}
+    </div>
+
+    {% if red.slike %}
+      <div class="row" style="margin-top:8px;align-items:center">
+        {% for sl in red.slike %}
+          <a href="/slika/{{ sl.id }}" target="_blank">
+            <img src="/slika/{{ sl.id }}" alt=""
+                 style="height:70px;border-radius:6px;border:1px solid var(--line)"></a>
+        {% endfor %}
+        <span class="tag ok">već slikano — {{ red.slike[0].poslao }}</span>
+      </div>
+    {% else %}
+      <form method="post" action="/dokument/{{ red.nacrt.document_id }}/slika"
+            enctype="multipart/form-data" style="margin-top:8px">
+        <input type="hidden" name="line_no" value="{{ s.line_no }}">
+        <div class="row">
+          <div class="field" style="flex:1;min-width:200px">
+            <input type="file" name="slika" accept="image/*" capture="environment" required>
+          </div>
+          <div class="field" style="flex:1;min-width:160px">
+            <input type="text" name="napomena" placeholder="npr. boja bela, poreklo Turska">
+          </div>
+          <button type="submit">Pošalji sliku</button>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="card">Nema artikala koji čekaju sliku.</div>
+{% endfor %}
+{% endif %}
+
+{% if prikaz != 'slikanje' %}
 <table>
   <thead>
     <tr>
@@ -51,6 +102,7 @@
   {% endfor %}
   </tbody>
 </table>
+{% endif %}
 
 <p class="muted small" style="margin-top:14px">
   Potvrda znači da je roba sa dokumenta stvarno stigla u objekat. Ako nešto ne valja —

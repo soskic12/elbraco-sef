@@ -230,7 +230,16 @@
         <td data-naslov="#">{{ l.line_no }}</td>
         <td data-naslov="Naziv">{{ l.name or '-' }}</td>
         <td class="small" data-naslov="Naša šifra">
-          {% if l.erp_item_code %}
+          {% if l.nije_artikal %}
+            <span class="tag">nije artikal</span>
+            {% if user.is_operator %}
+              <form class="inline" method="post" action="/sifre/nije-artikal">
+                <input type="hidden" name="document_id" value="{{ doc.id }}">
+                <input type="hidden" name="line_no" value="{{ l.line_no }}">
+                <input type="hidden" name="vrati" value="1">
+                <button class="ghost small" type="submit">vrati</button></form>
+            {% endif %}
+          {% elif l.erp_item_code %}
             <span class="tag ok">{{ l.erp_item_code }}</span>
           {% else %}
             <span class="tag warn">čeka šifru</span>

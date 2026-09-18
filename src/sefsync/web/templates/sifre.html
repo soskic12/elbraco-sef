@@ -83,6 +83,13 @@
           <button type="submit">Poveži</button>
         </form>
         <a class="small" href="/sifre/predlog/{{ nacrt.document_id }}/{{ s.line_no }}">predlog&nbsp;artikla</a>
+        <form class="inline" method="post" action="/sifre/nije-artikal"
+              onsubmit="return confirm('Ova stavka nije artikal i neće ući u kalkulaciju?')">
+          <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
+          <input type="hidden" name="line_no" value="{{ s.line_no }}">
+          <button class="ghost small" type="submit"
+                  title="Npr. „Odobrenje po saglasnosti“ ili troškovi transporta">nije artikal</button>
+        </form>
       </td>
     </tr>
     {% endfor %}

@@ -436,6 +436,11 @@ class DocumentLine(Base):
     # Faza 2: mapiranje na ERP artikal
     erp_item_code: Mapped[str | None] = mapped_column(String(50), default=None)
     erp_mapping_source: Mapped[str | None] = mapped_column(String(30), default=None)
+    # Stavka koja nije artikal i nikad nece imati nasu sifru: "Odobrenje po
+    # Saglasnosti broj 277102/2026" (Eurotehna), troskovi transporta i slicno.
+    # Bez ovoga takva stavka zauvek stoji na spisku "ceka sifru" i zatrpava ga.
+    nije_artikal: Mapped[bool] = mapped_column(Boolean, default=False)
+    nije_artikal_by: Mapped[str | None] = mapped_column(String(100), default=None)
 
     document: Mapped[Document] = relationship(back_populates="lines")
 

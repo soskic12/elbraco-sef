@@ -598,12 +598,59 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                 403, f"Za šifru objekta {user.unit_code} nema poslovne jedinice u šifarniku."
             )
 
+        # Spisak "sta treba slikati": stavke sa njegovih faktura kojima fali nasa
+        # sifra. Poslovodja time ne mora da otvara fakturu po fakturu i gada sta
+        # je novo - vidi artikle, i odmah pored dugme za kameru.
+        za_slikanje = []
+        if prikaz == "slikanje":
+            from ..services.slike import za_artikal
+
+            nacrti = session.scalars(
+                select(NacrtKalkulacije)
+                .options(selectinload(NacrtKalkulacije.document))
+                .join(Document, Document.id == NacrtKalkulacije.document_id)
+                .where(
+                    Document.business_unit_id == unit.id,
+                    Document.forwarded_at.isnot(None),
+                    Document.archived == False,  # noqa: E712
+                    NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+                )
+                .order_by(NacrtKalkulacije.document_id.desc())
+            )
+            for nacrt in nacrti:
+                for stavka in nacrt.nemapirane or []:
+                    slike_te = za_artikal(
+                        session,
+                        ean=stavka.get("ean"),
+                        sifra_dobavljaca=stavka.get("sifra_dobavljaca"),
+                        supplier_vat=nacrt.document.supplier_vat,
+                    )
+                    za_slikanje.append(
+                        {"nacrt": nacrt, "stavka": stavka, "slike": slike_te}
+                    )
+
         query = select(Document).where(
             Document.business_unit_id == unit.id, Document.forwarded_at.isnot(None)
         )
         if prikaz == "novo":
             query = query.where(Document.received_at.is_(None))
-        rows = list(session.scalars(query.order_by(Document.forwarded_at.desc()).limit(200)))
+        rows = (
+            []
+            if prikaz == "slikanje"
+            else list(session.scalars(query.order_by(Document.forwarded_at.desc()).limit(200)))
+        )
+        # koliko stavki ceka sliku - stoji na kartici i kad nije otvorena
+        koliko_za_slikanje = session.scalar(
+            select(func.count())
+            .select_from(NacrtKalkulacije)
+            .join(Document, Document.id == NacrtKalkulacije.document_id)
+            .where(
+                Document.business_unit_id == unit.id,
+                Document.forwarded_at.isnot(None),
+                Document.archived == False,  # noqa: E712
+                NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+            )
+        )
         ceka = session.scalar(
             select(func.count())
             .select_from(Document)
@@ -616,7 +663,15 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
         return templates.TemplateResponse(
             request,
             "unit.html",
-            {"unit": unit, "documents": rows, "ceka": ceka, "prikaz": prikaz, "user": user},
+            {
+                "unit": unit,
+                "documents": rows,
+                "ceka": ceka,
+                "prikaz": prikaz,
+                "za_slikanje": za_slikanje,
+                "koliko_za_slikanje": koliko_za_slikanje,
+                "user": user,
+            },
         )
 
 
@@ -827,6 +882,27 @@ def sifre_predlog(
             "user": user,
         },
     )
+
+
+@app.post("/sifre/nije-artikal")
+def sifre_nije_artikal(
+    user: Operater,
+    document_id: int = Form(...),
+    line_no: int = Form(...),
+    vrati: str = Form(""),
+) -> RedirectResponse:
+    """Stavka koja nikad nece imati nasu sifru izlazi sa spiska (i iz kalkulacije)."""
+    from ..services.nacrti import oznaci_nije_artikal
+
+    try:
+        oznaci_nije_artikal(
+            document_id, line_no, korisnik=user.login, vrati=bool(vrati)
+        )
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back("/sifre", str(exc), False)
+    if vrati:
+        return _back(f"/dokument/{document_id}", "Stavka je vraćena na spisak.")
+    return _back("/sifre", "Stavka je označena — ne traži se šifra za nju.")
 
 
 @app.post("/sifre/osvezi")

@@ -634,3 +634,30 @@ def test_vec_prosledjen_dokument_se_ne_salje_ponovo(podaci, db):
     )
 
     assert notifier.pozvano == []
+
+
+def test_poslovodja_ima_spisak_sta_treba_slikati(client, podaci, db, monkeypatch):
+    """Da ne mora da otvara fakturu po fakturu i pogadja sta je novo."""
+    from sefsync.models import utcnow
+    from sefsync.services import nacrti
+
+    class LazniNacrt:
+        magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {"IZNOS_ZA_NAP": 1.0}
+        problemi: list = []
+        nemapirane = [{"line_no": 1, "naziv": "Frižider", "sifra_dobavljaca": "EW-9911",
+                       "ean": "860012345", "kolicina": 2.0, "cena": 5.0, "jedinica": "H87"}]
+        spreman = False
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    nacrti.osvezi(podaci["doc"])
+
+    prijavi(client, POSLOVODJA)
+    odgovor = client.get("/moja-jedinica?prikaz=slikanje")
+
+    assert odgovor.status_code == 200
+    assert "Frižider" in odgovor.text
+    assert "capture=\"environment\"" in odgovor.text     # kamera, ne galerija
