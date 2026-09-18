@@ -1084,3 +1084,24 @@ ijednog promašaja ide objektu **sam**, bez Nininog klika.
 `NOTIFY_OVERRIDE_TO` na serveru i dalje preusmerava sva obaveštenja na jednu adresu.
 Prosleđivanje zato čini dokument vidljivim poslovođi u panelu, ali mu obaveštenje ne
 stiže. To se briše kad Bane kaže — i tek tada prosleđivanje ima pun efekat.
+
+
+---
+
+## Magacin 010: kako povraćaj zaista teče (Bane, 18.09.2026)
+
+Objekat kupcu vrati novac po nekoj **saglasnosti** dobavljača. Artikal koji je kupac
+vratio prebacuje se sa stanja objekta u **magacin 010**, gde se „poništava" knjižnim
+odobrenjem dobavljača. Zato kalkulacije na 010 **imaju stavke** — za razliku od 088.
+
+**Eurotehna-021 je izuzetak:** na knjižnom odobrenju ne navodi artikal nego vezu ka
+saglasnosti („Odobrenje po Saglasnosti broj 277102/2026"). Stavka nema ni EAN ni šifru
+dobavljača, pa app traži našu šifru koju ne može da pogodi — da bi se to rešilo,
+trebalo bi znati šta stoji na kojoj saglasnosti, a taj podatak ne postoji ni na
+fakturi ni u ERP-u.
+
+Kod ostalih dobavljača je jednostavnije: odobrenje navodi artikal.
+
+**Odluka: ne rešava se sada.** Ti dokumenti ostaju na spisku „čeka šifru" i Dušan ih
+preskače. Ako počnu da smetaju, najmanji zahvat je dugme „ovo nije artikal", koje
+stavku skida sa spiska bez otvaranja šifre.
