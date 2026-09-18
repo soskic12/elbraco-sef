@@ -19,7 +19,15 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import BusinessUnit, MatchField, MatchOp, RoutingRule, RoutingSource
+from ..models import (
+    BusinessUnit,
+    DocumentType,
+    MatchField,
+    MatchOp,
+    RoutingRule,
+    RoutingSource,
+    UnitKind,
+)
 from ..textutil import normalize
 
 log = logging.getLogger(__name__)
@@ -59,12 +67,30 @@ def _matches(op: MatchOp, haystack: str, pattern: str) -> bool:
     return norm_pattern in haystack  # CONTAINS
 
 
+# Magacin u koji ide roba koju je kupac vratio.
+MAGACIN_POVRACAJ = "010"
+
+
 class RoutingEngine:
     """Ucitava pravila jednom i primenjuje ih na vise dokumenata."""
 
-    def __init__(self, rules: list[RoutingRule], single_unit_id: int | None = None):
+    def __init__(
+        self,
+        rules: list[RoutingRule],
+        single_unit_id: int | None = None,
+        *,
+        maloprodaje: set[int] | None = None,
+        povracaj_id: int | None = None,
+    ):
         self.rules = sorted(rules, key=lambda r: (r.priority, r.id or 0))
         self.single_unit_id = single_unit_id
+        # Knjizno odobrenje nikad ne zavrsi u prodavnici (mereno: od 923 odobrenja
+        # 568 je na 010, 355 na 088, nijedno drugde). Roba koju je kupac vratio
+        # prelazi sa stanja objekta u magacin 010, gde je odobrenje ponistava -
+        # pa pravilo po adresi isporuke, koje pokazuje na objekat, za odobrenje
+        # znaci "povracaj iz tog objekta", a ne "dokument pripada objektu".
+        self.maloprodaje = maloprodaje or set()
+        self.povracaj_id = povracaj_id
 
     @classmethod
     def from_db(cls, session: Session) -> RoutingEngine:
@@ -76,7 +102,30 @@ class RoutingEngine:
                 )
             )
         )
-        return cls(rules, single_unit_id=units[0] if len(units) == 1 else None)
+        maloprodaje = set(
+            session.scalars(
+                select(BusinessUnit.id).where(BusinessUnit.kind == UnitKind.RETAIL)
+            )
+        )
+        povracaj = session.scalar(
+            select(BusinessUnit.id).where(BusinessUnit.erp_code == MAGACIN_POVRACAJ)
+        )
+        return cls(
+            rules,
+            single_unit_id=units[0] if len(units) == 1 else None,
+            maloprodaje=maloprodaje,
+            povracaj_id=povracaj,
+        )
+
+    def _ispravi_odobrenje(self, unit_id: int, doc_type: str) -> tuple[int, str]:
+        """Odobrenje razvrstano u prodavnicu zapravo ide na magacin povracaja."""
+        if (
+            doc_type == DocumentType.CREDIT_NOTE.value
+            and self.povracaj_id is not None
+            and unit_id in self.maloprodaje
+        ):
+            return self.povracaj_id, " (odobrenje iz objekta → magacin povraćaja)"
+        return unit_id, ""
 
     def decide(self, fields: dict[str, str | None]) -> RoutingDecision:
         """`fields` je `UblDocument.routing_fields()` (ili isti oblik iz baze)."""
@@ -129,11 +178,13 @@ class RoutingEngine:
                     if rule.field is MatchField.SUPPLIER_VAT
                     else RoutingSource.RULE
                 )
+                jedinica, dodatak = self._ispravi_odobrenje(rule.business_unit_id, doc_type)
                 return RoutingDecision(
-                    business_unit_id=rule.business_unit_id,
+                    business_unit_id=jedinica,
                     source=source,
                     rule_id=rule.id,
-                    note=f"pravilo #{rule.id}: {rule.field.value} {rule.op.value} '{rule.pattern}'",
+                    note=f"pravilo #{rule.id}: {rule.field.value} {rule.op.value} "
+                         f"'{rule.pattern}'{dodatak}",
                 )
 
         if self.single_unit_id is not None:

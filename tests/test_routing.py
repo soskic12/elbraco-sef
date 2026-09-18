@@ -269,3 +269,48 @@ def test_vrsta_veze_ne_ulazi_u_any_text(db, odobrenje_xml):
         decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
 
         assert decision.source is RoutingSource.NONE
+
+
+def test_odobrenje_razvrstano_u_prodavnicu_ide_na_magacin_povracaja(db, odobrenje_xml):
+    """Roba koju je kupac vratio prelazi sa stanja objekta u magacin 010.
+
+    Mereno na 923 odobrenja: 568 je zavrsilo na 010, 355 na 088, nijedno u
+    prodavnici. Pravilo po adresi isporuke pokazuje na objekat iz kog je roba
+    vracena, a ne na odrediste dokumenta - zato se odluka prevodi.
+    """
+    with db.session_scope() as session:
+        mp, _ = _units(session)
+        povracaj = BusinessUnit(code="MAG010", name="Povrat robe",
+                                kind=UnitKind.WAREHOUSE, erp_code="010", routable=False)
+        session.add(povracaj)
+        session.add(
+            RoutingRule(priority=20, field=MatchField.BUYER_ADDRESS, op=MatchOp.CONTAINS,
+                        pattern="Kneza Milosa 5", business_unit_id=mp.id)
+        )
+        session.flush()
+        povracaj_id = povracaj.id
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(odobrenje_xml).routing_fields())
+
+        assert decision.business_unit_id == povracaj_id
+        assert "povraćaj" in decision.note
+
+
+def test_obicna_faktura_ostaje_u_prodavnici(db, faktura_xml):
+    """Prevod vazi samo za knjizna odobrenja - faktura ide objektu, kao i do sada."""
+    with db.session_scope() as session:
+        mp, _ = _units(session)
+        session.add(
+            BusinessUnit(code="MAG010", name="Povrat robe", kind=UnitKind.WAREHOUSE,
+                         erp_code="010", routable=False)
+        )
+        session.add(
+            RoutingRule(priority=20, field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+                        pattern="Vojvode Misica 12", business_unit_id=mp.id)
+        )
+        session.flush()
+        mp_id = mp.id
+
+        decision = RoutingEngine.from_db(session).decide(parse_ubl(faktura_xml).routing_fields())
+
+        assert decision.business_unit_id == mp_id

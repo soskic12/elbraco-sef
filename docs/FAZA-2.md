@@ -1157,3 +1157,35 @@ Sada:
 
 Zapis o gašenju ide u dnevnik (`mapiranje.kolebljivo`), sa obe šifre — da se vidi
 zašto je veza nestala.
+
+---
+
+## Podela OFFICE / 010 — gde je stvarno grešila (18.09.2026)
+
+Bane: „podela između office i 010 je još malo problem u praksi". Izmereno na 923
+odobrenja sa poznatim odgovorom iz ERP-a.
+
+**Greške nisu bile tamo gde sam mislio.** Od 64 greške, njih **36 je bilo
+„poslato u prodavnicu umesto na 010"** — pravilo po adresi isporuke (prioritet 20)
+okine pre pravila za knjižna odobrenja (40/45) i pošalje odobrenje objektu iz kog je
+roba vraćena.
+
+Presudan nalaz iz istine: od 923 odobrenja **568 je na 010, 355 na 088, nijedno u
+prodavnici**. Odobrenje u ERP-u ne završava u objektu — nikad.
+
+To je isto ono što je Bane opisao: kupac vrati robu u objekat, roba pređe sa stanja
+objekta u magacin 010, gde je knjižno odobrenje poništava. Adresa isporuke na
+odobrenju govori **iz kog objekta je povraćaj**, a ne kome dokument pripada.
+
+### Šta je mereno pre nego što je odlučeno
+
+| Varijanta | Odlučeno | Tačnost | Grešaka |
+|---|---:|---:|---:|
+| Zatečeno | 892 (96,6 %) | 92,8 % | 64 |
+| Pravila za odobrenja idu prva (prioritet 5) | 892 | 93,6 % | 57 |
+| Samo pravila za odobrenja, ostalo operateru | 775 (84,0 %) | 94,3 % | 44 |
+| Samo pravila za odobrenja, ostatak → 010 | 923 (100 %) | 86,6 % | 124 |
+| **Odluka na objekat → 010** | **892 (96,6 %)** | **96,7 %** | **29** |
+
+Poslednja je i ugrađena: **greške prepolovljene, bez ijednog dodatnog ljudskog
+poteza**. Prevod radi samo za `CreditNote`; faktura i dalje ide objektu.
