@@ -271,6 +271,8 @@ Alternativno razdvojeno:
 | `sefsync erp-check` / `erp-tables` | provera ERP baze (faza 2) |
 | `sefsync kalkulacija <id>` | nacrt ulazne kalkulacije u CSV (faza 2) |
 | `sefsync nacrti [--osvezi]` | šta je od kalkulacija spremno, a šta čeka šifru (faza 2) |
+| `sefsync nemapirane` | zašto stavke čekaju šifru — po uzroku |
+| `sefsync sifre-slobodne` | mapa slobodnih šifara u ERP šifarniku |
 | `sefsync mapiranje [--upisi]` | mapiranja artikala iz istorije (barkod + zaknjižene kalkulacije) |
 
 ---

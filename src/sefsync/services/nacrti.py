@@ -11,16 +11,19 @@ je nasa sifra, ta veza vazi i za sve buduce fakture istog dobavljaca.
 from __future__ import annotations
 
 import logging
+import re
+from collections import Counter
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 
 from ..db import session_scope
+from ..erp.connection import get_erp_engine
 from ..erp.kalkulacija import pripremi
 from ..models import (
     AuditLog,
     Document,
     DocumentLine,
-    ItemMapping,
+    ItemMapping,  # noqa: F401 - koristi se u razlozi_cekanja
     NacrtKalkulacije,
     ProcessState,
     StanjeNacrta,
@@ -28,6 +31,101 @@ from ..models import (
 )
 
 log = logging.getLogger(__name__)
+
+
+# Nazivi koji nisu artikal nego finansijska stavka - po njima se prepoznaje da
+# nasa sifra nikad nece ni postojati ("Odobrenje po Saglasnosti broj 277102/2026").
+_NIJE_ARTIKAL = re.compile(
+    r"odobrenje po saglasnosti|saglasnost broj|troskov|troškov|transport|"
+    r"naknad|provizij|rabat|bonus|popust|kamat|uslug",
+    re.IGNORECASE,
+)
+
+
+def razlozi_cekanja(engine=None) -> dict:
+    """Zasto stavke cekaju sifru, po uzroku - ne po utisku.
+
+    Ekran pokazuje sta ceka coveka, ali ne i zasto. Bez ovoga se ne zna da li je
+    posao stvarno rucni ili nesto ne radi kako treba.
+    """
+    eng = engine or get_erp_engine()
+    with eng.connect() as conn:
+        barkodovi = {
+            r.b
+            for r in conn.execute(
+                text(
+                    "SELECT DISTINCT RTRIM(ISNULL(BARCODE,'')) b FROM dbo.ARTIKLI "
+                    "WHERE RTRIM(SIFRAMAG)='099' AND RTRIM(ISNULL(BARCODE,'')) <> ''"
+                )
+            )
+        }
+
+    uzroci: Counter = Counter()
+    po_dobavljacu: Counter = Counter()
+    primeri: dict[str, list[str]] = {}
+    stavki = 0
+
+    with session_scope() as session:
+        nacrti = list(
+            session.scalars(
+                select(NacrtKalkulacije).where(
+                    NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU
+                )
+            )
+        )
+        dokumenti = {
+            d.id: d
+            for d in session.scalars(
+                select(Document).where(
+                    Document.id.in_([n.document_id for n in nacrti] or [0])
+                )
+            )
+        }
+        poznate = {
+            (m.supplier_vat, m.supplier_item_id)
+            for m in session.scalars(
+                select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
+            )
+        }
+
+        for nacrt in nacrti:
+            doc = dokumenti.get(nacrt.document_id)
+            for stavka in nacrt.nemapirane or []:
+                stavki += 1
+                naziv = stavka.get("naziv") or ""
+                ean = (stavka.get("ean") or "").strip()
+                sifra_dob = (stavka.get("sifra_dobavljaca") or "").strip()
+                pib = doc.supplier_vat if doc is not None else None
+
+                if _NIJE_ARTIKAL.search(naziv):
+                    uzrok = "nije artikal (odobrenje, troškovi, naknada)"
+                elif ean and ean in barkodovi:
+                    uzrok = "barkod POSTOJI u šifarniku — treba da se reši sam"
+                elif ean:
+                    uzrok = "ima barkod, nema ga u šifarniku — nova šifra"
+                elif sifra_dob and (pib, sifra_dob) in poznate:
+                    uzrok = "šifra dobavljača je poznata — treba da se reši sama"
+                elif sifra_dob:
+                    uzrok = "nema barkod, šifra dobavljača nije viđena — čovek"
+                else:
+                    uzrok = "nema ni barkod ni šifru dobavljača — čovek"
+
+                uzroci[uzrok] += 1
+                if doc is not None:
+                    po_dobavljacu[(doc.supplier_name or "?")[:34]] += 1
+                primeri.setdefault(uzrok, [])
+                if len(primeri[uzrok]) < 4:
+                    primeri[uzrok].append(
+                        f"{naziv[:44]} (EAN {ean or '-'}, šifra {sifra_dob or '-'})"
+                    )
+
+    return {
+        "nacrta": len(nacrti),
+        "stavki": stavki,
+        "uzroci": uzroci,
+        "primeri": primeri,
+        "po_dobavljacu": po_dobavljacu,
+    }
 
 
 def _stanje(nacrt) -> StanjeNacrta:

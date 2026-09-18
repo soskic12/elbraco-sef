@@ -708,6 +708,28 @@ def cmd_nacrti(
         typer.echo("Za ponovno računanje: sefsync nacrti --osvezi")
 
 
+@app.command("nemapirane")
+def cmd_nemapirane() -> None:
+    """Zašto stavke čekaju šifru — po uzroku, ne po utisku."""
+    _boot()
+    from .services.nacrti import razlozi_cekanja
+
+    nalaz = razlozi_cekanja()
+    typer.echo(
+        f"Nacrta koji čekaju šifru: {nalaz['nacrta']}, stavki u njima: {nalaz['stavki']}"
+    )
+    typer.echo("")
+    for uzrok, n in nalaz["uzroci"].most_common():
+        typer.echo(f"  {n:>4}  {uzrok}")
+        for primer in nalaz["primeri"].get(uzrok, []):
+            typer.echo(f"        {primer}")
+    if nalaz["po_dobavljacu"]:
+        typer.echo("")
+        typer.echo("Po dobavljaču:")
+        for ime, n in nalaz["po_dobavljacu"].most_common(10):
+            typer.echo(f"  {n:>4}  {ime}")
+
+
 @app.command("osvezi-ubl")
 def cmd_reparse(
     dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),
