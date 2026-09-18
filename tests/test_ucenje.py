@@ -243,3 +243,85 @@ def test_faktura_bez_piba_i_maticnog_ne_ide_dalje(db, svet):
         assert session.get(Document, loš_id).forwarded_at is None
         # ispravan dokument iz fiksture i dalje prolazi
         assert session.get(Document, svet["doc"]).bez_identifikacije is False
+
+
+# --------------------------------------------------------------------------- #
+# dvosmislena sifra dobavljaca
+# --------------------------------------------------------------------------- #
+
+
+def _dokument_sa_stavkom(db, broj: str, sifra_dob: str, naziv: str) -> int:
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = session.scalar(select(BusinessUnit).where(BusinessUnit.code == "MP002"))
+        if pj is None:
+            pj = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+            session.add(pj)
+            session.flush()
+        doc = Document(
+            sef_invoice_id=hash(broj) % 10**6, document_number=broj,
+            supplier_name="CSM 2017", supplier_vat="110130228",
+            amount=1000.0, sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+        )
+        doc.lines.append(
+            DocumentLine(line_no=1, name=naziv, sellers_item_id=sifra_dob,
+                         quantity=1.0, price=1000.0)
+        )
+        session.add(doc)
+        session.flush()
+        return doc.id
+
+
+def test_ista_sifra_dobavljaca_za_drugi_artikal_gasi_vezu(db, monkeypatch):
+    """CSM salje "ponye 20 litium" bez boje, a kod nas je svaka boja svoja sifra.
+
+    Da se veza prepisala, sledeca faktura bi tiho dobila boju od proslog puta.
+    """
+    from sefsync.models import ItemMapping
+    from sefsync.services import nacrti
+
+    class Nacrt:
+        magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
+        problemi, nemapirane = [], []
+        spreman = True
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())
+    prvi = _dokument_sa_stavkom(db, "CSM-1", "PONYE20", "CSM ponye 20 litium")
+    drugi = _dokument_sa_stavkom(db, "CSM-2", "PONYE20", "CSM ponye 20 litium")
+
+    nacrti.povezi_sifru(prvi, 1, "50001", korisnik="dusan")     # bela
+    nacrti.povezi_sifru(drugi, 1, "50002", korisnik="dusan")    # crvena
+
+    with db.session_scope() as session:
+        veze = list(session.scalars(select(ItemMapping)))
+        assert len(veze) == 1, "ne pravi se druga veza za istu sifru"
+        assert veze[0].active is False, "kolebljiva veza se gasi"
+        assert veze[0].source == "kolebljivo"
+        # obe stavke ipak imaju svoju sifru
+        from sefsync.models import DocumentLine
+
+        sifre = {
+            l.document_id: l.erp_item_code
+            for l in session.scalars(select(DocumentLine))
+        }
+        assert sifre[prvi] == "50001" and sifre[drugi] == "50002"
+
+
+def test_ne_pamti_ostavlja_sifarnik_netaknut(db, monkeypatch):
+    """Kad covek unapred zna da je sifra dvosmislena."""
+    from sefsync.models import ItemMapping
+    from sefsync.services import nacrti
+
+    class Nacrt:
+        magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
+        problemi, nemapirane = [], []
+        spreman = True
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())
+    doc = _dokument_sa_stavkom(db, "CSM-3", "PONYE24", "CSM ponye 24 litium")
+
+    nacrti.povezi_sifru(doc, 1, "50003", korisnik="dusan", pamti=False)
+
+    with db.session_scope() as session:
+        assert session.scalar(select(ItemMapping)) is None

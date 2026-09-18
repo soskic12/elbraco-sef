@@ -1132,3 +1132,28 @@ već išlo po artiklu — ovde nije.
 Sada se i tu traži po artiklu (barkod, pa šifra dobavljača + PIB), i slika stoji u
 svom stupcu **uz stavku**, sa imenom onoga ko ju je poslao. Test pokriva baš taj
 slučaj: slika sa jedne fakture mora da se vidi na drugoj.
+
+---
+
+## Jedna dobavljačeva šifra, više naših artikala — 18.09.2026
+
+CSM fakturiše „ponye 20 litium" **bez oznake boje**, a kod nas je svaka boja svoja
+šifra. Dušan mora da sačeka potvrdu iz objekta koja je boja stigla — i to je u redu.
+Opasno je ono što se dešavalo posle: ručni unos šifre pamtio je vezu trajno, pa bi
+**sledeća faktura tiho dobila boju od prošlog puta**.
+
+Provereno u podacima: od 2.110 postojećih mapiranja **nijedno nije dvosmisleno**, jer
+izvođenje iz istorije odbacuje kolebljiva (45 takvih je odbačeno). Rupa je bila samo
+u ručnom unosu.
+
+Sada:
+
+- ista dobavljačeva šifra vezana za **drugi** artikal → veza se **gasi**
+  (`active=False`, `source='kolebljivo'`), a ne prepisuje. Sledeći put opet odlučuje
+  čovek. Obe stavke ipak zadrže svoju šifru.
+- ista šifra za **isti** artikal → potvrda, uz brojač pogodaka
+- čekirano **„ne pamti vezu"** → šifra se upiše samo na tu stavku, šifarnik ostaje
+  netaknut (za dobavljače za koje se unapred zna da su ovakvi)
+
+Zapis o gašenju ide u dnevnik (`mapiranje.kolebljivo`), sa obe šifre — da se vidi
+zašto je veza nestala.

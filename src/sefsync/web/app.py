@@ -854,11 +854,15 @@ def sifre_povezi(
     document_id: int = Form(...),
     line_no: int = Form(...),
     erp_item_code: str = Form(...),
+    ne_pamti: str = Form(""),
 ) -> RedirectResponse:
     from ..services.nacrti import povezi_sifru
 
     try:
-        povezi_sifru(document_id, line_no, erp_item_code, korisnik=user.login)
+        povezi_sifru(
+            document_id, line_no, erp_item_code,
+            korisnik=user.login, pamti=not ne_pamti,
+        )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
         return _back("/sifre", str(exc), False)
     return _back("/sifre", f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")

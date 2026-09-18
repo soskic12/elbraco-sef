@@ -84,6 +84,9 @@
           <input type="hidden" name="line_no" value="{{ s.line_no }}">
           <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345">
           <button type="submit">Poveži</button>
+          <label class="small muted" style="display:block"
+                 title="Za dobavljače koji jednom šifrom pokrivaju više naših artikala (boje, veličine)">
+            <input type="checkbox" name="ne_pamti" value="1"> ne pamti vezu</label>
         </form>
         <a class="small" href="/sifre/predlog/{{ nacrt.document_id }}/{{ s.line_no }}">predlog&nbsp;artikla</a>
         <form class="inline" method="post" action="/sifre/nije-artikal"

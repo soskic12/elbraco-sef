@@ -17,6 +17,7 @@ from sqlalchemy import and_, or_, select
 from ..db import session_scope
 from ..erp.kalkulacija import pripremi
 from ..models import (
+    AuditLog,
     Document,
     DocumentLine,
     ItemMapping,
@@ -114,6 +115,7 @@ def povezi_sifru(
     erp_item_code: str,
     *,
     korisnik: str,
+    pamti: bool = True,
     engine=None,
 ) -> NacrtKalkulacije | None:
     """Covek je rekao koja je nasa sifra za jednu stavku.
@@ -121,6 +123,15 @@ def povezi_sifru(
     Veza se pamti u `item_mapping` (po dobavljacu i njegovoj sifri, pa i po
     barkodu kad ga ima), dakle vazi i za sve naredne fakture. Zato je ovo
     najvredniji klik u celom toku - ne resava jedan dokument nego sve buduce.
+
+    Ali pamti se samo ono sto je jednoznacno. Neki dobavljaci jednom sifrom
+    pokrivaju vise nasih artikala - CSM salje "ponye 20 litium" bez oznake boje,
+    a kod nas je svaka boja svoja sifra. Kad se ista dobavljaceva sifra jednom
+    veze za jedan artikal, a drugi put za drugi, veza se **gasi** umesto da se
+    prepise: sledeci put mora opet da odluci covek. Prepisivanje bi znacilo da
+    naredna faktura tiho dobije boju od proslog puta.
+
+    `pamti=False` je za slucaj kad covek unapred zna da je sifra dvosmislena.
     """
     sifra = (erp_item_code or "").strip()
     if not sifra:
@@ -149,7 +160,25 @@ def povezi_sifru(
                 ItemMapping.barcode == (linija.standard_item_id or None),
             )
         )
-        if postoji is None:
+        if postoji is not None and postoji.erp_item_code.strip() != sifra:
+            # Ista dobavljaceva sifra, drugi artikal - dakle ne znaci jedno.
+            postoji.active = False
+            postoji.source = "kolebljivo"
+            postoji.misses += 1
+            session.add(
+                AuditLog(
+                    actor=korisnik,
+                    action="mapiranje.kolebljivo",
+                    document_id=document_id,
+                    detail=f"{pib}/{linija.sellers_item_id or '-'}: "
+                           f"{postoji.erp_item_code} -> {sifra}; veza ugašena",
+                )
+            )
+        elif postoji is not None:
+            postoji.confirmed_at = utcnow()
+            postoji.confirmed_by = korisnik
+            postoji.hits += 1
+        elif pamti:
             session.add(
                 ItemMapping(
                     supplier_vat=pib,
@@ -162,11 +191,6 @@ def povezi_sifru(
                     confirmed_by=korisnik,
                 )
             )
-        else:
-            postoji.erp_item_code = sifra
-            postoji.confirmed_at = utcnow()
-            postoji.confirmed_by = korisnik
-            postoji.active = True
 
     osvezeni = osvezi(document_id, korisnik=korisnik, engine=engine)
 
