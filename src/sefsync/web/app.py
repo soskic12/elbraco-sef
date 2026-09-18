@@ -808,23 +808,29 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
             for stanje in StanjeNacrta
         }
         racunato = session.scalar(select(func.max(NacrtKalkulacije.racunato_u)))
-        # Slike koje su poslovodje poslale uz te dokumente - ambalaza sa barkodom
-        # je ono zbog cega se dosad gledalo u Viber grupu.
-        slike_po_dokumentu: dict[int, list] = {}
-        if nacrti:
-            for red in session.scalars(
-                select(Slika).where(
-                    Slika.document_id.in_([n.document_id for n in nacrti])
-                ).order_by(Slika.id)
-            ):
-                slike_po_dokumentu.setdefault(red.document_id, []).append(red)
+        # Slike se traze PO ARTIKLU, ne po dokumentu: isti artikal stize na vise
+        # objekata, pa je slika najcesce sa tudje fakture. Dok se gledalo po
+        # dokumentu, Dusan nije video da je artikal vec neko slikao.
+        from ..services.slike import za_artikal
+
+        slike_po_stavci: dict[tuple[int, int], list] = {}
+        for nacrt in nacrti:
+            for stavka in nacrt.nemapirane or []:
+                nadjene = za_artikal(
+                    session,
+                    ean=stavka.get("ean"),
+                    sifra_dobavljaca=stavka.get("sifra_dobavljaca"),
+                    supplier_vat=nacrt.document.supplier_vat,
+                )
+                if nadjene:
+                    slike_po_stavci[(nacrt.document_id, stavka.get("line_no"))] = nadjene
     return templates.TemplateResponse(
         request,
         "sifre.html",
         {
             "nacrti": nacrti,
             "zapeli": zapeli,
-            "slike": slike_po_dokumentu,
+            "slike": slike_po_stavci,
             "broj": broj,
             "racunato": racunato,
             "user": user,

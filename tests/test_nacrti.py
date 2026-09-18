@@ -427,3 +427,49 @@ def test_oznaka_se_moze_vratiti(db, podaci, monkeypatch):
         linija = session.scalar(select(DocumentLine))
         assert linija.nije_artikal is False
         assert linija.nije_artikal_by is None
+
+
+def test_dusan_vidi_sliku_sa_tudje_fakture(client, db, podaci, monkeypatch):
+    """Slikao poslovodja u jednom objektu, a Dusan gleda fakturu drugog objekta.
+
+    Dok su se slike trazile po dokumentu, kod njega nije pisalo nista - pa bi
+    trazio sliku koja vec postoji.
+    """
+    from sefsync.models import Document, DocumentLine, SefStatus
+    from sefsync.services import nacrti
+    from sefsync.services.slike import sacuvaj
+
+    MALI_PNG = bytes.fromhex(
+        "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+        "01f15c4890000000a49444154789c6360000002000100ffff03000006"
+        "000557bfabd40000000049454e44ae426082"
+    )
+    # slika stize sa PRVE fakture
+    sacuvaj(podaci, MALI_PNG, mime="image/png", naziv_fajla="a.png",
+            korisnik="so1", line_no=1)
+
+    # a Dusan gleda DRUGU fakturu sa istim artiklom (isti EAN)
+    with db.session_scope() as session:
+        prvi = session.get(Document, podaci)
+        drugi = Document(
+            sef_invoice_id=500555, document_number="FA-9/26",
+            supplier_name="EWE COMP DOO", supplier_vat="100042618",
+            amount=1.0, sef_status=SefStatus.SEEN, business_unit_id=prvi.business_unit_id,
+        )
+        drugi.lines.append(
+            DocumentLine(line_no=1, name="Frižider", sellers_item_id="EW-9911",
+                         standard_item_id="8606012345678", quantity=1.0, price=1.0)
+        )
+        session.add(drugi)
+        session.flush()
+        drugi_id = drugi.id
+
+    monkeypatch.setattr(
+        nacrti, "pripremi", lambda *a, **k: LazniNacrt(nemapirane=[STAVKA_BEZ_SIFRE])
+    )
+    nacrti.osvezi(drugi_id)
+
+    odgovor = client.get("/sifre")
+
+    assert "/slika/" in odgovor.text        # slika sa tudje fakture je tu
+    assert "so1" in odgovor.text            # i ko ju je poslao

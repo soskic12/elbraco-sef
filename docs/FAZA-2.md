@@ -1118,3 +1118,17 @@ slikano — ko".
 Saglasnosti broj 277102/2026" (Eurotehna) ili troškovi transporta nikad neće imati
 našu šifru; dugme je skida sa spiska i iz kalkulacije, uz zapis ko je to rekao.
 Poništava se na strani dokumenta („vrati").
+
+### Slike se traže po artiklu i na Dušanovom tabu (18.09.)
+
+Prijavljeno: poslovođa u Somboru slikao „EL.BICIKL MONTURA 250KW/36V BEŽ", a kod
+Dušana na fakturi drugog objekta sa istim artiklom nije pisalo ništa.
+
+Uzrok je bio u mom kodu: na tabu „Šifre" slike su se tražile **po dokumentu**
+(`Slika.document_id in ...`), a isti artikal stiže na više objekata, pa je slika
+najčešće sa tuđe fakture. Na strani dokumenta i u poslovođinoj kartici traženje je
+već išlo po artiklu — ovde nije.
+
+Sada se i tu traži po artiklu (barkod, pa šifra dobavljača + PIB), i slika stoji u
+svom stupcu **uz stavku**, sa imenom onoga ko ju je poslao. Test pokriva baš taj
+slučaj: slika sa jedne fakture mora da se vidi na drugoj.

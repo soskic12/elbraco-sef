@@ -48,21 +48,10 @@
     </div>
   {% endif %}
 
-  {% set njene = slike.get(nacrt.document_id, []) %}
-  {% if njene %}
-    <div class="row" style="margin:8px 0">
-      {% for sl in njene %}
-        <a href="/slika/{{ sl.id }}" target="_blank" title="{{ sl.napomena or sl.naziv_fajla }}">
-          <img src="/slika/{{ sl.id }}" alt=""
-               style="height:90px;border-radius:6px;border:1px solid var(--line)"></a>
-      {% endfor %}
-      <span class="muted small" style="align-self:center">slike sa objekta</span>
-    </div>
-  {% endif %}
-
   <table class="small" style="width:100%;margin-top:8px">
     <tr>
       <th style="width:30px">#</th><th>Naziv sa fakture</th>
+      <th style="width:110px">Slika</th>
       <th style="width:120px">Šifra dob.</th><th style="width:140px">EAN</th>
       <th style="width:90px">Količina</th><th style="width:110px">Nab. cena</th>
       <th style="width:260px">Naša šifra</th>
@@ -71,6 +60,20 @@
     <tr>
       <td>{{ s.line_no }}</td>
       <td>{{ s.naziv }}</td>
+      <td>
+        {% set njene = slike.get((nacrt.document_id, s.line_no), []) %}
+        {% if njene %}
+          {% for sl in njene[:2] %}
+            <a href="/slika/{{ sl.id }}" target="_blank"
+               title="{{ sl.napomena or '' }} ({{ sl.poslao }}, {{ sl.poslato_u.strftime('%d.%m. %H:%M') }})">
+              <img src="/slika/{{ sl.id }}" alt=""
+                   style="height:56px;border-radius:5px;border:1px solid var(--line)"></a>
+          {% endfor %}
+          <div class="small muted">{{ njene[0].poslao }}</div>
+        {% else %}
+          <span class="muted small">nema</span>
+        {% endif %}
+      </td>
       <td>{{ s.sifra_dobavljaca or '—' }}</td>
       <td>{{ s.ean or '—' }}</td>
       <td>{{ '%g'|format(s.kolicina) if s.kolicina is not none else '—' }} {{ s.jedinica }}</td>
