@@ -1053,3 +1053,34 @@ na fakturi drugog.
 njegovoj šifri i važi samo unutar tog dobavljača — isti artikal nabavljen od dva
 različita dobavljača, bez barkoda, ne prepoznaje se kao isti. Bane: „ekstremno je
 retko", pa se ne meri niti rešava dok se ne pojavi.
+
+
+---
+
+## Potvrda razvrstavanja i prosleđivanje su spojeni — 18.09.2026
+
+Ekran poslovođe MP001 bio je prazan iako mu je razvrstano 12 dokumenata. Nije
+greška: poslovođa vidi samo ono što je **prosleđeno**, a od 160 razvrstanih
+dokumenata prosleđen je bio **jedan**.
+
+Ispod toga je stajala rupa u toku rada: svih 26 dokumenata koji čekaju šifru bilo je
+neprosleđeno, a poslovođa neprosleđen dokument ne može ni da otvori — dakle ne može
+ni da slika ambalažu, po kojoj Dušan otvara šifru. Posao je stajao na oba kraja.
+
+**Odluka (Bane, 18.09.):** potvrda razvrstavanja i prosleđivanje postaju jedan potez.
+Ko kaže čija je faktura, taj ju je i poslao. Dva klika za jednu odluku imala su smisla
+dok se nije znalo koliko razvrstavanje pogađa; sada je pokrivenost 77,5 %, a tačnost
+tamo gde odluči preko 90 %.
+
+- u redu je sada jedno dugme **„Potvrdi i prosledi"**
+- ručna dodela poslovne jedinice odmah i prosleđuje („Sačuvaj i prosledi")
+- već prosleđen dokument se ne šalje ponovo sam od sebe — za to postoji „Prosledi ponovo"
+
+Sledeći korak (kad se skupi dovoljno provere): dokument koji razvrsta pravilo bez
+ijednog promašaja ide objektu **sam**, bez Nininog klika.
+
+### Mejlovi još ne idu objektima
+
+`NOTIFY_OVERRIDE_TO` na serveru i dalje preusmerava sva obaveštenja na jednu adresu.
+Prosleđivanje zato čini dokument vidljivim poslovođi u panelu, ali mu obaveštenje ne
+stiže. To se briše kad Bane kaže — i tek tada prosleđivanje ima pun efekat.

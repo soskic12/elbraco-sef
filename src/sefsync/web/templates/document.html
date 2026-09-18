@@ -101,7 +101,7 @@
         {% endfor %}
       </select></div>
     <label class="small"><input type="checkbox" name="napravi_pravilo" value="1" checked> napravi pravilo</label>
-    <button type="submit">Sačuvaj</button>
+    <button type="submit">Sačuvaj i prosledi</button>
   </form>
 </div>
 
@@ -127,7 +127,7 @@
     <form class="inline" method="post" action="/prosledi">
       <input type="hidden" name="dokumenti" value="{{ doc.id }}">
       <input type="hidden" name="povratak" value="/dokument/{{ doc.id }}">
-      <button type="submit">{% if doc.forwarded_at %}Prosledi ponovo{% else %}Prosledi poslovnoj jedinici{% endif %}</button>
+      <button type="submit">{% if doc.forwarded_at %}Prosledi ponovo{% else %}Potvrdi i prosledi poslovnoj jedinici{% endif %}</button>
     </form>
     {% if not doc.archived %}
       <form class="inline" method="post" action="/arhiviraj">

@@ -595,3 +595,42 @@ def test_prima_se_samo_slika(client, podaci, db):
 
     with db.session_scope() as session:
         assert session.scalar(select(Slika)) is None
+
+
+def test_rucna_dodela_pj_odmah_prosledjuje(podaci, db):
+    """Ko kaze cija je faktura, taj ju je i poslao - dva klika za jednu odluku nema smisla.
+
+    Dok se ne prosledi, poslovodja dokument ni ne vidi, pa ne moze ni da slika
+    ambalazu za novu sifru.
+    """
+    from sefsync.services.workflow import Workflow
+
+    notifier = LazniNotifier()
+    Workflow(notifier=notifier).assign_unit(
+        podaci["nerazvrstan"], podaci["unit"], actor="nina", remember=False
+    )
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["nerazvrstan"])
+        assert doc.forwarded_at is not None
+        assert doc.forwarded_by == "nina"
+        assert doc.routing_confirmed_by == "nina"
+    assert notifier.pozvano == [podaci["nerazvrstan"]]
+
+
+def test_vec_prosledjen_dokument_se_ne_salje_ponovo(podaci, db):
+    """Ispravka PJ na vec prosledjenom ne sme da okine jos jedan mejl sama od sebe."""
+    from sefsync.models import utcnow
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+
+    notifier = LazniNotifier()
+    Workflow(notifier=notifier).assign_unit(
+        podaci["doc"], podaci["druga"], actor="nina", remember=False
+    )
+
+    assert notifier.pozvano == []

@@ -133,11 +133,11 @@
     <span class="muted small">Označeno: <b id="broj">0</b></span>
     <button type="submit" formaction="/pregledano" class="ghost"
             title="Skida oznaku „novo“ — ono što je na portalu bio status „Nova“">Označi pregledano</button>
-    <button type="submit" formaction="/potvrdi" class="ghost"
-            title="Predlog razvrstavanja je tačan">Potvrdi razvrstavanje</button>
-    <button type="submit" formaction="/prihvati"
+    <button type="submit" formaction="/prosledi"
+            title="Potvrđuje da je poslovna jedinica tačna i šalje dokument objektu">
+      Potvrdi i prosledi</button>
+    <button type="submit" formaction="/prihvati" class="ghost"
             onclick="return potvrdi('Prihvatiti označene dokumente na SEF-u?')">Prihvati na SEF-u</button>
-    <button type="submit" formaction="/prosledi" class="ghost">Prosledi poslovnoj jedinici</button>
     <button type="submit" formaction="/arhiviraj" class="ghost"
             onclick="return potvrdi('Skloniti označene iz reda?')">Arhiviraj</button>
     <span class="spacer" style="flex:1"></span>

@@ -207,6 +207,7 @@ class Workflow:
             # jedini pouzdan znak - pravilo ume da radi tacno godinu dana pa da
             # se objekat preseli.
             prethodna = doc.business_unit_id
+            vec_prosledjen = doc.forwarded_at is not None
             if prethodna is not None and prethodna != business_unit_id:
                 doc.routing_corrected = True
                 if doc.routing_rule_id:
@@ -248,6 +249,14 @@ class Workflow:
             osvezi(doc_id)
         except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan
             log.info("Nacrt za #%s nije izracunat: %s", doc_id, str(exc)[:160])
+
+        # Ko kaze cija je faktura, taj ju je i poslao. Dva klika za jednu odluku
+        # nisu imala smisla otkad se zna koliko razvrstavanje pogadja - a dok se
+        # ne prosledi, poslovodja dokument uopste ne vidi (pa ne moze ni da slika
+        # ambalazu za novu sifru).
+        if not vec_prosledjen:
+            ishod = self.forward([doc_id], actor=actor)
+            poruka += " " + ("Prosleđeno." if ishod.done else ishod.summary())
         return ActionResult(True, poruka, 1)
 
     def confirm_routing(self, doc_ids: list[int], actor: str) -> ActionResult:
