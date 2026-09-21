@@ -18,7 +18,7 @@ from sqlalchemy import and_, or_, select, text
 
 from ..db import session_scope
 from ..erp.connection import get_erp_engine
-from ..erp.kalkulacija import pripremi
+from ..erp.kalkulacija import VecPostoji, pripremi, upisi
 from ..models import (
     AuditLog,
     Document,
@@ -229,6 +229,73 @@ def oznaci_nije_artikal(
         linija.nije_artikal_by = None if vrati else korisnik
 
     return osvezi(document_id, engine=engine)
+
+
+def upisi_u_erp(
+    document_id: int, *, korisnik: str, produkcija: bool = False, engine=None
+) -> tuple[bool, str]:
+    """Upisuje kalkulaciju u ERP. Vraca (da li je upisana, poruka za coveka).
+
+    Zove se kad poslovodja potvrdi prijem robe - ranije nema smisla, jer bi app
+    pretekla poslovodju koji kalkulaciju i dalje pravi rukom.
+
+    Ne baca izuzetak na ono sto nije greska programa (nije spremna, vec postoji,
+    ERP nedostupan) - to su stanja o kojima covek treba da procita recenicu.
+    """
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        stanje = red.stanje if red else None
+        vec_upisan = red.erp_broj if red else None
+
+    if stanje is StanjeNacrta.UPISAN:
+        return False, f"Kalkulacija je već upisana ({vec_upisan})."
+    if stanje is StanjeNacrta.NE_TREBA:
+        return False, "Ovaj dokument ne ide kroz kalkulaciju."
+
+    try:
+        nacrt = pripremi(document_id, engine=engine)
+    except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan
+        log.warning("Nacrt za #%s nije sklopljen: %s", document_id, exc)
+        return False, f"Kalkulacija nije sklopljena: {exc}"
+
+    if not nacrt.spreman:
+        osvezi(document_id, engine=engine)
+        return False, "Kalkulacija još nije spremna — pogledaj tab „Šifre“."
+
+    try:
+        opis = upisi(nacrt, produkcija=produkcija)
+    except VecPostoji as exc:
+        _zabelezi_upis(document_id, str(exc).split(": ")[-1], "ručno u ERP-u", opis=str(exc))
+        return False, str(exc)
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku, trag u log
+        log.exception("Kalkulacija za #%s nije upisana", document_id)
+        return False, f"Upis nije prošao: {exc}"
+
+    # U kolonu ide samo broj kalkulacije (staje u 20 znakova) - ceo opis, sa
+    # imenom baze, ostaje u dnevniku.
+    broj = f"{nacrt.magacin}/{nacrt.zaglavlje.get('BROJ', '')}"
+    _zabelezi_upis(document_id, broj, korisnik, opis=opis)
+    return True, f"Kalkulacija je upisana u ERP ({opis})."
+
+
+def _zabelezi_upis(document_id: int, broj: str, korisnik: str, *, opis: str = "") -> None:
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None:
+            red = NacrtKalkulacije(document_id=document_id)
+            session.add(red)
+        red.stanje = StanjeNacrta.UPISAN
+        red.erp_broj = broj[:20]
+        red.upisano_u = utcnow()
+        red.upisao = korisnik
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="kalkulacija.upisana",
+                document_id=document_id,
+                detail=opis or broj,
+            )
+        )
 
 
 def povezi_sifru(

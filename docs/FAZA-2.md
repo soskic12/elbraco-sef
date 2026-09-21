@@ -1239,3 +1239,38 @@ bez `UPDATE` i `DELETE`, pa app ne može da dira ono što je već uneto. Šifarn
 
 Druga brava ostaje u kodu: bez `ERP_ALLOW_PRODUCTION_WRITE=true` upis u produkciju se
 odbija bez obzira na prava u bazi.
+
+
+---
+
+## Upis kalkulacije u ERP — 21.09.2026
+
+Poslednji deo faze 2−. Upis se pokreće **kad poslovođa potvrdi prijem robe** — ranije
+nema smisla, jer bi app pretekla poslovođu koji kalkulaciju i dalje pravi rukom.
+
+### Tri brave, svaka za svoju vrstu greške
+
+1. **`ERP_UPIS_KALKULACIJE`** (podrazumevano `false`) — dok se ne uvežba, potvrda
+   prijema radi kao i do sada i ne dira ERP.
+2. **`ERP_ALLOW_PRODUCTION_WRITE`** (podrazumevano `false`) — upis ide u test bazu
+   `ELBSX_2026`; produkcija traži izričitu dozvolu.
+3. **Provera duplikata** — pre upisa se traži da li za taj broj računa tog dobavljača
+   već postoji kalkulacija (poređenje po normalizovanom broju, `FA-5543-03/26` ==
+   `FA55430326`, u `ULKALKUL` i `MKALKUL`). Ako postoji, app **ne pravi drugu**, nego
+   nacrt označi kao upisan sa napomenom „ručno u ERP-u". Odluka (Bane): dve
+   kalkulacije za istu fakturu gore su nego nijedna.
+
+Uz to ostaju ranije brave: nespremna kalkulacija se ne upisuje, `PROKNJIZENO` sme da
+bude samo `0`, a broj se ponovo uzima ako ga neko preotme.
+
+### Šta se beleži
+
+`nacrt_kalkulacije` dobija `stanje=UPISAN`, broj kalkulacije (`002/00450`), vreme i
+**ko je pokrenuo** upis. U ERP-u, u `RBR`, stoji `sefsync` — pa se po tome razlikuje
+šta je app napravila.
+
+**Neuspeh upisa ne poništava potvrdu prijema**: roba jeste stigla, šta god ERP rekao.
+Poslovođa dobija rečenicu šta se desilo (nije spremna, već postoji, ERP nedostupan).
+
+Pet testova, među njima i da se upis ne ponavlja i da se nespremna kalkulacija ne
+upisuje ni slučajno.

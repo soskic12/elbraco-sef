@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     erp_test_db_name: str | None = "ELBSX_2026"
     # Zastita: bez ovoga nijedan upis ne moze u produkcionu ERP bazu.
     erp_allow_production_write: bool = False
+    # Da li potvrda prijema robe uopste pokrece upis kalkulacije. Podrazumevano
+    # ne: dok se ne uvezba, kalkulacije prave poslovodje kao i do sada.
+    erp_upis_kalkulacije: bool = False
 
     # --- Izvor sifarnika poslovnih jedinica (postojeca tabela na serveru) ---
     # Ako nije zadat, koristi se erp_db_url. Upit mora da vrati kolone:

@@ -96,6 +96,10 @@ def broj_racuna_za_erp(broj: str | None) -> str:
     return zbijen[:20]
 
 
+class VecPostoji(Exception):
+    """Za tu fakturu kalkulacija vec postoji - app ne pravi drugu."""
+
+
 @dataclass
 class Nacrt:
     """Sta bi aplikacija upisala. Ne dira bazu dok se ne pozove `upisi`."""
@@ -478,6 +482,32 @@ def kao_sql(nacrt: Nacrt) -> str:
     return "\n".join(redovi)
 
 
+def postojeca_kalkulacija(conn: Connection, broj_racuna: str, dobavljac: str) -> str | None:
+    """Da li za taj racun tog dobavljaca vec postoji kalkulacija u ERP-u.
+
+    Poslovodje i dalje prave kalkulacije rukom, pa app mora da proveri pre upisa -
+    dve kalkulacije za istu fakturu su gore nego nijedna. Poredi se po
+    normalizovanom broju (`FA-5543-03/26` == `FA55430326`), jer covek crtice i
+    kose crte kuca kako mu dodje.
+    """
+    from ..services.mapiranje import kljuc_racuna
+
+    trazeni = kljuc_racuna(broj_racuna)
+    if not trazeni or not dobavljac:
+        return None
+    for tabela in ("ULKALKUL", "MKALKUL"):
+        for red in conn.execute(
+            text(
+                f"SELECT RTRIM(BROJ) br, RTRIM(MAGACIN) mag, RTRIM(ISNULL(BROJ_RN_DOB,'')) rn "
+                f"FROM dbo.{tabela} WHERE RTRIM(DOBAVLJAC) = :dob"
+            ),
+            {"dob": dobavljac.strip()},
+        ):
+            if red.rn and kljuc_racuna(red.rn) == trazeni:
+                return f"{tabela} {red.mag}/{red.br}"
+    return None
+
+
 def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
     """Upisuje nacrt. Podrazumevano u test bazu; produkcija trazi dozvolu."""
     if not nacrt.spreman:
@@ -499,6 +529,16 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
         )
 
     eng, baza = erp_engine_za_upis(produkcija)
+
+    # Poslovodje i dalje rade rucno - ako su vec uneli ovu fakturu, app staje.
+    with eng.connect() as conn:
+        postoji = postojeca_kalkulacija(
+            conn,
+            str(nacrt.zaglavlje.get("BROJ_RN_DOB") or ""),
+            str(nacrt.zaglavlje.get("DOBAVLJAC") or ""),
+        )
+    if postoji:
+        raise VecPostoji(f"Kalkulacija za taj račun već postoji u ERP-u: {postoji}")
 
     # Broj kalkulacije je brojac po magacinu (MAX+1), a ne sekvenca. ERP ga
     # dodeljuje tek na "OK" - do tada glava stoji na ekranu bez broja i bez reda

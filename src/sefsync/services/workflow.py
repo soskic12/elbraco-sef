@@ -179,7 +179,21 @@ class Workflow:
             self.notifier.notify_receipt(doc_id, confirmed_by=actor)
         except Exception:  # noqa: BLE001 - potvrda vazi i ako mejl ne prodje
             log.exception("Obaveštenje o potvrdi prijema (dokument %s) nije poslato", doc_id)
-        return ActionResult(True, "Prijem je potvrđen.", 1)
+
+        # Tek sad se zna da je roba stvarno stigla - do tada bi app pretekla
+        # poslovodju, koji kalkulaciju i dalje pravi rukom. Neuspeh upisa ne
+        # ponistava potvrdu prijema: roba jeste stigla, sta god ERP rekao.
+        poruka = "Prijem je potvrđen."
+        if self.settings.erp_upis_kalkulacije:
+            from .nacrti import upisi_u_erp
+
+            _, ishod = upisi_u_erp(
+                doc_id,
+                korisnik=actor,
+                produkcija=self.settings.erp_allow_production_write,
+            )
+            poruka += " " + ishod
+        return ActionResult(True, poruka, 1)
 
     # ------------------------------------------------------------------ #
     # razvrstavanje i arhiva

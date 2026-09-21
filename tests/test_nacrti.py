@@ -473,3 +473,109 @@ def test_dusan_vidi_sliku_sa_tudje_fakture(client, db, podaci, monkeypatch):
 
     assert "/slika/" in odgovor.text        # slika sa tudje fakture je tu
     assert "so1" in odgovor.text            # i ko ju je poslao
+
+
+# --------------------------------------------------------------------------- #
+# upis kalkulacije u ERP na potvrdu prijema
+# --------------------------------------------------------------------------- #
+
+
+class SpremanNacrt(LazniNacrt):
+    def __init__(self):
+        super().__init__()
+
+
+def test_potvrda_prijema_upisuje_kalkulaciju(db, podaci, monkeypatch):
+    """Upis ide tek kad poslovodja kaze da je roba stigla - ranije bi ga pretekao."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta, utcnow
+    from sefsync.services import nacrti
+    from sefsync.services.workflow import Workflow
+
+    upisano: list = []
+
+    def lazni_upis(nacrt, produkcija=False):
+        # pravi `upisi` dodeli broj i upise ga u nacrt - test to mora da oponasa
+        nacrt.zaglavlje["BROJ"] = "00450"
+        upisano.append(produkcija)
+        return "ELBSX_2026: MKALKUL 002/U/00450, stavki 3"
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(nacrti, "upisi", lazni_upis)
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci)
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+    nacrti.osvezi(podaci)
+
+    radnik = Workflow(notifier=type("N", (), {"notify_receipt": lambda *a, **k: True})())
+    monkeypatch.setattr(radnik.settings, "erp_upis_kalkulacije", True)
+    ishod = radnik.confirm_receipt(podaci, actor="predrag")
+
+    assert ishod.ok
+    assert "upisana u ERP" in ishod.message
+    assert upisano == [False], "podrazumevano ide u test bazu"
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.stanje is StanjeNacrta.UPISAN
+        assert red.upisao == "predrag"
+        assert red.erp_broj == "002/00450"
+
+
+def test_kalkulacija_koja_vec_postoji_se_ne_pravi_drugi_put(db, podaci, monkeypatch):
+    """Poslovodje i dalje rade rucno - dve kalkulacije za istu fakturu su gore od nijedne."""
+    from sefsync.erp.kalkulacija import VecPostoji
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+
+    def pukni(nacrt, produkcija=False):
+        raise VecPostoji("Kalkulacija za taj račun već postoji u ERP-u: MKALKUL 002/00449")
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(nacrti, "upisi", pukni)
+
+    upisana, poruka = nacrti.upisi_u_erp(podaci, korisnik="predrag")
+
+    assert upisana is False
+    assert "već postoji" in poruka
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.stanje is StanjeNacrta.UPISAN
+        assert red.upisao == "ručno u ERP-u"
+
+
+def test_nespremna_kalkulacija_se_ne_upisuje(db, podaci, monkeypatch):
+    from sefsync.services import nacrti
+
+    monkeypatch.setattr(
+        nacrti, "pripremi", lambda *a, **k: LazniNacrt(nemapirane=[STAVKA_BEZ_SIFRE])
+    )
+    monkeypatch.setattr(
+        nacrti, "upisi",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("ne sme da se upise")),
+    )
+
+    upisana, poruka = nacrti.upisi_u_erp(podaci, korisnik="predrag")
+
+    assert upisana is False
+    assert "nije spremna" in poruka
+
+
+def test_upis_se_ne_ponavlja(db, podaci, monkeypatch):
+    from sefsync.services import nacrti
+
+    def lazni_upis(nacrt, produkcija=False):
+        nacrt.zaglavlje["BROJ"] = "00450"
+        return "ELBSX_2026: MKALKUL 002/U/00450"
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(nacrti, "upisi", lazni_upis)
+    nacrti.upisi_u_erp(podaci, korisnik="predrag")
+
+    monkeypatch.setattr(
+        nacrti, "upisi",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("drugi upis nije smeo")),
+    )
+    upisana, poruka = nacrti.upisi_u_erp(podaci, korisnik="predrag")
+
+    assert upisana is False
+    assert "već upisana" in poruka
