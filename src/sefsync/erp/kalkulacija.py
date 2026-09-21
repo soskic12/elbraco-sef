@@ -64,6 +64,13 @@ def clarion_datum(n: int) -> dt.date:
     return CLARION_NULA + dt.timedelta(days=n)
 
 
+# Ime pod kojim app upisuje stavke. RBR je jedini trag u ERP-u ko je stavku uneo,
+# pa stoji ime aplikacije, ne coveka (odluka: Bane, 21.09.). Kad nesto krene
+# naopako, `RBR LIKE 'sefsync%'` odmah kaze sta je app napravila. Ko je pokrenuo
+# upis pise kod nas, u `nacrt_kalkulacije.upisao`.
+KORISNIK = "sefsync"
+
+
 def napravi_rbr(korisnik: str, trenutak: dt.datetime | None = None) -> str:
     """RBR = datum(5) + vreme u stotinkama(7) + 4 cifre + korisnicko ime.
 
@@ -235,7 +242,7 @@ def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine
 
 def pripremi(
     document_id: int,
-    korisnik: str,
+    korisnik: str = KORISNIK,
     *,
     datum: dt.date | None = None,
     engine: Engine | None = None,

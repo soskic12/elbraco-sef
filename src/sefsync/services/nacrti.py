@@ -137,7 +137,7 @@ def _stanje(nacrt) -> StanjeNacrta:
     return StanjeNacrta.SPREMAN
 
 
-def osvezi(document_id: int, *, korisnik: str = "app", engine=None) -> NacrtKalkulacije | None:
+def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
     """Ponovo sklopi nacrt za jedan dokument i upise ishod. Ne dira ERP upisom."""
     with session_scope() as session:
         doc = session.get(Document, document_id)
@@ -146,7 +146,8 @@ def osvezi(document_id: int, *, korisnik: str = "app", engine=None) -> NacrtKalk
         # Ne troši se ni jedan upit ka ERP-u: avans nema sta da trazi u kalkulaciji.
         return _upisi_stanje(document_id, StanjeNacrta.NE_TREBA)
 
-    nacrt = pripremi(document_id, korisnik=korisnik, engine=engine)
+    # RBR nosi ime aplikacije, ne coveka - vidi erp.kalkulacija.KORISNIK
+    nacrt = pripremi(document_id, engine=engine)
 
     with session_scope() as session:
         red = session.get(NacrtKalkulacije, document_id)
@@ -227,7 +228,7 @@ def oznaci_nije_artikal(
         linija.nije_artikal = not vrati
         linija.nije_artikal_by = None if vrati else korisnik
 
-    return osvezi(document_id, korisnik=korisnik, engine=engine)
+    return osvezi(document_id, engine=engine)
 
 
 def povezi_sifru(
@@ -313,14 +314,14 @@ def povezi_sifru(
                 )
             )
 
-    osvezeni = osvezi(document_id, korisnik=korisnik, engine=engine)
+    osvezeni = osvezi(document_id, engine=engine)
 
     # Isti artikal stize na vise objekata. Kad se sifra jednom kaze, sve ostale
     # fakture koje ga cekaju moraju da prodju same - inace poslovodja u drugom
     # objektu i dalje gleda "ceka sifru" za nesto sto je vec reseno.
     for drugi in _cekaju_isti_artikal(document_id, line_no):
         try:
-            osvezi(drugi, korisnik=korisnik, engine=engine)
+            osvezi(drugi, engine=engine)
         except Exception as exc:  # noqa: BLE001 - jedan dokument ne sme da obori ostale
             log.warning("Nacrt za #%s nije osvezen: %s", drugi, exc)
     return osvezeni

@@ -197,3 +197,22 @@ def test_avans_dobija_stanje_ne_treba(db, monkeypatch):
     assert red.stanje is StanjeNacrta.NE_TREBA
     with db.session_scope() as session:
         assert session.get(NacrtKalkulacije, doc_id).stanje is StanjeNacrta.NE_TREBA
+
+
+def test_rbr_nosi_ime_aplikacije_a_ne_coveka():
+    """RBR je jedini trag u ERP-u ko je uneo stavku.
+
+    Mereno 21.09.: nijedna od 23.079 stavki nema prazan RBR, ni na nezaknjizenim
+    kalkulacijama - znaci upisuje se pri unosu stavke, ne klikom na KNJIZENJE.
+    Zato ga app mora upisati sama, i to pod svojim imenom: `RBR LIKE 'sefsync%'`
+    odmah kaze sta je app napravila ako nesto krene naopako.
+    """
+    import datetime as dt
+
+    from sefsync.erp.kalkulacija import KORISNIK, napravi_rbr
+
+    rbr = napravi_rbr(KORISNIK, dt.datetime(2026, 9, 18, 14, 45, 3))
+
+    assert rbr.startswith("82444")          # clarion dan 18.09.2026
+    assert rbr.endswith("sefsync")
+    assert len(rbr) <= 39                   # duzina kolone u PRULKALK/MPRULK

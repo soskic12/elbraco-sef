@@ -1212,3 +1212,30 @@ rekao „spremna", pa bi app kasnije upisala dokument koji u knjigama ne postoji
 Ugrađeno: avans se odbija **pre nego što se ERP uopšte dodirne**, a nacrt dobija
 stanje `NE_TREBA` — ne stoji na spisku kao da nešto čeka. Dva testa, od kojih jedan
 pada ako se za avans uopšte otvori veza ka ERP-u.
+
+---
+
+## `RBR`: ko upisuje stavku — izmereno 21.09.2026
+
+Pretpostavka je bila da `RBR` upisuje klik na **KNJIŽENJE** u ERP-u. **Nije tako.**
+Od 23.079 stavki u kalkulacijama **nijedna nema prazan `RBR`**, uključujući i onu na
+nezaknjiženoj kalkulaciji (`PROKNJIZENO=0`). Dakle upisuje se **pri unosu stavke**.
+
+Primer sa nezaknjižene: `8244453167141802SuzicNikol` — Clarion dan `82444`
+(18.09.2026), vreme `5316714`, četiri cifre `1802`, korisnik `SuzicNikol` (10
+znakova). Polje je `varchar(39)`, naših 26 znakova staje.
+
+**Znači app mora sama da upiše `RBR`, i u njemu stoji čije ime.**
+
+**Odluka (Bane, 21.09.): ime aplikacije — `sefsync`.** Kad nešto krene naopako,
+`RBR LIKE 'sefsync%'` odmah kaže šta je app napravila i šta treba obrisati. Ko je
+pokrenuo upis piše kod nas, u `nacrt_kalkulacije.upisao`.
+
+### Prava u produkciji
+
+Odobren `GRANT INSERT` na `ULKALKUL`, `MKALKUL`, `PRULKALK`, `MPRULK` u `ELBS_2026` —
+bez `UPDATE` i `DELETE`, pa app ne može da dira ono što je već uneto. Šifarnik
+(`ARTIKLI`, `ARTPROD`, `DARTIKLI`) ostaje netaknut.
+
+Druga brava ostaje u kodu: bez `ERP_ALLOW_PRODUCTION_WRITE=true` upis u produkciju se
+odbija bez obzira na prava u bazi.
