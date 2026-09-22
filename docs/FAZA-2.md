@@ -1297,3 +1297,24 @@ potvrda prijema u objektu; ovo je za usluge i za slučaj kad poslovođa ne može
 Uz to, u kartici „Tok" sada piše stanje kalkulacije: spremna, čeka šifru (sa brojem
 stavki), zaustavljena, ne ide kroz kalkulaciju, ili **u ERP-u** — sa brojem, ko je i
 kada pustio.
+
+### Magacin povraćaja: `010` u ERP-u, `110` u šifarniku osoblja (22.09.2026)
+
+Ilijana Krnjajić (`ilijana`, funkcija REKLAMACIJE) radi povraćaje. Da bi videla
+dokumente magacina 010, treba joj `SifraPovezanogObjekta` — ali **ne `010`**: ta
+šifra će jednog dana biti nova prodavnica, pa su to dva različita prostora imena.
+
+Odluka (Bane): kod osoblja stoji **`110`**, a `erp_code` ostaje **`010`**, jer je to
+magacin koji ide na kalkulaciju.
+
+Dodato polje `BusinessUnit.staff_code`. Osoba se traži prvo po njemu, pa tek onda po
+`erp_code` (kako je kod prodavnica). Popunjava se na kartici „Poslovne jedinice".
+
+### Ilijanin tok nije isti kao kod poslovođe — za kasnije
+
+**Njoj roba ne stiže.** Knjižno odobrenje na 010 služi za **razduženje robe koju joj
+je maloprodaja prebacila internim prenosom**, a ne za prijem isporuke. Zato joj dugme
+„Roba je primljena" ne odgovara po smislu, iako mehanički radi.
+
+Ostaje da se prođe ceo taj tok (interni prenos → razduženje → knjižno odobrenje) i
+napravi šta treba. Zabeleženo da se ne izgubi; Bane: „ima još detalja".

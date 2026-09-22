@@ -63,6 +63,11 @@ class BusinessUnit(Base):
     kind: Mapped[UnitKind] = mapped_column(Enum(UnitKind), default=UnitKind.RETAIL)
     # Sifra iste PJ u ERP-u (za fazu 2 - magacin/skladiste na kalkulaciji)
     erp_code: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Sifra pod kojom ista PJ stoji u sifarniku osoblja (`SifraPovezanogObjekta`).
+    # Ta dva prostora imena nisu ista: magacin povracaja je u ERP-u `010`, a u
+    # sifarniku osoblja `110`, jer ce `010` jednog dana biti nova prodavnica.
+    # Kad je prazno, osoba se trazi po `erp_code` - tako je kod prodavnica.
+    staff_code: Mapped[str | None] = mapped_column(String(32), index=True, default=None)
     address: Mapped[str | None] = mapped_column(String(300), default=None)
     city: Mapped[str | None] = mapped_column(String(100), default=None)
     postal_code: Mapped[str | None] = mapped_column(String(10), default=None)

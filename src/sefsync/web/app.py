@@ -165,10 +165,21 @@ def _back(url: str, message: str, ok: bool = True) -> RedirectResponse:
 
 
 def _unit_for(session, user: User) -> BusinessUnit | None:
-    """Poslovna jedinica poslovodje - po sifri objekta iz sifarnika osoblja."""
+    """Poslovna jedinica poslovodje - po sifri objekta iz sifarnika osoblja.
+
+    Prvo se gleda `staff_code`, jer sifarnik osoblja i ERP nisu isti prostor
+    imena: magacin povracaja je u ERP-u `010`, a kod osoblja `110` - posto ce
+    `010` jednog dana biti nova prodavnica. Kad `staff_code` nije popunjen,
+    trazi se po `erp_code`, kako je kod prodavnica.
+    """
     if not user.unit_code:
         return None
     code = user.unit_code.strip()
+    po_osoblju = session.scalar(
+        select(BusinessUnit).where(BusinessUnit.staff_code == code)
+    )
+    if po_osoblju is not None:
+        return po_osoblju
     unit = session.scalar(
         select(BusinessUnit).where(
             BusinessUnit.erp_code == code, BusinessUnit.kind == UnitKind.RETAIL
@@ -763,6 +774,7 @@ def unit_save(
     name: Annotated[str, Form()],
     kind: Annotated[str, Form()] = UnitKind.RETAIL.value,
     erp_code: Annotated[str, Form()] = "",
+    staff_code: Annotated[str, Form()] = "",
     address: Annotated[str, Form()] = "",
     city: Annotated[str, Form()] = "",
     postal_code: Annotated[str, Form()] = "",
@@ -781,6 +793,7 @@ def unit_save(
         unit.name = name.strip()
         unit.kind = UnitKind(kind)
         unit.erp_code = erp_code.strip() or None
+        unit.staff_code = staff_code.strip() or None
         unit.address = address.strip() or None
         unit.city = city.strip() or None
         unit.postal_code = postal_code.strip() or None

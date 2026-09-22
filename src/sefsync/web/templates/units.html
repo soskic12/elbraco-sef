@@ -16,6 +16,8 @@
         </select>
       </div>
       <div class="field"><label>Šifra u ERP-u</label><input type="text" name="erp_code" id="erp_code" size="10"></div>
+      <div class="field"><label title="Kad se razlikuje od ERP šifre — npr. magacin povraćaja je u ERP-u 010, a kod osoblja 110">Šifra kod osoblja</label>
+        <input type="text" name="staff_code" id="staff_code" size="10" placeholder="ako se razlikuje"></div>
       <div class="field"><label>Adresa</label><input type="text" name="address" id="address" size="28"></div>
       <div class="field"><label>Mesto</label><input type="text" name="city" id="city" size="14"></div>
       <div class="field"><label>PTT</label><input type="text" name="postal_code" id="postal_code" size="6"></div>
@@ -47,7 +49,8 @@
         {% if not u.active %}<span class="tag warn">neaktivna</span>{% endif %}
         {% if u.active and not u.routable %}<span class="tag">van automatike</span>{% endif %}</td>
       <td>{{ u.kind.value }}</td>
-      <td>{{ u.erp_code or '—' }}</td>
+      <td>{{ u.erp_code or '—' }}{% if u.staff_code %}
+          <div class="muted small" title="šifra u šifarniku osoblja">osoblje: {{ u.staff_code }}</div>{% endif %}</td>
       <td class="small">{{ u.address or '' }} {{ u.city or '' }}</td>
       <td class="small">{{ u.postal_code or '—' }}</td>
       <td class="small">{{ u.emails or '—' }}</td>
@@ -55,7 +58,8 @@
       <td class="num"><a href="/?pj={{ u.id }}">{{ counts.get(u.id, 0) }}</a></td>
       <td><button class="ghost small" type="button" onclick='popuni({{ {
             "id": u.id, "code": u.code, "name": u.name, "kind": u.kind.value,
-            "erp_code": u.erp_code or "", "address": u.address or "", "city": u.city or "",
+            "erp_code": u.erp_code or "", "staff_code": u.staff_code or "",
+            "address": u.address or "", "city": u.city or "",
             "postal_code": u.postal_code or "", "emails": u.emails or "",
             "phones": u.phones or "", "active": u.active, "routable": u.routable } | tojson }})'>izmeni</button></td>
     </tr>
@@ -68,7 +72,7 @@
 
 <script>
 function popuni(u) {
-  for (const k of ['code','name','kind','erp_code','address','city','postal_code','emails','phones'])
+  for (const k of ['code','name','kind','erp_code','staff_code','address','city','postal_code','emails','phones'])
     document.getElementById(k).value = u[k] ?? '';
   document.getElementById('unit_id').value = u.id;
   document.getElementById('active').checked = u.active;
@@ -76,7 +80,7 @@ function popuni(u) {
   window.scrollTo(0, 0);
 }
 function resetForm() {
-  for (const k of ['code','name','erp_code','address','city','postal_code','emails','phones'])
+  for (const k of ['code','name','erp_code','staff_code','address','city','postal_code','emails','phones'])
     document.getElementById(k).value = '';
   document.getElementById('unit_id').value = 0;
   document.getElementById('active').checked = true;
