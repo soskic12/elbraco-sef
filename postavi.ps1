@@ -54,6 +54,15 @@ function Uradi($opis, [scriptblock]$posao) {
 # provere pre svega
 # --------------------------------------------------------------------------- #
 
+# Port zna .env na serveru, ne ova skripta. Cita se pre provera, da se i port
+# koji se proverava i onaj koji se na kraju otvara u firewall-u poklapaju sa
+# onim na kom panel stvarno radi.
+$envPutanja = Join-Path $Odrediste '.env'
+if (-not $PSBoundParameters.ContainsKey('Port') -and (Test-Path $envPutanja)) {
+    $izEnv = (Get-Content $envPutanja | Where-Object { $_ -match '^WEB_PORT=' }) -replace 'WEB_PORT=', ''
+    if ($izEnv -and $izEnv.Trim() -match '^\d+$') { $Port = [int]$izEnv.Trim() }
+}
+
 Korak 'Provere'
 
 $jeAdmin = ([Security.Principal.WindowsPrincipal] `
@@ -213,18 +222,25 @@ Korak 'Podesavanja'
 $env_ = Join-Path $Odrediste '.env'
 if (Test-Path $env_) {
     Write-Host '   .env vec postoji - ne diram ga'
-    # Port mora da bude isti na tri mesta (app, firewall, adresa u mejlovima).
-    # Ako se razlikuje, servis slusa jedno a sve ostalo gadja drugo - pa se
-    # ovde uskladjuje, uz jasan ispis sta je promenjeno.
+    # Port odredjuje .env, ne skripta. Ranije je bilo obrnuto: skripta je port
+    # "uskladjivala" na svoj podrazumevani (8080) i prepisivala .env. Na serveru
+    # gde panel radi na 8088 to je 22.09. oborilo panel - 8080 je tamo u
+    # rezervisanom opsegu, pa se proces nije mogao vezati ni za sta.
+    #
+    # Sada se port iz .env-a samo procita i koristi dalje (firewall, provera).
+    # Izricito zadat -Port i dalje ima prednost, jer ga je covek namerno napisao.
     $uEnv = (Get-Content $env_ | Where-Object { $_ -match '^WEB_PORT=' }) -replace 'WEB_PORT=', ''
-    if ($uEnv -and $uEnv.Trim() -ne "$Port") {
-        Write-Host "   u .env je bio WEB_PORT=$($uEnv.Trim()), menjam na $Port" -ForegroundColor Yellow
-        Uradi 'uskladjujem port u .env' {
-            (Get-Content $env_) -replace '^WEB_PORT=.*$', "WEB_PORT=$Port" |
-                Set-Content $env_ -Encoding utf8
-            (Get-Content $env_) -replace '^PUBLIC_BASE_URL=.*$', "PUBLIC_BASE_URL=http://$env:COMPUTERNAME`:$Port" |
-                Set-Content $env_ -Encoding utf8
+    $uEnv = if ($uEnv) { $uEnv.Trim() } else { '' }
+    if ($PSBoundParameters.ContainsKey('Port')) {
+        if ($uEnv -and $uEnv -ne "$Port") {
+            Write-Host "   u .env je WEB_PORT=$uEnv, a zadat je -Port $Port - menjam .env" -ForegroundColor Yellow
+            Uradi 'upisujem zadati port u .env' {
+                (Get-Content $env_) -replace '^WEB_PORT=.*$', "WEB_PORT=$Port" |
+                    Set-Content $env_ -Encoding utf8
+            }
         }
+    } else {
+        Write-Host "   port iz .env-a: $Port (ne diram ga)"
     }
 } else {
     Uradi 'pravim .env iz sablona' {

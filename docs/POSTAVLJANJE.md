@@ -116,6 +116,26 @@ vrednost i restartuj servis.
 
 ---
 
+## Port određuje `.env`, ne skripta
+
+`postavi.ps1` čita `WEB_PORT` iz `.env`-a na serveru i koristi ga za proveru,
+firewall i završnu proveru da panel odgovara. **Ne menja ga.**
+
+Do 22.09.2026. bilo je obrnuto — skripta je „usklađivala" port na svoj
+podrazumevani (8080) i prepisivala `.env`. Na serveru gde panel radi na **8088** to
+je oborilo panel: 8080 je tamo u rezervisanom opsegu (`winerror 10013`), pa se proces
+nije mogao vezati ni za šta, a `.env` je ostao promenjen.
+
+Ako port treba stvarno promeniti, zada se izričito:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\efakture\postavi.ps1 -Arhiva ... -Port 8088 -Stvarno
+```
+
+Tada skripta upiše taj port u `.env` i kaže šta je promenila.
+
+---
+
 ## Nova verzija na server
 
 Posle `postavi.ps1 -Stvarno` idu još tri koraka. Skripta ih ne radi sama jer svaki
