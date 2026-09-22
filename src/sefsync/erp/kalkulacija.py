@@ -320,10 +320,25 @@ def pripremi(
         # datum kao zaglavlje (2.066 od 2.068, odnosno 20.991 od 21.032).
         # Ranije je app pisala danasnji datum, pa je na ekranu ispadao datum
         # slanja umesto prometa.
-        promet = doc.delivery_date or doc.tax_point_date or doc.issue_date
+        promet = doc.delivery_date or doc.issue_date
         dan_prometa = clarion_dan(promet) if promet else dan
 
         osnovica = pdv_ukupno = mp_vrednost = mp_pdv = 0.0
+        # Zbirovi po poreskoj stopi. ERP ih drzi u odvojenim poljima: PDV je
+        # opsta stopa (20 %), PRENETIPOREZ posebna (10 %), a u maloprodaji jos i
+        # MPVRED1/UKAL_PDV1 za 10 % naspram MPVRED2/UKAL_PDV2 za 20 %. Mereno na
+        # 071/00033: PRENETIPOREZ 207,18 je tacno 10 % od osnovice po toj stopi.
+        # Mesanih kalkulacija je malo (4 u istoriji, sve u pabu), ali faktura sa
+        # 0/10/20 % postoji, pa zbir po jednoj stopi ne bi bio tacan.
+        po_stopi: dict[float, dict[str, float]] = {}
+
+        def _dodaj(stopa_: float, osn: float, porez: float, mp_vr: float = 0.0, mp_pd: float = 0.0):
+            red = po_stopi.setdefault(stopa_, {"osnovica": 0.0, "pdv": 0.0, "mp": 0.0, "mp_pdv": 0.0})
+            red["osnovica"] += osn
+            red["pdv"] += porez
+            red["mp"] += mp_vr
+            red["mp_pdv"] += mp_pd
+
         trenutak = dt.datetime.now()
 
         for linija in linije:
@@ -414,14 +429,41 @@ def pripremi(
 
             osnovica += vrednost
             pdv_ukupno += pdv
+            _dodaj(
+                stopa,
+                vrednost,
+                pdv,
+                round(mp * abs(kolicina), 2) if maloprodaja and mp else 0.0,
+                stavka.get("IZN_MPP", 0.0) if maloprodaja else 0.0,
+            )
             nacrt.stavke.append(stavka)
 
         if bez_stavki:
-            # Iznosi dolaze iz zaglavlja fakture, jer stavaka nema.
+            # Iznosi dolaze iz zaglavlja fakture, jer stavaka nema. Podela po
+            # stopama se ipak racuna iz stavki dokumenta - usluzna faktura ume da
+            # nosi i 10 % i 20 % (struja, komunalije), a ERP to drzi u odvojenim
+            # poljima.
             pdv_ukupno = float(doc.vat_amount or 0) * predznak
             za_naplatu = round(float(doc.amount or 0) * predznak, 2)
+            for linija in doc.lines:
+                if linija.vat_percent is None or linija.line_amount is None:
+                    continue
+                osn = round(float(linija.line_amount) * predznak, 2)
+                _dodaj(float(linija.vat_percent), osn,
+                       round(osn * float(linija.vat_percent) / 100.0, 2))
+            if not po_stopi:
+                _dodaj(20.0, 0.0, pdv_ukupno)
         else:
             za_naplatu = round(osnovica + pdv_ukupno, 2)
+
+        # ERP razdvaja stope: PDV je opsta (20 %), PRENETIPOREZ posebna (10 %).
+        def _po(stopa_: float, kljuc: str) -> float:
+            return round(po_stopi.get(stopa_, {}).get(kljuc, 0.0), 2)
+
+        pdv_opsta = _po(20.0, "pdv")
+        pdv_posebna = _po(10.0, "pdv")
+        if bez_stavki and not pdv_opsta and not pdv_posebna:
+            pdv_opsta = round(pdv_ukupno, 2)
 
         rok = clarion_dan(doc.due_date) if doc.due_date else 0
         nacrt.zaglavlje = {
@@ -436,7 +478,8 @@ def pripremi(
             "DAT_RAC_DOB": dan_prometa,
             "DATUM_PRIJEM": dan_prometa,
             "ROBNO_ZADUZ": round(osnovica, 2),
-            "PDV": round(pdv_ukupno, 2),
+            "PDV": pdv_opsta,
+            "PRENETIPOREZ": pdv_posebna,
             "IZNOS_ZA_NAP": za_naplatu,
             "MENJA_CENU": "Da" if maloprodaja else "",
             "OBRACUN_MALO": "",
@@ -452,8 +495,12 @@ def pripremi(
         }
         if maloprodaja:
             nacrt.zaglavlje["IZN_RUCM"] = round(mp_vrednost - mp_pdv - osnovica, 2)
-            nacrt.zaglavlje["UKAL_PDV2"] = round(mp_pdv, 2)
-            nacrt.zaglavlje["MPVRED2"] = round(mp_vrednost, 2)
+            # 1 = posebna stopa, 2 = opsta. Mereno na 071/00033: MPVRED1 2.000,00
+            # i UKAL_PDV1 181,82 (= 2.000/11) idu uz 10 %, a MPVRED2/UKAL_PDV2 uz 20 %.
+            nacrt.zaglavlje["UKAL_PDV1"] = _po(10.0, "mp_pdv")
+            nacrt.zaglavlje["MPVRED1"] = _po(10.0, "mp")
+            nacrt.zaglavlje["UKAL_PDV2"] = _po(20.0, "mp_pdv")
+            nacrt.zaglavlje["MPVRED2"] = _po(20.0, "mp")
 
         return nacrt
 

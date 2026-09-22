@@ -273,3 +273,58 @@ def test_kalkulacija_nosi_datum_prometa_a_ne_danasnji(db, monkeypatch):
     assert nacrt.zaglavlje["DATUM"] == promet
     assert nacrt.zaglavlje["DAT_RAC_DOB"] == promet
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == promet
+
+
+def test_faktura_sa_vise_poreskih_stopa_deli_pdv(db):
+    """ERP drzi stope odvojeno: PDV je opsta (20 %), PRENETIPOREZ posebna (10 %).
+
+    Mereno na 071/00033: PRENETIPOREZ 207,18 je tacno 10 % od osnovice po toj
+    stopi. Da app sve sabere u PDV, poreska evidencija bi bila pogresna.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777020, document_number="KP-1/26", supplier_name="Komunalno",
+            supplier_vat="100495492", supplier_reg_no="12345678",
+            amount=5000.0, vat_amount=500.0, sef_status=SefStatus.SEEN,
+            business_unit_id=pj.id, issue_date=dt.date(2026, 9, 18),
+        )
+        # usluzna faktura sa obe stope - struja 20 %, voda 10 %
+        doc.lines.append(DocumentLine(line_no=1, name="Električna energija",
+                                      quantity=1, line_amount=1000.0, vat_percent=20.0))
+        doc.lines.append(DocumentLine(line_no=2, name="Voda",
+                                      quantity=1, line_amount=500.0, vat_percent=10.0))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+
+    assert nacrt.zaglavlje["PDV"] == 200.0            # 20 % od 1.000
+    assert nacrt.zaglavlje["PRENETIPOREZ"] == 50.0    # 10 % od 500
