@@ -469,6 +469,7 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 select(Slika).where(Slika.document_id == doc_id).order_by(Slika.id)
             )
         )
+        nacrt = session.get(NacrtKalkulacije, doc_id)
         # Za svaku stavku: da li je neko vec slikao taj artikal, makar sa druge
         # fakture i iz drugog objekta. Bez toga svaki poslovodja slika isti
         # artikal iznova.
@@ -494,6 +495,8 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "lines": doc.lines,
                 "slike": slike,
                 "slikano": slikano,
+                "nacrt": nacrt,
+                "upis_ukljucen": get_settings().erp_upis_kalkulacije,
                 "units": units,
                 "notifications": notifications,
                 "audit": audit,
@@ -501,6 +504,30 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "user": user,
             },
         )
+
+
+@app.post("/dokument/{doc_id}/upisi-kalkulaciju")
+def upisi_kalkulaciju(doc_id: int, user: Operater) -> RedirectResponse:
+    """Operater upisuje kalkulaciju bez potvrde prijema robe.
+
+    Kod usluga (magacin 088) nema prijema robe - niko ne "primi" struju ili
+    zakup, pa taj dokument nema poslovodju koji bi kliknuo. Za robu ovo ostaje
+    izuzetak: redovan put je potvrda prijema u objektu.
+    """
+    from ..config import get_settings as _get
+    from ..services.nacrti import upisi_u_erp
+
+    podesavanja = _get()
+    if not podesavanja.erp_upis_kalkulacije:
+        return _back(
+            f"/dokument/{doc_id}",
+            "Upis kalkulacija je isključen (ERP_UPIS_KALKULACIJE).",
+            False,
+        )
+    _, poruka = upisi_u_erp(
+        doc_id, korisnik=user.login, produkcija=podesavanja.erp_allow_production_write
+    )
+    return _back(f"/dokument/{doc_id}", poruka)
 
 
 @app.get("/dokument/{doc_id}/ubl")

@@ -579,3 +579,50 @@ def test_upis_se_ne_ponavlja(db, podaci, monkeypatch):
 
     assert upisana is False
     assert "već upisana" in poruka
+
+
+def test_operater_moze_da_upise_kalkulaciju_bez_prijema(client, db, podaci, monkeypatch):
+    """Kod usluga (088) nema prijema robe - niko ne "primi" struju ni zakup.
+
+    OFFICE nema erp_code, pa se nijedna osoba iz sifarnika ne moze povezati s tom
+    jedinicom; bez ovog dugmeta takav dokument ne bi imao ko da pusti.
+    """
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+    import sefsync.web.app as app_module
+
+    def lazni_upis(nacrt, produkcija=False):
+        nacrt.zaglavlje["BROJ"] = "03017"
+        return "ELBSX_2026: ULKALKUL 088/U/03017"
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(nacrti, "upisi", lazni_upis)
+    monkeypatch.setattr(app_module.get_settings(), "erp_upis_kalkulacije", True)
+    nacrti.osvezi(podaci)
+
+    odgovor = client.post(
+        f"/dokument/{podaci}/upisi-kalkulaciju", follow_redirects=False
+    )
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.stanje is StanjeNacrta.UPISAN
+        assert red.upisao == "bogdan"
+
+
+def test_bez_prekidaca_operater_ne_moze_da_upise(client, db, podaci, monkeypatch):
+    from sefsync.services import nacrti
+    import sefsync.web.app as app_module
+
+    monkeypatch.setattr(app_module.get_settings(), "erp_upis_kalkulacije", False)
+    monkeypatch.setattr(
+        nacrti, "upisi",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("ne sme da se upise")),
+    )
+
+    odgovor = client.post(
+        f"/dokument/{podaci}/upisi-kalkulaciju", follow_redirects=False
+    )
+
+    assert "isklju" in odgovor.headers["location"]

@@ -1274,3 +1274,26 @@ Poslovođa dobija rečenicu šta se desilo (nije spremna, već postoji, ERP nedo
 
 Pet testova, među njima i da se upis ne ponavlja i da se nespremna kalkulacija ne
 upisuje ni slučajno.
+
+### Ko pušta kalkulaciju kad nema prijema robe (22.09.2026)
+
+Prvi upis u `ELBSX_2026` prošao je tačno — `MKALKUL 001/U/00529`, Eurotehna, račun
+`3476VP-2026`: iznosi, rabat 47 %, marža 45,16 %, `PROKNJIZENO=0`, `IZVOREPP`
+„Elektronske fakture", a `RBR` `8244834164430570sefsync`.
+
+Pitanje koje je odmah zatim ispalo: **ko potvrđuje prijem za dokumente na upravi (088)?**
+
+Odgovor je bio — niko. `OFFICE` nema `erp_code`, pa se nijedna osoba iz šifarnika
+osoblja ne može povezati s tom jedinicom, a operateri nemaju dugme za potvrdu prijema
+(ono postoji samo na ekranu poslovođe).
+
+I logički je tako ispravno: **kod usluga nema prijema robe.** Niko ne „primi" struju,
+zakup ni bankarsku naknadu. Takav dokument proveri kancelarija i unese ga u ERP.
+
+Zato operater na strani dokumenta sada ima dugme **„Upiši kalkulaciju u ERP"**, vidljivo
+kad je nacrt spreman i kad je upis uopšte uključen. Za robu ostaje redovan put —
+potvrda prijema u objektu; ovo je za usluge i za slučaj kad poslovođa ne može.
+
+Uz to, u kartici „Tok" sada piše stanje kalkulacije: spremna, čeka šifru (sa brojem
+stavki), zaustavljena, ne ide kroz kalkulaciju, ili **u ERP-u** — sa brojem, ko je i
+kada pustio.
