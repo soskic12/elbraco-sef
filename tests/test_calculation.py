@@ -216,3 +216,60 @@ def test_rbr_nosi_ime_aplikacije_a_ne_coveka():
     assert rbr.startswith("82444")          # clarion dan 18.09.2026
     assert rbr.endswith("sefsync")
     assert len(rbr) <= 39                   # duzina kolone u PRULKALK/MPRULK
+
+
+def test_kalkulacija_nosi_datum_prometa_a_ne_danasnji(db, monkeypatch):
+    """Mereno na 3.401 dokumentu gde se datum fakture i prometa razlikuju:
+    DATUM je promet u 90 %, DAT_RAC_DOB u 91 %. App je ranije pisala danasnji
+    datum, pa je na ERP ekranu ispadao datum slanja umesto prometa.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777010, document_number="RN-1/26", supplier_name="X",
+            supplier_vat="100000000", supplier_reg_no="12345678",
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=pj.id,
+            issue_date=dt.date(2026, 9, 18),
+            delivery_date=dt.date(2026, 9, 15),      # promet je ranije od fakture
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class LazniConn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class LazniEngine:
+        def connect(self):
+            return LazniConn()
+
+    nacrt = K.pripremi(doc_id, engine=LazniEngine(), datum=dt.date(2026, 9, 22))
+
+    promet = K.clarion_dan(dt.date(2026, 9, 15))
+    assert nacrt.zaglavlje["DATUM"] == promet
+    assert nacrt.zaglavlje["DAT_RAC_DOB"] == promet
+    assert nacrt.zaglavlje["DATUM_PRIJEM"] == promet

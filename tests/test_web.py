@@ -663,11 +663,10 @@ def test_poslovodja_ima_spisak_sta_treba_slikati(client, podaci, db, monkeypatch
     assert "capture=\"environment\"" in odgovor.text     # kamera, ne galerija
 
 
-def test_osoba_se_nalazi_po_sifri_iz_sifarnika_osoblja(client, db):
-    """Sifarnik osoblja i ERP nisu isti prostor imena.
+def test_covek_se_vezuje_za_jedinicu_spiskom_prijava(client, db):
+    """`SifraPovezanogObjekta` deli i LOGISTIKA, pa se u nju ne upisuje nasa sema.
 
-    Magacin povracaja je u ERP-u `010`, a kod osoblja `110` - jer ce `010`
-    jednog dana biti nova prodavnica. Ilijana (reklamacije) ima 110.
+    Ilijana (reklamacije) tamo nema objekat uopste, a treba da vidi magacin 010.
     """
     from sefsync.models import BusinessUnit, UnitKind
     from sefsync.web.auth import Role, User
@@ -675,19 +674,21 @@ def test_osoba_se_nalazi_po_sifri_iz_sifarnika_osoblja(client, db):
     with db.session_scope() as session:
         session.add(
             BusinessUnit(code="MAG010", name="Povrat robe", kind=UnitKind.WAREHOUSE,
-                         erp_code="010", staff_code="110", routable=False)
+                         erp_code="010", logins="ilijana", routable=False)
         )
-        # prodavnica koja bi sutra mogla da uzme sifru 010 kod osoblja
         session.add(
-            BusinessUnit(code="MP010", name="NOVA PRODAVNICA", kind=UnitKind.RETAIL,
-                         erp_code="010x")
+            BusinessUnit(code="MP001", name="SOMBOR", kind=UnitKind.RETAIL, erp_code="001")
         )
 
-    ilijana = User("ilijana", "Krnjajić Ilijana", Role.POSLOVODJA, "110", "REKLAMACIJE")
     import sefsync.web.app as app_module
 
+    ilijana = User("ilijana", "Krnjajić Ilijana", Role.POSLOVODJA, None, "REKLAMACIJE")
     with db.session_scope() as session:
         jedinica = app_module._unit_for(session, ilijana)
-        assert jedinica is not None
-        assert jedinica.code == "MAG010"
+        assert jedinica is not None and jedinica.code == "MAG010"
         assert jedinica.erp_code == "010"      # na kalkulaciji ostaje ERP sifra
+
+    # ko nije na spisku, i dalje se nalazi po sifri objekta
+    dane = User("dane", "Sunajko Dane", Role.POSLOVODJA, "001", "POSLOVODJA")
+    with db.session_scope() as session:
+        assert app_module._unit_for(session, dane).code == "MP001"

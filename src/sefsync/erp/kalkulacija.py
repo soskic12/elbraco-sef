@@ -314,6 +314,15 @@ def pripremi(
             .all()
         )
 
+        # Datum prometa je ono sto ERP ocekuje. Mereno 22.09. na 3.401 dokumentu
+        # gde se datum fakture i datum prometa razlikuju: DATUM je promet u 90 %,
+        # DAT_RAC_DOB u 91 %, DATUM_PRIJEM u 51 % (u 43 % nula). Stavka nosi isti
+        # datum kao zaglavlje (2.066 od 2.068, odnosno 20.991 od 21.032).
+        # Ranije je app pisala danasnji datum, pa je na ekranu ispadao datum
+        # slanja umesto prometa.
+        promet = doc.delivery_date or doc.tax_point_date or doc.issue_date
+        dan_prometa = clarion_dan(promet) if promet else dan
+
         osnovica = pdv_ukupno = mp_vrednost = mp_pdv = 0.0
         trenutak = dt.datetime.now()
 
@@ -368,7 +377,7 @@ def pripremi(
                 "BROJ": broj,
                 "ARTIKAL": art["artikal"],
                 "NAZIV": art["naziv"],
-                "DATUM": dan,
+                "DATUM": dan_prometa,
                 "OPIS": broj_racuna[:15],
                 "TARIFA": tarifa.zfill(5),
                 "STOPA": stopa,
@@ -420,12 +429,12 @@ def pripremi(
             "MAGACIN": magacin,
             "VRSTAKNJIZ": "U",
             "BROJ": broj,
-            "DATUM": dan,
+            "DATUM": dan_prometa,
             "KONTO": "435",
             "DOBAVLJAC": dobavljac or "",
             "BROJ_RN_DOB": broj_racuna,
-            "DAT_RAC_DOB": clarion_dan(doc.issue_date) if doc.issue_date else dan,
-            "DATUM_PRIJEM": dan,
+            "DAT_RAC_DOB": dan_prometa,
+            "DATUM_PRIJEM": dan_prometa,
             "ROBNO_ZADUZ": round(osnovica, 2),
             "PDV": round(pdv_ukupno, 2),
             "IZNOS_ZA_NAP": za_naplatu,

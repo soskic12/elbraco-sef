@@ -63,11 +63,19 @@ class BusinessUnit(Base):
     kind: Mapped[UnitKind] = mapped_column(Enum(UnitKind), default=UnitKind.RETAIL)
     # Sifra iste PJ u ERP-u (za fazu 2 - magacin/skladiste na kalkulaciji)
     erp_code: Mapped[str | None] = mapped_column(String(32), default=None)
-    # Sifra pod kojom ista PJ stoji u sifarniku osoblja (`SifraPovezanogObjekta`).
-    # Ta dva prostora imena nisu ista: magacin povracaja je u ERP-u `010`, a u
-    # sifarniku osoblja `110`, jer ce `010` jednog dana biti nova prodavnica.
-    # Kad je prazno, osoba se trazi po `erp_code` - tako je kod prodavnica.
-    staff_code: Mapped[str | None] = mapped_column(String(32), index=True, default=None)
+    # Prijave ljudi koji rade u ovoj jedinici, zarezom odvojene.
+    #
+    # `kontakti_osobe.SifraPovezanogObjekta` koristi i projekat LOGISTIKA, pa se
+    # u njega ne sme upisivati nasa sema: sifra `010` tamo znaci nesto drugo, a
+    # jednog dana ce biti i nova prodavnica. Zato vezu covek-jedinica drzimo kod
+    # sebe, gde je mozemo menjati bez posledica po tudju aplikaciju.
+    #
+    # Kad je prazno, osoba se i dalje nalazi preko `SifraPovezanogObjekta` ->
+    # `erp_code`, kako rade prodavnice.
+    logins: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    def login_list(self) -> list[str]:
+        return [x.strip().lower() for x in (self.logins or "").split(",") if x.strip()]
     address: Mapped[str | None] = mapped_column(String(300), default=None)
     city: Mapped[str | None] = mapped_column(String(100), default=None)
     postal_code: Mapped[str | None] = mapped_column(String(10), default=None)

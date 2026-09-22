@@ -157,6 +157,14 @@ def load_person(login: str, settings: Settings | None = None) -> User:
         return User(login.strip(), row["ime"], Role.OPERATER, objekat or None, funkcija)
     if objekat:
         return User(login.strip(), row["ime"], Role.POSLOVODJA, objekat, funkcija)
+
+    # Covek moze biti vezan za jedinicu i kod nas, spiskom prijava uz poslovnu
+    # jedinicu. `SifraPovezanogObjekta` deli i projekat LOGISTIKA, pa se u njega
+    # ne upisuje nasa sema - a neko poput Ilijane (reklamacije, magacin 010)
+    # tamo nema objekat uopste.
+    jedinica = _jedinica_po_prijavi(login)
+    if jedinica is not None:
+        return User(login.strip(), row["ime"], Role.POSLOVODJA, jedinica, funkcija)
     if "POSLOVODJA" in funkcija or "POSLOVOĐA" in funkcija:
         raise AuthError(
             "Poslovođa nema upisan objekat u šifarniku (SifraPovezanogObjekta), "
@@ -172,6 +180,26 @@ def load_person(login: str, settings: Settings | None = None) -> User:
             f"tim imenom."
         )
     return User(login.strip(), row["ime"], Role.OPERATER, None, funkcija)
+
+
+def _jedinica_po_prijavi(login: str) -> str | None:
+    """Sifra jedinice kojoj je prijava dodeljena u panelu, ako jeste."""
+    from ..db import session_scope
+    from ..models import BusinessUnit
+
+    prijava = (login or "").strip().lower()
+    if not prijava:
+        return None
+    try:
+        with session_scope() as session:
+            for jedinica in session.scalars(
+                select(BusinessUnit).where(BusinessUnit.logins.is_not(None))
+            ):
+                if prijava in jedinica.login_list():
+                    return (jedinica.erp_code or jedinica.code or "").strip() or None
+    except Exception as exc:  # noqa: BLE001 - prijava ne sme da padne zbog ovoga
+        log.warning("Spisak prijava po jedinicama nije procitan: %s", exc)
+    return None
 
 
 def authenticate(login: str, password: str, settings: Settings | None = None) -> User:

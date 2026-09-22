@@ -140,3 +140,45 @@ def test_poruka_kaze_pod_kojom_prijavom_je_pokusano(monkeypatch):
         auth.load_person("SelakDusan", settings=podesavanja)
 
     assert "SelakDusan" in str(greska.value)
+
+
+def test_prijava_bez_objekta_prolazi_ako_je_vezana_za_jedinicu(db, monkeypatch):
+    """Ilijana u sifarniku osoblja nema objekat, a treba da radi na magacinu 010.
+
+    `SifraPovezanogObjekta` koristi i projekat LOGISTIKA, pa se u njega ne sme
+    upisivati nasa sema - veza covek-jedinica zato stoji u panelu.
+    """
+    import sefsync.web.auth as auth
+    from sefsync.models import BusinessUnit, UnitKind
+
+    with db.session_scope() as session:
+        session.add(
+            BusinessUnit(code="MAG010", name="Povrat robe", kind=UnitKind.WAREHOUSE,
+                         erp_code="010", logins="ilijana", routable=False)
+        )
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"ime": "Krnjajić Ilijana", "funkcija": "REKLAMACIJE",
+                    "objekat": "", "aktivan": True}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(auth, "get_erp_engine", lambda: type("E", (), {"connect": lambda self: Conn()})())
+    podesavanja = get_settings()
+    monkeypatch.setattr(podesavanja, "web_operators", "NinaR,SelakDusan")
+
+    korisnik = auth.load_person("ilijana", settings=podesavanja)
+
+    assert korisnik.role is Role.POSLOVODJA
+    assert korisnik.unit_code == "010"

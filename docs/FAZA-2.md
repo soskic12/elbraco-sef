@@ -1298,17 +1298,29 @@ Uz to, u kartici „Tok" sada piše stanje kalkulacije: spremna, čeka šifru (s
 stavki), zaustavljena, ne ide kroz kalkulaciju, ili **u ERP-u** — sa brojem, ko je i
 kada pustio.
 
-### Magacin povraćaja: `010` u ERP-u, `110` u šifarniku osoblja (22.09.2026)
+### Ko radi u kojoj jedinici — veza stoji u panelu (22.09.2026, ispravljeno)
 
 Ilijana Krnjajić (`ilijana`, funkcija REKLAMACIJE) radi povraćaje. Da bi videla
 dokumente magacina 010, treba joj `SifraPovezanogObjekta` — ali **ne `010`**: ta
 šifra će jednog dana biti nova prodavnica, pa su to dva različita prostora imena.
 
-Odluka (Bane): kod osoblja stoji **`110`**, a `erp_code` ostaje **`010`**, jer je to
-magacin koji ide na kalkulaciju.
+Prvo rešenje je bilo da se kod osoblja upiše `110`. **Odbačeno**: `kontakti_osobe`
+u istom obliku koristi i projekat **LOGISTIKA**, pa upisivanje naše šeme u tuđu
+tabelu znači da im menjamo podatke. (Kolona `Napomena` je prazna na svih 36 redova,
+ali prisvajanje tuđeg slobodnog polja puca onog dana kad je oni zauzmu.)
 
-Dodato polje `BusinessUnit.staff_code`. Osoba se traži prvo po njemu, pa tek onda po
-`erp_code` (kako je kod prodavnica). Popunjava se na kartici „Poslovne jedinice".
+**Veza čovek–jedinica zato stoji kod nas**: `BusinessUnit.logins`, spisak prijava
+zarezom, popunjava se na kartici „Poslovne jedinice". Ko nije nigde naveden, nalazi
+se po starom — `SifraPovezanogObjekta` → `erp_code`, kako rade prodavnice.
+
+Time se rešava i prijava: Ilijana u šifarniku nema objekat, pa bi je stari kod odbio
+pre nego što se do jedinice uopšte dođe. Sada se, kad objekta nema, gleda spisak
+prijava u panelu.
+
+Isto važi za magacine (MAG021, MAG023, MAG026, MAG029): nijedan nema čoveka sa
+odgovarajućom šifrom objekta — svih 19 ljudi sa popunjenim objektom vodi na prodajna
+mesta MP001–MP009. Kad magacini budu radili u panelu, njihove prijave se upisuju
+ovde, bez diranja šifarnika osoblja.
 
 ### Ilijanin tok nije isti kao kod poslovođe — za kasnije
 
