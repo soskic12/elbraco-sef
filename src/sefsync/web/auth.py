@@ -28,7 +28,8 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import quote_plus
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import Settings, get_settings
 from ..erp.connection import ErpNotConfigured, get_erp_engine, resolve_erp_url
@@ -197,7 +198,10 @@ def _jedinica_po_prijavi(login: str) -> str | None:
             ):
                 if prijava in jedinica.login_list():
                     return (jedinica.erp_code or jedinica.code or "").strip() or None
-    except Exception as exc:  # noqa: BLE001 - prijava ne sme da padne zbog ovoga
+    except (SQLAlchemyError, OSError) as exc:
+        # Nedostupna baza ne sme da obori prijavu, ali greska u kodu sme - zato
+        # se ne hvata sve: prvi pokusaj je progutao NameError i tiho vracao
+        # "nema jedinice", pa je izgledalo kao da spisak prijava ne radi.
         log.warning("Spisak prijava po jedinicama nije procitan: %s", exc)
     return None
 
