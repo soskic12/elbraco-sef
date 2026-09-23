@@ -518,7 +518,10 @@ def pripremi(
             "DOBAVLJAC": dobavljac or "",
             "BROJ_RN_DOB": broj_racuna,
             "DAT_RAC_DOB": dan_prometa,
-            "DATUM_PRIJEM": dan_prometa,
+            # Datum prijema robe. Kod usluga prijema nema - na svih 3.076
+            # zaglavlja na 088 je nula, dok je na 010, 021 i u maloprodaji
+            # popunjen bez izuzetka (i skoro uvek jednak DATUM-u).
+            "DATUM_PRIJEM": 0 if bez_stavki else dan_prometa,
             "ROBNO_ZADUZ": round(osnovica, 2),
             "PDV": pdv_opsta,
             "PRENETIPOREZ": pdv_posebna,

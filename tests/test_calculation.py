@@ -272,7 +272,9 @@ def test_kalkulacija_nosi_datum_prometa_a_ne_danasnji(db, monkeypatch):
     promet = K.clarion_dan(dt.date(2026, 9, 15))
     assert nacrt.zaglavlje["DATUM"] == promet
     assert nacrt.zaglavlje["DAT_RAC_DOB"] == promet
-    assert nacrt.zaglavlje["DATUM_PRIJEM"] == promet
+    # Dokument je usluzni (OFFICE -> 088), a tamo prijema robe nema:
+    # vidi test_usluga_nema_datum_prijema_robe.
+    assert nacrt.zaglavlje["DATUM_PRIJEM"] == 0
 
 
 def test_faktura_sa_vise_poreskih_stopa_deli_pdv(db):
@@ -449,3 +451,80 @@ def test_racun_bez_neoporezivog_dela_nema_posebnu_evidenciju(db):
 
     nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
     assert nacrt.pdv_evidencija == []
+
+
+def test_usluga_nema_datum_prijema_robe(db):
+    """Uslugu niko ne primi, pa DATUM_PRIJEM ostaje nula.
+
+    Mereno: na svih 3.076 zaglavlja na 088 polje je nula, dok je na 010, 021 i
+    u maloprodaji popunjeno bez izuzetka. Prvi probni upis (088/02530) ga je
+    popunio i time se razlikovao od zapisa koji ERP sam napravi.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777023, document_number="KP-3/26", supplier_name="EPS",
+            supplier_vat="103920327", supplier_reg_no="20053658",
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=pj.id, issue_date=dt.date(2026, 9, 18),
+            delivery_date=dt.date(2026, 9, 1),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Struja", quantity=1,
+                                      line_amount=1000.0, vat_percent=20.0))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+    assert nacrt.zaglavlje["DATUM_PRIJEM"] == 0
+    # datum prometa i dalje stoji tamo gde treba
+    assert nacrt.zaglavlje["DATUM"] == K.clarion_dan(dt.date(2026, 9, 1))
+
+    # a kod robe se prijem upisuje - inace bi polje ostalo prazno tamo gde ERP
+    # ocekuje datum (010 i 021: popunjeno na svih 872 zaglavlja)
+    with db.session_scope() as session:
+        mag = BusinessUnit(code="MAG010", name="POVRAĆAJ", kind=UnitKind.WAREHOUSE,
+                           erp_code="010")
+        session.add(mag)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777024, document_number="RN-9/26", supplier_name="Dobavljač",
+            supplier_vat="100000000", supplier_reg_no="12345678",
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=mag.id, issue_date=dt.date(2026, 9, 18),
+            delivery_date=dt.date(2026, 9, 1),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Roba", quantity=1,
+                                      line_amount=1000.0, vat_percent=20.0))
+        session.add(doc)
+        session.flush()
+        doc_roba = doc.id
+
+    nacrt = K.pripremi(doc_roba, engine=type("E", (), {"connect": lambda self: Conn()})())
+    assert nacrt.zaglavlje["DATUM_PRIJEM"] == K.clarion_dan(dt.date(2026, 9, 1))
