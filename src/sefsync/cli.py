@@ -750,6 +750,67 @@ def cmd_nemapirane() -> None:
             typer.echo(f"  {n:>4}  {ime}")
 
 
+@app.command("stavke")
+def cmd_stavke(
+    broj: str = typer.Argument(..., help="Broj racuna dobavljaca (ili deo broja)."),
+) -> None:
+    """Ispisuje stavke jednog dokumenta: kolicina, iznos, stopa, poreska kategorija.
+
+    Sluzi kad neka faktura zaskripi u ERP-u pa treba videti sta je tacno u njoj -
+    npr. racun za struju gde su PDV i naknade razdvojeni po stavkama.
+    """
+    _boot()
+    from sqlalchemy import select as _select
+
+    from .models import Document
+
+    with session_scope() as session:
+        docs = list(
+            session.scalars(
+                _select(Document)
+                .where(Document.document_number.like(f"%{broj}%"))
+                .order_by(Document.issue_date.desc())
+            )
+        )
+        _ispisi_stavke(docs, broj)
+
+
+def _ispisi_stavke(docs, broj: str) -> None:
+    if not docs:
+        typer.secho(f"Nema dokumenta sa brojem koji sadrzi '{broj}'.", fg="red")
+        raise typer.Exit(1)
+    if len(docs) > 1:
+        typer.echo(f"Nadjeno {len(docs)} dokumenata, ispisujem sve.")
+        typer.echo("")
+
+    for doc in docs:
+        typer.echo(f"#{doc.id}  {doc.document_number}  {doc.supplier_name} (PIB {doc.supplier_vat})")
+        typer.echo(
+            f"   izdat {doc.issue_date}  promet {doc.delivery_date or '-'}  "
+            f"valuta {doc.due_date or '-'}"
+        )
+        typer.echo(
+            f"   osnovica {doc.sum_without_vat or 0:,.2f}  PDV {doc.vat_amount or 0:,.2f}  "
+            f"ukupno {doc.amount or 0:,.2f}"
+        )
+        typer.echo("")
+        typer.echo("   rb  kolicina        iznos  stopa kat  naziv")
+        po_stopi: dict[tuple[float | None, str | None], float] = {}
+        for linija in doc.lines:
+            kljuc = (linija.vat_percent, linija.vat_category)
+            po_stopi[kljuc] = po_stopi.get(kljuc, 0.0) + (linija.line_amount or 0.0)
+            typer.echo(
+                f"   {linija.line_no:>3} {linija.quantity or 0:>9.2f} "
+                f"{linija.line_amount or 0:>12,.2f} {linija.vat_percent or 0:>5.0f}% "
+                f"{(linija.vat_category or '-'):<3}  {(linija.name or '')[:44]}"
+            )
+        typer.echo("")
+        typer.echo("   zbir po stopi i kategoriji")
+        for (stopa, kat), iznos in sorted(po_stopi.items(), key=lambda t: (t[0][0] or 0)):
+            typer.echo(f"      {stopa or 0:>3.0f}% {kat or '-':<3} {iznos:>14,.2f}")
+        typer.echo("")
+
+
 @app.command("osvezi-ubl")
 def cmd_reparse(
     dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),
