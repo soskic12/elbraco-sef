@@ -43,6 +43,15 @@ IZVOR = "Elektronske fakture"
 TABELA_PDV_EVIDENCIJE = "PDVEVIDX"
 TIP_ULAZNI_RACUN = 1     # sifarnik TIPEVID: "ULAZNI RACUNI"
 TIP_BEZ_EPPDV = 23       # "ULAZNI RACUNI (BEZ EPPDV)" - deo koji ne nosi PDV
+TIP_POVRAT_ROBE = 35     # "Povrat robe" - stoji na stavkama knjiznih odobrenja
+
+# Clarion ne ostavlja NULL: u kolonu koja nije popunjena upisuje nulu ili prazan
+# string. Nas INSERT je nabrajao samo polja koja racunamo, pa je ostalo 78 kolona
+# sa NULL-om kojih u ERP-ovim zapisima nema nijedna.
+TIPOVI_BROJEVI = {"tinyint", "smallint", "int", "bigint", "float", "real",
+                  "decimal", "numeric", "money", "smallmoney"}
+TIPOVI_TEKST = {"char", "varchar", "nchar", "nvarchar", "text", "ntext"}
+_KOLONE: dict[str, dict[str, str]] = {}
 
 # Izmereno na 4.652 kalkulacije: stopa -> sintetski konto poreza.
 SINTPOR_PO_STOPI = {20.0: "270", 10.0: "271", 0.0: "272"}
@@ -416,6 +425,11 @@ def pripremi(
                 "ROB_CENA": neto,
                 "IZNOS": vrednost,
                 "DOBAV": dobavljac or "",
+                # Tip poreske evidencije stavke. Mereno: na 021 je 1 na svih
+                # 1.376 stavki i u maloprodaji isto, a na 010 je 35 ("Povrat
+                # robe") na 690 od 692 - i svih 690 su negativne stavke, sto je
+                # tacno ono sto knjizno odobrenje i pravi.
+                "IDPDV": TIP_POVRAT_ROBE if predznak < 0 else TIP_ULAZNI_RACUN,
                 "_izvor_sifre": odakle,
             }
 
@@ -559,6 +573,36 @@ def pripremi(
 # --------------------------------------------------------------------------- #
 
 
+def dopuni_prazna(conn: Connection, tabela: str, red: dict) -> dict:
+    """Popunjava kolone koje nismo racunali - nulom ili praznim stringom.
+
+    ERP je Clarion aplikacija i nigde ne ostavlja NULL: u uzorku od 200 zapisa
+    na 021 svih 78 kolona koje app ne dira ima 0 odnosno prazan string. Nas
+    INSERT je nabrajao samo svoja polja, pa je ostatak ostajao NULL - zapis koji
+    se po tome razlikuje od svih ostalih u bazi.
+    """
+    if tabela not in _KOLONE:
+        _KOLONE[tabela] = {
+            r.COLUMN_NAME: r.DATA_TYPE
+            for r in conn.execute(
+                text(
+                    "select COLUMN_NAME, DATA_TYPE from INFORMATION_SCHEMA.COLUMNS "
+                    "where TABLE_NAME = :t"
+                ),
+                {"t": tabela},
+            )
+        }
+    dopunjen = dict(red)
+    for kolona, tip in _KOLONE[tabela].items():
+        if kolona in dopunjen:
+            continue
+        if tip in TIPOVI_BROJEVI:
+            dopunjen[kolona] = 0
+        elif tip in TIPOVI_TEKST:
+            dopunjen[kolona] = ""
+    return dopunjen
+
+
 def _vrednost(v) -> str:
     if v is None:
         return "NULL"
@@ -660,16 +704,18 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
                 for s in nacrt.stavke:
                     s["BROJ"] = broj
 
-                kolone = list(nacrt.zaglavlje)
+                zaglavlje = dopuni_prazna(conn, nacrt.tabela_zaglavlja, nacrt.zaglavlje)
+                kolone = list(zaglavlje)
                 conn.execute(
                     text(
                         f"INSERT INTO dbo.{nacrt.tabela_zaglavlja} ({', '.join(kolone)}) "
                         f"VALUES ({', '.join(':' + k for k in kolone)})"
                     ),
-                    nacrt.zaglavlje,
+                    zaglavlje,
                 )
                 for s in nacrt.stavke:
                     vidljive = {k: v for k, v in s.items() if not k.startswith("_")}
+                    vidljive = dopuni_prazna(conn, nacrt.tabela_stavki, vidljive)
                     kolone = list(vidljive)
                     conn.execute(
                         text(
@@ -679,7 +725,10 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
                         vidljive,
                     )
                 for red in nacrt.pdv_evidencija:
-                    vidljive = dict(red, DOKUMENT=f"{nacrt.magacin}{broj}")
+                    vidljive = dopuni_prazna(
+                        conn, TABELA_PDV_EVIDENCIJE,
+                        dict(red, DOKUMENT=f"{nacrt.magacin}{broj}"),
+                    )
                     kolone = list(vidljive)
                     conn.execute(
                         text(

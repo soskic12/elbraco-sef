@@ -531,3 +531,105 @@ def test_usluga_nema_datum_prijema_robe(db):
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == K.clarion_dan(dt.date(2026, 9, 1))
     # Isto pravilo vazi i za MENJA_CENU: kalkulacija robe formira cenu, usluga ne.
     assert nacrt.zaglavlje["MENJA_CENU"] == "Da"
+
+
+def test_dopuna_praznih_kolona():
+    """Kolone koje app ne racuna dobijaju nulu ili prazan string, ne NULL.
+
+    ERP je Clarion aplikacija i nigde ne ostavlja NULL: u uzorku od 200 zapisa
+    na 021 svih 78 kolona koje app ne dira ima 0 odnosno prazan string.
+    """
+    from sefsync.erp import kalkulacija as K
+
+    class Conn:
+        def execute(self, *a, **k):
+            return [
+                type("R", (), {"COLUMN_NAME": "MAGACIN", "DATA_TYPE": "varchar"}),
+                type("R", (), {"COLUMN_NAME": "IZNOS", "DATA_TYPE": "float"}),
+                type("R", (), {"COLUMN_NAME": "CARINA", "DATA_TYPE": "float"}),
+                type("R", (), {"COLUMN_NAME": "VAL", "DATA_TYPE": "varchar"}),
+                type("R", (), {"COLUMN_NAME": "STATUSID", "DATA_TYPE": "int"}),
+                type("R", (), {"COLUMN_NAME": "NESTO", "DATA_TYPE": "datetime"}),
+            ]
+
+    K._KOLONE.pop("PROBA", None)
+    red = K.dopuni_prazna(Conn(), "PROBA", {"MAGACIN": "021", "IZNOS": 1200.0})
+
+    assert red["MAGACIN"] == "021"      # nase vrednosti ostaju
+    assert red["IZNOS"] == 1200.0
+    assert red["CARINA"] == 0           # brojevi dobijaju nulu
+    assert red["STATUSID"] == 0
+    assert red["VAL"] == ""             # tekst prazan string
+    assert "NESTO" not in red           # ostale tipove ne diramo
+    K._KOLONE.pop("PROBA", None)
+
+
+def test_knjizno_odobrenje_nosi_tip_povrat_robe(db):
+    """Stavka knjiznog odobrenja ide u evidenciju kao povrat robe (TIPEVID 35).
+
+    Mereno: na 010 je IDPDV = 35 na 690 od 692 stavki i svih 690 su negativne,
+    dok je na 021 i u maloprodaji 1 bez izuzetka.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import (
+        BusinessUnit, Document, DocumentLine, DocumentType, ItemMapping, SefStatus,
+        UnitKind,
+    )
+
+    with db.session_scope() as session:
+        mag = BusinessUnit(code="MAG010", name="POVRAĆAJ", kind=UnitKind.WAREHOUSE,
+                           erp_code="010")
+        session.add(mag)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777025, document_number="KO-1/26", supplier_name="Dobavljač",
+            supplier_vat="100000000", supplier_reg_no="12345678",
+            document_type=DocumentType.CREDIT_NOTE,
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=mag.id, issue_date=dt.date(2026, 9, 18),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Vraćena roba", quantity=1,
+                                      line_amount=1000.0, vat_percent=20.0,
+                                      sellers_item_id="DOB-77"))
+        session.add(doc)
+        session.add(ItemMapping(supplier_vat="100000000", supplier_item_id="DOB-77",
+                                erp_item_code="12345", active=True))
+        session.flush()
+        doc_id = doc.id
+
+    class Red:
+        """Red iz ARTIKLI onakav kakav ocekuje `_artikal`."""
+
+        _mapping = {"artikal": "12345", "naziv": "Vraćena roba", "jm": "kom",
+                    "tarifa": "002"}
+
+        def __getitem__(self, i):
+            return 20.0          # PTARIFE.STOPA
+
+    class Conn:
+        def execute(self, *a, **k):
+            self.upit = str(a[0]) if a else ""
+            return self
+
+        def first(self):
+            return Red() if "ARTIKLI" in self.upit or "PTARIFE" in self.upit else None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+    assert nacrt.stavke, "nacrt nema nijednu stavku - test ne bi proveravao nista"
+    for stavka in nacrt.stavke:
+        assert stavka["IDPDV"] == K.TIP_POVRAT_ROBE
+        assert stavka["KOLICINA"] < 0      # odobrenje ulazi minusom
