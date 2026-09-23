@@ -1398,3 +1398,26 @@ nikakva izmena koda.
 Pouka za ubuduće: kad jedan dobavljač snabdeva sve objekte, PIB nije dovoljan signal.
 Razlika između EPS-a i FORMA PLUS-a je baš u tome — EPS uvek ide na jedno mesto, FORMA
 PLUS nikad.
+
+## Kako se proverava da upis liči na ERP-ov (23.09.)
+
+Prva dva probna upisa sam poredio **polje po polje**, i tako našao dve greške —
+pa stao. Treći put sam pustio poređenje **svih kolona odjednom**: za svaku kolonu
+se uzme šta ERP piše u 200 svojih zapisa na istom magacinu, i ako je tamo jedna te
+ista vrednost u bar 90 % slučajeva, to je konvencija — pa se uporedi sa našom.
+
+Izašla je **81 razlika**. Toliko ih polje-po-polje ne bih našao nikad.
+
+| nalaz | šta je bilo |
+|---|---|
+| `DATUM_PRIJEM` | app ga pisala i kod usluga; na 088 je nula na svih 3.076 zapisa |
+| `MENJA_CENU` | app gledala „je li maloprodaja"; ERP piše `Da` svuda gde ima robe |
+| `IDPDV` | app ga uopšte nije pisala; na 010 je 35 („Povrat robe") na 690 od 692 |
+| **78 kolona sa NULL-om** | Clarion nigde ne ostavlja NULL nego nulu ili prazan string |
+
+Posle ispravki poređenje izlazi prazno, osim `PROKNJIZENO` — naša je 0
+(nezaknjižena), a stari uzorci su zaključani (2). Ta razlika **mora** da ostane.
+
+**Pouka o metodu:** kad se upisuje u tuđu šemu, ne poredi se ono čega se setiš nego
+sve što se može uporediti. Tabela ima 61 kolonu, app računa 22 — ostalih 39 se ne
+vide dok ih neko ne izbroji.
