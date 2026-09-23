@@ -1421,3 +1421,19 @@ Posle ispravki poređenje izlazi prazno, osim `PROKNJIZENO` — naša je 0
 **Pouka o metodu:** kad se upisuje u tuđu šemu, ne poredi se ono čega se setiš nego
 sve što se može uporediti. Tabela ima 61 kolonu, app računa 22 — ostalih 39 se ne
 vide dok ih neko ne izbroji.
+
+### Sva tri toka su prošla istu proveru
+
+| tok | zapis u `ELBSX_2026` | šta je posebno provereno |
+|---|---|---|
+| usluga | `ULKALKUL 088/02530` | podela PDV evidencije (TIP 1 + TIP 23), bez stavki |
+| veleprodaja | `ULKALKUL 021/00227` | tarifa, RBR, rabat po stavkama, `IDPDV` |
+| maloprodaja | `MKALKUL 008/00466` | marža: `MALACENA`, `IZN_RUCM`, `MPVRED1/2`, `UKAL_PDV1/2` |
+
+Kod maloprodaje su sva četiri zbira iz zaglavlja izvedena iz stavki i poklopila se
+u dinar, a `MALACENA` je na sve četiri stavke jednaka tekućoj ceni objekta u
+`ARTPROD`.
+
+**App ne izmišlja cenu.** Uzima tekuću cenu objekta i iz nje izvodi maržu. Kad
+nabavna poskupi, marža ispadne manja — odluka da se cena digne ostaje poslovođi,
+kao i pre.
