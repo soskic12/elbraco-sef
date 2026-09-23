@@ -100,18 +100,40 @@ Instalirati sa https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver
 
 # Port ume da bude zauzet (IIS) ili u rezervisanom opsegu (Hyper-V, WinNAT).
 # Bolje da se sazna ovde nego da servis tiho ne moze da se veze.
+#
+# Kod nadogradnje port po pravilu drzi sam panel koji jos radi - to nije
+# problem nego ocekivano stanje, pa se prvo gleda ko je vlasnik. Bez te
+# provere je 22.09. svaka nadogradnja ispisivala upozorenje i savet da se
+# pokrene "-Port 8088" kad je port vec bio 8088.
+function Ko-Drzi-Port($broj) {
+    try {
+        $veza = Get-NetTCPConnection -LocalPort $broj -State Listen -ErrorAction Stop |
+                Select-Object -First 1
+        return Get-Process -Id $veza.OwningProcess -ErrorAction Stop
+    } catch { return $null }
+}
+
 $slusac = $null
 try {
     $slusac = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any, $Port)
     $slusac.Start()
     Write-Host "   port ${Port}: slobodan"
 } catch {
-    Write-Warning @"
+    $vlasnik = Ko-Drzi-Port $Port
+    $nas = $vlasnik -and $vlasnik.Path -and
+           $vlasnik.Path.StartsWith($Odrediste, [StringComparison]::OrdinalIgnoreCase)
+    if ($nas) {
+        Write-Host "   port ${Port}: drzi ga panel koji radi (PID $($vlasnik.Id)) - zaustavicu ga pre kopiranja"
+    } else {
+        $ko = if ($vlasnik) { "$($vlasnik.ProcessName) (PID $($vlasnik.Id)) $($vlasnik.Path)" }
+              else { 'niko ne slusa - port je verovatno u rezervisanom opsegu' }
+        Write-Warning @"
 Port $Port se ne moze zauzeti: $($_.Exception.Message)
-Ko ga drzi:            netstat -ano | findstr :$Port
+Drzi ga: $ko
 Rezervisani opsezi:    netsh interface ipv4 show excludedportrange protocol=tcp
-Pa pokreni sa drugim portom, npr:   -Port 8088
+Port se menja u .env-u (WEB_PORT) ili izricito: -Port <drugi broj>
 "@
+    }
 } finally {
     if ($slusac) { $slusac.Stop() }
 }
