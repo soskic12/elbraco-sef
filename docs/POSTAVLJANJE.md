@@ -145,10 +145,8 @@ jer svaki menja podatke, a ne kod.
 # 1. paket sa razvojne masine -> C:\objave\sefsync-paket.zip  (prekopirati rucno)
 
 # 2. raspakuj i pokreni skriptu IZ PAKETA
-Expand-Archive C:\objave\sefsync-paket.zip C:\objave
-ovo -Force
-powershell -ExecutionPolicy Bypass -File C:\objave
-ovo\postavi.ps1 `
+Expand-Archive C:\objave\sefsync-paket.zip C:\objave\novo -Force
+powershell -ExecutionPolicy Bypass -File C:\objave\novo\postavi.ps1 `
     -Arhiva C:\objave\sefsync-paket.zip -Stvarno
 
 # 3. pravila i mapiranja artikala (samo kad su se menjala)
@@ -161,8 +159,7 @@ C:\efakture\.venv\Scripts\sefsync.exe osvezi-ubl
 C:\efakture\.venv\Scripts\sefsync.exe razvrstaj
 ```
 
-**Skripta se pokreće iz `C:\objave
-ovo\`, ne iz `C:\objave\`.** Kopija u
+**Skripta se pokreće iz `C:\objave\novo\`, ne iz `C:\objave\`.** Kopija u
 `C:\objave\` zaostaje za paketom — 22.09. je zbog toga prepisala `WEB_PORT` i
 oborila panel, a 23.09. je i dalje ispisivala upozorenje o portu iako je popravka
 već bila u paketu. Iz raspakovanog foldera skripta i paket su uvek ista verzija.
