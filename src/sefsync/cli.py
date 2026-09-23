@@ -750,6 +750,51 @@ def cmd_nemapirane() -> None:
             typer.echo(f"  {n:>4}  {ime}")
 
 
+@app.command("zaboravi-upis")
+def cmd_zaboravi_upis(
+    document_id: int = typer.Argument(..., help="ID dokumenta u panelu."),
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispiše."),
+) -> None:
+    """Skida oznaku „upisano u ERP" sa nacrta, da se upis može ponoviti.
+
+    Nacrt koji je jednom otisao u ERP se namerno ne vraca unazad - inace bi
+    ponovno racunanje obrisalo trag o tome sta je vec zaknjizeno. Kod probnih
+    upisa u ELBSX_2026 je to smetnja: zapis se obrise iz ERP-a, a panel i dalje
+    misli da postoji, pa dugmeta nema.
+
+    NE dira ERP. Zapis u ELBSX/ELBS se brise zasebno, pre ovoga.
+    """
+    _boot()
+
+    from .models import NacrtKalkulacije, StanjeNacrta
+
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None:
+            typer.secho(f"Dokument #{document_id} nema nacrt.", fg="red")
+            raise typer.Exit(1)
+        if red.stanje is not StanjeNacrta.UPISAN:
+            typer.echo(f"#{document_id}: stanje je „{red.stanje.value}“ — nema šta da se skine.")
+            raise typer.Exit(0)
+
+        typer.echo(
+            f"#{document_id}  {red.magacin or '?'}  {red.erp_broj or '?'}  "
+            f"upisao {red.upisao or '?'} {red.upisano_u or ''}"
+        )
+        if not stvarno:
+            typer.echo("")
+            typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+            typer.echo("Pre toga obriši zapis iz ERP-a, inače ga zaustavi provera duplikata.")
+            raise typer.Exit(0)
+
+        red.stanje = StanjeNacrta.SPREMAN
+        red.erp_broj = None
+        red.upisano_u = None
+        red.upisao = None
+
+    typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
+
+
 @app.command("stavke")
 def cmd_stavke(
     broj: str = typer.Argument(..., help="Broj racuna dobavljaca (ili deo broja)."),
