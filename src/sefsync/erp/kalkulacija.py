@@ -526,7 +526,11 @@ def pripremi(
             "PDV": pdv_opsta,
             "PRENETIPOREZ": pdv_posebna,
             "IZNOS_ZA_NAP": za_naplatu,
-            "MENJA_CENU": "Da" if maloprodaja else "",
+            # "Da" znaci da kalkulacija formira cenu. Mereno: tako je svuda gde
+            # ima robe - maloprodaja 4.809, 010 587, 021 285 zapisa - a prazno
+            # je samo na uslugama (088, 3.076). Ranije je app gledala da li je
+            # maloprodaja, pa je veleprodaji pisala prazno.
+            "MENJA_CENU": "" if bez_stavki else "Da",
             "OBRACUN_MALO": "",
             "MODEL": 0,
             "VALUTA": rok,

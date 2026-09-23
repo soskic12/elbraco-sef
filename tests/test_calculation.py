@@ -503,6 +503,7 @@ def test_usluga_nema_datum_prijema_robe(db):
 
     nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == 0
+    assert nacrt.zaglavlje["MENJA_CENU"] == ""
     # datum prometa i dalje stoji tamo gde treba
     assert nacrt.zaglavlje["DATUM"] == K.clarion_dan(dt.date(2026, 9, 1))
 
@@ -528,3 +529,5 @@ def test_usluga_nema_datum_prijema_robe(db):
 
     nacrt = K.pripremi(doc_roba, engine=type("E", (), {"connect": lambda self: Conn()})())
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == K.clarion_dan(dt.date(2026, 9, 1))
+    # Isto pravilo vazi i za MENJA_CENU: kalkulacija robe formira cenu, usluga ne.
+    assert nacrt.zaglavlje["MENJA_CENU"] == "Da"
