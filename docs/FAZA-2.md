@@ -1377,3 +1377,24 @@ ostalih 36 dira 21, 27 ili 34.
 
 **Račun koji bi bio ceo neoporeziv se ne dira.** Takav u istoriji ne postoji, pa nema
 po čemu da se proveri šta bi ERP očekivao u zaglavlju.
+
+## Tri nerazvrstana dobavljača, tri različita odgovora (23.09.)
+
+Komanda `razvrstaj` sada ispisuje i **koji** dokumenti ostaju, pa se odmah videlo da
+devet nerazvrstanih čine samo tri dobavljača. Nijedan od njih nema pravilo — nisu
+dakle propala, nego ih nikad nismo mapirali. Gde im roba stvarno ulazi u ERP:
+
+| dobavljač | u ERP-u | odluka |
+|---|---|---|
+| **FORMA PLUS** (101717578) | 63 kalkulacije, razbacane po **svim** prodavnicama 001–009 (po ~9 na svaku) | pravilo „dobavljač → jedinica" bi bilo pogrešno |
+| **EPS** (103920327) | 37 kalkulacija, **svih 37 na 088** | pravilo #263, prioritet 60, kao ostalih 25 režijskih |
+| **Rolostil pr / Predrag Gajić** (100754526) | nijedna kalkulacija | nov dobavljač, ide operateru |
+
+**FORMA PLUS se uči iz napomene.** Postojećih sedam razvrstava operater ručno; od
+sledeće fakture dobavljač u napomenu upisuje oznaku objekta, pa se pravilo piše nad
+poljem `note` — ono je već podržano i u `MatchField` i u `routing_fields()`, ne treba
+nikakva izmena koda.
+
+Pouka za ubuduće: kad jedan dobavljač snabdeva sve objekte, PIB nije dovoljan signal.
+Razlika između EPS-a i FORMA PLUS-a je baš u tome — EPS uvek ide na jedno mesto, FORMA
+PLUS nikad.
