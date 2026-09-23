@@ -595,13 +595,33 @@ def cmd_reroute(
     typer.echo(f"Razvrstavam {len(ids)} dokumenata...")
     servis = IngestService()
     razvrstano = 0
+    ostali: list[int] = []
     for doc_id in ids:
         try:
             if servis.reroute(doc_id) is not RoutingSource.NONE:
                 razvrstano += 1
+            else:
+                ostali.append(doc_id)
         except Exception as exc:  # noqa: BLE001
             typer.secho(f"  #{doc_id}: {exc}", fg="yellow")
     typer.echo(f"Razvrstano: {razvrstano} od {len(ids)}")
+
+    # Ko su ostali, a ne samo koliko ih je. Bez ovoga je "Razvrstano: 0 od 8"
+    # jedino sto se vidi sa konzole, pa se ne zna da li je to osam obicnih
+    # dokumenata za operatera ili novi dobavljac kome fali pravilo.
+    if ostali:
+        typer.echo("")
+        typer.echo("Cekaju operatera (nijedno pravilo ih ne hvata):")
+        with session_scope() as session:
+            docs = session.scalars(
+                _select(Document).where(Document.id.in_(ostali)).order_by(Document.issue_date)
+            )
+            for d in docs:
+                datum = d.issue_date.isoformat() if d.issue_date else "?"
+                typer.echo(
+                    f"  {datum}  {d.document_number or '?':<20} "
+                    f"{(d.supplier_name or '?')[:34]:<34} PIB {d.supplier_vat or '?'}"
+                )
 
 
 @app.command("mapiranje")
