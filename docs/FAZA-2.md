@@ -1437,3 +1437,53 @@ u dinar, a `MALACENA` je na sve četiri stavke jednaka tekućoj ceni objekta u
 **App ne izmišlja cenu.** Uzima tekuću cenu objekta i iz nje izvodi maržu. Kad
 nabavna poskupi, marža ispadne manja — odluka da se cena digne ostaje poslovođi,
 kao i pre.
+
+## Magacin 010 — povrat robe (23.09.)
+
+`MAGACINI`: **010 = „Povrat robe"**, 012 = „REZERVACIJA MAGACINI", 011 = „USLUGE",
+088 = „BEZ EVIDENCIJE U ROBNOM".
+
+Kako ERP vodi povrate danas — 587 zaglavlja, 692 stavke:
+
+| | |
+|---|---|
+| sve negativno | osnovica, PDV, ukupno; količina na svih 692 stavke |
+| **nabavna cena pozitivna** | minus nosi količina, ne cena |
+| rabat | **nijedna stavka ga nema** (0 od 692) |
+| `IDPDV` | 35 „Povrat robe" (690), 34 „Finansijsko odobrenje" (1), 1 (1) |
+| `KONTO` / `STAVKE` / `MENJA_CENU` | 435 / Da / Da, bez izuzetka |
+| tab „Veza robno" (`ZMAG`, `ZARTIKAL`, `BROJ_PRIJEM`) | prazan na svih 587 |
+
+**Cena dolazi sa knjižnog odobrenja, ne iz ranije kalkulacije.** Od 16 uporedivih
+slučajeva 9 se poklopilo sa ranijom kupovinom, 7 nije (povrat 15.210 gde je kupovina
+bila 14.742). Zato app cenu računa iz dokumenta, kako i radi.
+
+**Rabat se uračunava** (Bane, 23.09.). Da knjižno odobrenje navede rabat, app piše
+`FAK_CENA` bruto, `RABAT_PROC`, `IZN_RABATA` i neto `NAB_CENA` — isto kao kod
+kupovine. To što ERP na 010 nema nijedan rabat je zato što ih odobrenja ne nose, a
+ne zato što se ne smeju upisati.
+
+### Eurotehna: 88 od 587 kalkulacija
+
+Njihova odobrenja ne navode artikal nego vezu ka saglasnosti. Bane: dva puta do
+artikla —
+
+1. **kroz stavku**, gde piše na koju se saglasnost odnosi, pa Ilijana sama upiše
+   artikal sa te saglasnosti;
+2. **kroz napomenu**, gde stoji za koji uređaj je odobrenje — *„to bi možda moglo
+   da se automatizuje"*.
+
+Drugi put je kandidat za pravilo nad poljem `note`, isto kao kod FORMA PLUS-a. Pre
+bilo kakvog koda treba videti kako ta napomena stvarno izgleda na više odobrenja;
+zato `sefsync stavke` sada ispisuje i napomenu, prilog i veze.
+
+### Ilijanin tok — zaseban posao
+
+Njoj roba ne stiže spolja: prebaci je maloprodaja internim prenosom. Baneova ideja
+(23.09.): iskoristiti **magacin 012** i logiku iz projekta **LOGISTIKA** — Ilijana
+traži prebačaj od objekta, dokument se napravi **do faze knjiženja**, objekat dobije
+obaveštenje da ga zaknjiži; isto i za „čišćenje" njenog magacina knjižnim odobrenjem.
+
+Prenos se **ne vodi kroz kalkulacije** — u `ULKALKUL` i `MKALKUL` je `VRSTAKNJIZ`
+uvek `'U'`. Kandidati su `PROMETPR` i `PRIRACUN`, ali to se ne pogađa iz tabela:
+LOGISTIKA taj tok već ima, pa se kreće od njenog koda.

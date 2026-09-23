@@ -838,6 +838,20 @@ def _ispisi_stavke(docs, broj: str) -> None:
             f"   osnovica {doc.sum_without_vat or 0:,.2f}  PDV {doc.vat_amount or 0:,.2f}  "
             f"ukupno {doc.amount or 0:,.2f}"
         )
+        if doc.billing_reference:
+            typer.echo(f"   ispravlja: {doc.billing_reference} ({doc.billing_reference_count} veza)")
+        for oznaka, tekst in (
+            ("napomena", doc.note),
+            ("prilog", doc.attachment_text),
+            ("poziv kupca", doc.buyer_reference),
+            ("ugovor", doc.contract_reference),
+            ("dodatna veza", doc.additional_reference),
+        ):
+            if tekst:
+                sazeto = " ".join(str(tekst).split())
+                if len(sazeto) > 300:
+                    sazeto = sazeto[:300] + " […]"
+                typer.echo(f"   {oznaka}: {sazeto}")
         typer.echo("")
         typer.echo("   rb  kolicina        iznos  stopa kat  naziv")
         po_stopi: dict[tuple[float | None, str | None], float] = {}
