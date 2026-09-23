@@ -37,6 +37,13 @@ CLARION_NULA = dt.date(1800, 12, 28)
 MAGACIN_ULAZNI_RACUN = "088"
 IZVOR = "Elektronske fakture"
 
+# Podela racuna po tipu PDV evidencije (tab POPDV na formi ulaznog racuna).
+# Redovi se pisu u PDVEVIDX; knjizenje ih razvije u PDVEVID. Mereno: podelu ima
+# 87 od 3.075 racuna na 088 i kod svih se broj redova poklapa red za red.
+TABELA_PDV_EVIDENCIJE = "PDVEVIDX"
+TIP_ULAZNI_RACUN = 1     # sifarnik TIPEVID: "ULAZNI RACUNI"
+TIP_BEZ_EPPDV = 23       # "ULAZNI RACUNI (BEZ EPPDV)" - deo koji ne nosi PDV
+
 # Izmereno na 4.652 kalkulacije: stopa -> sintetski konto poreza.
 SINTPOR_PO_STOPI = {20.0: "270", 10.0: "271", 0.0: "272"}
 
@@ -112,6 +119,7 @@ class Nacrt:
     stavke: list[dict] = field(default_factory=list)
     problemi: list[str] = field(default_factory=list)
     nemapirane: list[dict] = field(default_factory=list)  # stavke bez nase sifre
+    pdv_evidencija: list[dict] = field(default_factory=list)  # redovi za PDVEVIDX
 
     @property
     def spreman(self) -> bool:
@@ -465,6 +473,40 @@ def pripremi(
         if bez_stavki and not pdv_opsta and not pdv_posebna:
             pdv_opsta = round(pdv_ukupno, 2)
 
+        # Deo racuna koji ne nosi PDV ide u posebnu evidenciju. Mereno na EPS
+        # racunu KP101016682899: stavka "JMS taksa" 349,00 nosi kategoriju OE
+        # (nije predmet PDV-a), a ERP ju je na 088/03039 upisao kao red TIP 23,
+        # dok je ostatak 46.961,11 = 39.134,26 + 7.826,85 upisan kao TIP 1.
+        #
+        # Pise se samo prava podela - racun koji je ceo oporeziv (2.988 od
+        # 3.075) nema red u PDVEVIDX i ERP mu evidenciju izvede iz zaglavlja.
+        # Racun koji bi bio ceo neoporeziv se ne dira: takav u istoriji ne
+        # postoji, pa nema po cemu da se proveri sta bi ERP ocekivao.
+        if bez_stavki:
+            neoporezivo = _po(0.0, "osnovica")
+            oporezivo = round(_po(10.0, "osnovica") + _po(20.0, "osnovica"), 2)
+            if neoporezivo and oporezivo:
+                nacrt.pdv_evidencija = [
+                    {
+                        "REDBR": 1,
+                        "TIP": TIP_ULAZNI_RACUN,
+                        "IZNOS": round(oporezivo + pdv_posebna + pdv_opsta, 2),
+                        "OSNOVA1": _po(10.0, "osnovica"),
+                        "PDV1": pdv_posebna,
+                        "OSNOVA2": _po(20.0, "osnovica"),
+                        "PDV2": pdv_opsta,
+                    },
+                    {
+                        "REDBR": 2,
+                        "TIP": TIP_BEZ_EPPDV,
+                        "IZNOS": neoporezivo,
+                        "OSNOVA1": 0.0,
+                        "PDV1": 0.0,
+                        "OSNOVA2": 0.0,
+                        "PDV2": 0.0,
+                    },
+                ]
+
         rok = clarion_dan(doc.due_date) if doc.due_date else 0
         nacrt.zaglavlje = {
             "LASTUSER": 1,
@@ -629,6 +671,16 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
                         ),
                         vidljive,
                     )
+                for red in nacrt.pdv_evidencija:
+                    vidljive = dict(red, DOKUMENT=f"{nacrt.magacin}{broj}")
+                    kolone = list(vidljive)
+                    conn.execute(
+                        text(
+                            f"INSERT INTO dbo.{TABELA_PDV_EVIDENCIJE} ({', '.join(kolone)}) "
+                            f"VALUES ({', '.join(':' + k for k in kolone)})"
+                        ),
+                        vidljive,
+                    )
             break
         except IntegrityError:
             # Neko je u medjuvremenu uzeo taj broj - u ERP-u ili drugi upis nas.
@@ -641,4 +693,8 @@ def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:
             time.sleep(0.2 * pokusaj)
 
     log.info("Kalkulacija %s/%s upisana u %s", nacrt.magacin, broj, baza)
-    return f"{baza}: {nacrt.tabela_zaglavlja} {nacrt.magacin}/U/{broj}, stavki {len(nacrt.stavke)}"
+    opis = f"{baza}: {nacrt.tabela_zaglavlja} {nacrt.magacin}/U/{broj}, stavki {len(nacrt.stavke)}"
+    if nacrt.pdv_evidencija:
+        tipovi = ", ".join(str(r["TIP"]) for r in nacrt.pdv_evidencija)
+        opis += f", PDV evidencija po tipovima {tipovi}"
+    return opis

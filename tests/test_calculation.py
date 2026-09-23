@@ -328,3 +328,124 @@ def test_faktura_sa_vise_poreskih_stopa_deli_pdv(db):
 
     assert nacrt.zaglavlje["PDV"] == 200.0            # 20 % od 1.000
     assert nacrt.zaglavlje["PRENETIPOREZ"] == 50.0    # 10 % od 500
+
+
+def test_racun_za_struju_deli_evidenciju_na_tip_1_i_23(db):
+    """Deo racuna bez PDV-a ide u posebnu evidenciju (PDVEVIDX), a ne u zbir.
+
+    Po pravom EPS racunu KP101016682899: stavka "JMS taksa" 349,00 nosi
+    kategoriju OE (nije predmet PDV-a), a osnovica za struju 39.134,26 nosi
+    20 %. ERP je to na 088/03039 upisao kao dva reda - TIP 1 sa 46.961,11 i
+    TIP 23 sa 349,00. Do sada je app pisala jedan iznos, pa je poreska
+    evidencija ispadala veca nego sto jeste.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777021, document_number="KP101016682899",
+            supplier_name="EPS AD Beograd", supplier_vat="103920327",
+            supplier_reg_no="20053658", amount=47310.11, vat_amount=7826.85,
+            sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+            issue_date=dt.date(2026, 9, 17), delivery_date=dt.date(2026, 9, 1),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="JMS taksa", quantity=1,
+                                      line_amount=349.0, vat_percent=0.0,
+                                      vat_category="OE"))
+        doc.lines.append(DocumentLine(line_no=2, name="Osnovica za elektricnu energiju",
+                                      quantity=1, line_amount=39134.26,
+                                      vat_percent=20.0, vat_category="S"))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+
+    oporezivi, neoporezivi = nacrt.pdv_evidencija
+    assert oporezivi["TIP"] == K.TIP_ULAZNI_RACUN
+    assert oporezivi["IZNOS"] == 46961.11        # 39.134,26 + 7.826,85
+    assert oporezivi["OSNOVA2"] == 39134.26
+    assert oporezivi["PDV2"] == 7826.85
+    assert neoporezivi["TIP"] == K.TIP_BEZ_EPPDV
+    assert neoporezivi["IZNOS"] == 349.0
+    assert neoporezivi["PDV2"] == 0.0
+    # zbir oba reda mora da da ukupan iznos racuna
+    assert round(oporezivi["IZNOS"] + neoporezivi["IZNOS"], 2) == 47310.11
+    # zaglavlje se ne menja - PDV ostaje samo stvarni porez
+    assert nacrt.zaglavlje["PDV"] == 7826.85
+    assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 47310.11
+
+
+def test_racun_bez_neoporezivog_dela_nema_posebnu_evidenciju(db):
+    """Racun koji je ceo oporeziv nema red u PDVEVIDX - ERP ga izvede sam.
+
+    Mereno: 2.988 od 3.075 racuna na 088 nema nijedan red u toj tabeli.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777022, document_number="KP-2/26", supplier_name="Telekom",
+            supplier_vat="100002887", supplier_reg_no="17162543",
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=pj.id, issue_date=dt.date(2026, 9, 18),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Telefon", quantity=1,
+                                      line_amount=1000.0, vat_percent=20.0,
+                                      vat_category="S"))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+    assert nacrt.pdv_evidencija == []
