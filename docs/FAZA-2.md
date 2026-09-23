@@ -1330,3 +1330,50 @@ je maloprodaja prebacila internim prenosom**, a ne za prijem isporuke. Zato joj 
 
 Ostaje da se prođe ceo taj tok (interni prenos → razduženje → knjižno odobrenje) i
 napravi šta treba. Zabeleženo da se ne izgubi; Bane: „ima još detalja".
+
+## PDV evidencija: šta piše app, a šta knjiženje
+
+Dule je na prvom pravom upisu prijavio da kod računa za struju „stavke razdvajaju
+PDV i da se to kuca ručno". Izmereno gde tačno, jer su u igri dve tabele sličnog
+imena:
+
+| | ko piše | ključ |
+|---|---|---|
+| **`PDVEVIDX`** | **čovek pri unosu** (tab POPDV na formi ulaznog računa) | `DOKUMENT = '088'+broj`, `REDBR`, `TIP` |
+| `PDVEVID` | **knjiženje** | `UR88<broj><redbr>`, odnosno `ULK`/`ULM`+magacin+broj |
+
+Od **3.075** računa na 088 **svih 3.075** ima red u `PDVEVID`, a samo **87** ima red
+u `PDVEVIDX` — i kod svih 87 se broj redova poklapa red za red (2↔2, 3↔3). Kad
+podele nema (2.988 računa), ERP sam izvede jedan red iz zaglavlja.
+
+**Zato app piše `PDVEVIDX`, a `PDVEVID` nikada.** Ranije zabeleženo „PDVEVID ne
+treba" je bilo tačno, ali nepotpuno — `PDVEVIDX` je tada promakao.
+
+### Pravilo se čita iz same fakture
+
+Na EPS računu `KP101016682899` stavka „JMS taksa" 349,00 nosi kategoriju **OE**
+(nije predmet PDV-a, `PDV-RS-17-4-2`), a osnovica za struju 39.134,26 nosi 20 %.
+ERP je to na `088/03039` zapisao kao:
+
+```
+REDBR 1  TIP  1  IZNOS 46.961,11  OSNOVA2 39.134,26  PDV2 7.826,85
+REDBR 2  TIP 23  IZNOS    349,00  OSNOVA2      0,00  PDV2     0,00
+```
+
+Dakle: **neoporezivi deo → TIP 23, oporezivi deo → TIP 1**, zbir daje iznos računa.
+`OSNOVA1/PDV1` su posebna stopa (10 %), `OSNOVA2/PDV2` opšta (20 %) — isti raspored
+kao `MPVRED1/MPVRED2` u maloprodaji.
+
+### Šta app namerno ne radi
+
+**TIP 21** („bez prava na odbitak") — svih 16 redova nosi PDV, i to su gorivo
+(Knez petrol, Lukoil, OMV, Euro petrol) i deo struje. Odbitak zavisi od namene, ne
+od fakture, pa to ostaje čoveku.
+
+**TIP 27** („bez evidencije u KPR") — 27 redova, sitni iznosi kod komunalnih.
+
+Po skupu tipova: **51** od 87 podeljenih računa je čisto 1 + 23, dakle app ih pokriva;
+ostalih 36 dira 21, 27 ili 34.
+
+**Račun koji bi bio ceo neoporeziv se ne dira.** Takav u istoriji ne postoji, pa nema
+po čemu da se proveri šta bi ERP očekivao u zaglavlju.
