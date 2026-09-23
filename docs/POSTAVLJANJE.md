@@ -136,16 +136,36 @@ Tada skripta upiše taj port u `.env` i kaže šta je promenila.
 
 ---
 
-## Nova verzija na server
+## Nova verzija na server — redosled
 
-Posle `postavi.ps1 -Stvarno` idu još tri koraka. Skripta ih ne radi sama jer svaki
-menja podatke, a ne kod.
+**Sve na serveru, PowerShell kao administrator.** Koraci 3–5 skripta ne radi sama
+jer svaki menja podatke, a ne kod.
 
 ```powershell
+# 1. paket sa razvojne masine -> C:\objave\sefsync-paket.zip  (prekopirati rucno)
+
+# 2. raspakuj i pokreni skriptu IZ PAKETA
+Expand-Archive C:\objave\sefsync-paket.zip C:\objave
+ovo -Force
+powershell -ExecutionPolicy Bypass -File C:\objave
+ovo\postavi.ps1 `
+    -Arhiva C:\objave\sefsync-paket.zip -Stvarno
+
+# 3. pravila i mapiranja artikala (samo kad su se menjala)
 C:\efakture\.venv\Scripts\sefsync.exe pravila-uvoz C:\efakture\pravila.json
+
+# 4. ponovno citanje UBL-ova (samo kad se menjao parser)
 C:\efakture\.venv\Scripts\sefsync.exe osvezi-ubl
+
+# 5. razvrstavanje onoga sto jos nema PJ
 C:\efakture\.venv\Scripts\sefsync.exe razvrstaj
 ```
+
+**Skripta se pokreće iz `C:\objave
+ovo\`, ne iz `C:\objave\`.** Kopija u
+`C:\objave\` zaostaje za paketom — 22.09. je zbog toga prepisala `WEB_PORT` i
+oborila panel, a 23.09. je i dalje ispisivala upozorenje o portu iako je popravka
+već bila u paketu. Iz raspakovanog foldera skripta i paket su uvek ista verzija.
 
 **`pravila-uvoz`** — pravila razvrstavanja i mapiranja artikala nisu u kodu nego u
 bazi. Bez ovoga nova verzija radi po starim pravilima. Uvoz ne duplira, prenosi i
