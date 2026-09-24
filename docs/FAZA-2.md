@@ -1491,19 +1491,31 @@ LOGISTIKA taj tok već ima, pa se kreće od njenog koda.
 ### Odobrenje bez artikla: predlog iz napomene (24.09.)
 
 Mereno na **967 knjižnih odobrenja** iz panela (arhivirana uključena — bez njih se
-gleda dvadesetak najnovijih i ništa se ne vidi):
+gleda dvadesetak najnovijih i ništa se ne vidi).
+
+Prva dva merenja su davala tačne brojeve o pogrešnom skupu:
+
+1. „791 već navodi artikal" — kriterijum je bio spisak ključnih reči u nazivu
+   stavke, pa je promašio „KNJIZNO ODOBRENJE 20%" (EWE COMP). Ispravno je pitati
+   `_nasa_sifra` da li stavka uopšte dobije šifru.
+2. I posle toga je brojka („53 od 574") i dalje merila pogrešno: u njoj su bila i
+   **finansijska odobrenja** — rabat, bonus, podrška prodaji — koja idu na 088 i
+   kojima artikal uopšte ne treba.
+
+Podela koja nešto znači je po tome **gde odobrenje ide**:
 
 | | |
 |---|---|
-| stavka već navodi artikal | **791** — njima ne treba ništa |
-| **razrešeno iz napomene** | **53** (49 po iznosu, 4 jedina stavka) |
-| napomena ne nosi broj računa | 91 (Comtrade 41, Eurotehna 20, CSM 16) |
-| račun nije nađen, ali model jeste | 19 |
-| račun nađen, više stavki sa istim iznosom | 9 |
-| račun nije nađen | 4 |
+| ide na **088**, artikal ne treba | **384** |
+| povrat na 010, sve stavke imaju šifru | **317** |
+| **povrat staje, ima predlog** | **53** |
+| **povrat staje, nema predloga** | **182** |
+| nerazvrstano | 31 |
 
-**Tačnost: 50 od 52 (96 %)**, provereno naspram artikla koji je čovek stvarno uneo
-u ERP za to isto odobrenje. Dva promašaja:
+Dakle staje **235** povrata, a predlog rešava **53 — nepunu četvrtinu**.
+
+**Tačnost tih 53: 50 od 52 (96 %)**, provereno naspram artikla koji je čovek
+stvarno uneo u ERP za to isto odobrenje. Dva promašaja:
 
 - `587FN-2026` — predlog `84655 Gorenje RIU 609 EA1`, čovek `95961 GorenjeRIU609EA1`:
   **isti uređaj pod dve šifre**, nije greška predloga nego dupliran artikal
