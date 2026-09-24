@@ -575,16 +575,25 @@ def cmd_reroute(
     sve: bool = typer.Option(
         False, "--sve", help="Ponovo razvrstaj i one koji već imaju PJ (ne dira ručne)."
     ),
+    odobrenja: bool = typer.Option(
+        False, "--odobrenja", help="Samo knjižna odobrenja."
+    ),
 ) -> None:
     """Primenjuje pravila na dokumente koji čekaju razvrstavanje."""
     _boot()
     from sqlalchemy import select as _select
 
-    from .models import Document, RoutingSource
+    from .models import Document, DocumentType, RoutingSource
     from .services.ingest import IngestService
 
     with session_scope() as session:
         upit = _select(Document.id).where(Document.archived == False)
+        if odobrenja:
+            # Odobrenja su jedina vrsta kod koje pogresna PJ znaci da roba ostane
+            # na stanju: umesto povrata na 010 zavrsi kao usluga na 088. Mereno
+            # 24.09.: zapisane odluke se sa stvarnim magacinom poklapaju u 36 %,
+            # a danasnji motor u 93 % - razlika su stare odluke, ne pravila.
+            upit = upit.where(Document.document_type == DocumentType.CREDIT_NOTE)
         if not sve:
             upit = upit.where(Document.business_unit_id.is_(None))
         else:

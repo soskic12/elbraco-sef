@@ -1519,3 +1519,30 @@ traženje, 4 % je razlog da se ne potpisuje naslepo.
    u prethodnim godinama". Nalog vidi 2026 i 2025; za dublje treba SELECT na starije.
 2. Dobavljači ne paze na padež: `587FN-2026` glasi „po **racun** broj 2082 VP-2026".
    Prva verzija regexa je tražila „računu/fakturi" i promašila ih.
+
+### Zapisana odluka zastareva (24.09.)
+
+Poređenje: gde app šalje knjižno odobrenje naspram toga gde ga je čovek stvarno
+stavio, na **877** odobrenja koja postoje i u panelu i u ERP-u:
+
+| | |
+|---|---|
+| **zapisano u bazi panela** | 318 (36,3 %) |
+| **današnji motor, preračunato** | **818 (93,3 %)** |
+
+Razlika nisu pravila nego **stare odluke**: dokumenti razvrstani pre ispravke koja
+knjižna odobrenja prevodi na 010 i dalje nose maloprodajnu jedinicu. Kod odobrenja
+to nije kozmetika — kalkulacija bi otišla u `MKALKUL 002` umesto na 010, pa roba
+nikad ne bi sišla sa stanja.
+
+Zato `razvrstaj --odobrenja` preračunava samo tu vrstu. `--sve` i dalje dira sve,
+pa i dokumente koje je operater već prosledio; kod odobrenja je rizik obrnut od
+uobičajenog, jer pogrešna PJ ostavlja manjak koji se ne vidi kao greška.
+
+Šta i danas promaši (59 od 877): 25 nerazvrstanih koja idu na 010, 16 sa 088 na
+010, 11 sa 010 na 088 (finansijska odobrenja bez robe), 6 nerazvrstanih na 088.
+
+**Pouka o merenju:** prvo sam izmerio 36 % i skoro javio da razvrstavanje ne valja.
+Broj je bio tačan, ali je merio zatečeno stanje baze, a ne ponašanje koda. Kad se
+meri „da li app radi kako treba", mora se pustiti kod, a ne čitati šta je zapisano
+od ranije.
