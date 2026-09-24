@@ -26,7 +26,9 @@ from sqlalchemy.engine import Connection
 # "po racunu broj 851 VP-2026 od 16.03.2026." - broj ume da ima razmak u sebi,
 # pa se hvata sve do " od " ili do zareza/tacke.
 _BROJ_RACUNA = re.compile(
-    r"po\s+(?:ra[cč]unu|fakturi|otpremnici)\s*(?:broj|br\.?)?\s*"
+    # "po racunu", "po racun", "po fakturi", "po otpremnici" - dobavljaci ne paze
+    # na padez, a 587FN-2026 glasi bas "po racun broj 2082 VP-2026".
+    r"po\s+(?:ra[cč]un\w*|fakt\w*|otprem\w*)\s*(?:broj|br\.?)?\s*"
     r"([0-9][0-9A-Za-z\-/ ]{2,24}?)"
     r"(?=\s+od\b|\s*[,.;]|$)",
     re.IGNORECASE,
@@ -155,3 +157,29 @@ def artikal_po_modelu(conn: Connection, napomena: str | None) -> list[dict]:
         )
         nadjeno.extend(dict(r._mapping) | {"model": model} for r in red)
     return nadjeno
+
+
+def izaberi_stavku(nadjeno: list[dict], osnovica: float | None) -> tuple[dict | None, str]:
+    """Bira stavku sa originalne fakture. Vraca (stavka, kako je izabrana).
+
+    Faktura ume da ima vise redova, a odobrenje se odnosi na jedan. Iznos je taj
+    koji razdvaja: kod svih razresenih odobrenja se nabavna cena poklopila sa
+    osnovicom odobrenja u dinar (615FN-2026: 43.470,70).
+    """
+    if not nadjeno:
+        return None, "nema"
+    if len(nadjeno) == 1:
+        return nadjeno[0], "jedina stavka"
+    if osnovica is None:
+        return None, "vise stavki, odobrenje bez osnovice"
+
+    po_iznosu = [x for x in nadjeno if abs(float(x["nabavna"]) - float(osnovica)) < 1.0]
+    if len(po_iznosu) == 1:
+        return po_iznosu[0], "po iznosu"
+    if len(po_iznosu) > 1:
+        # Isti artikal u vise redova je i dalje jedan odgovor.
+        sifre = {x["artikal"] for x in po_iznosu}
+        if len(sifre) == 1:
+            return po_iznosu[0], "po iznosu (isti artikal u vise redova)"
+        return None, "vise stavki sa istim iznosom"
+    return None, "nijedna stavka ne odgovara iznosu"

@@ -1487,3 +1487,35 @@ obaveštenje da ga zaknjiži; isto i za „čišćenje" njenog magacina knjižni
 Prenos se **ne vodi kroz kalkulacije** — u `ULKALKUL` i `MKALKUL` je `VRSTAKNJIZ`
 uvek `'U'`. Kandidati su `PROMETPR` i `PRIRACUN`, ali to se ne pogađa iz tabela:
 LOGISTIKA taj tok već ima, pa se kreće od njenog koda.
+
+### Odobrenje bez artikla: predlog iz napomene (24.09.)
+
+Mereno na **967 knjižnih odobrenja** iz panela (arhivirana uključena — bez njih se
+gleda dvadesetak najnovijih i ništa se ne vidi):
+
+| | |
+|---|---|
+| stavka već navodi artikal | **791** — njima ne treba ništa |
+| **razrešeno iz napomene** | **53** (49 po iznosu, 4 jedina stavka) |
+| napomena ne nosi broj računa | 91 (Comtrade 41, Eurotehna 20, CSM 16) |
+| račun nije nađen, ali model jeste | 19 |
+| račun nađen, više stavki sa istim iznosom | 9 |
+| račun nije nađen | 4 |
+
+**Tačnost: 50 od 52 (96 %)**, provereno naspram artikla koji je čovek stvarno uneo
+u ERP za to isto odobrenje. Dva promašaja:
+
+- `587FN-2026` — predlog `84655 Gorenje RIU 609 EA1`, čovek `95961 GorenjeRIU609EA1`:
+  **isti uređaj pod dve šifre**, nije greška predloga nego dupliran artikal
+- `568FN-2026` — predlog `95048`, čovek `95086`: pravi promašaj
+
+Zato predlog **ide čoveku na potvrdu**, ne u kalkulaciju sam od sebe. 96 % štedi
+traženje, 4 % je razlog da se ne potpisuje naslepo.
+
+**Dva nalaza usput koja se ne bi videla iz jednog primera:**
+
+1. Broj fakture se traži **kroz sve dostupne godine** — 18 od 53 je nađeno u
+   `ELBS_2025`. Bane: „ovakva k.o. čisto stižu za robu kojoj je kalkulacija ulazna
+   u prethodnim godinama". Nalog vidi 2026 i 2025; za dublje treba SELECT na starije.
+2. Dobavljači ne paze na padež: `587FN-2026` glasi „po **racun** broj 2082 VP-2026".
+   Prva verzija regexa je tražila „računu/fakturi" i promašila ih.

@@ -872,7 +872,8 @@ def _ispisi_stavke(docs, broj: str) -> None:
 
 @app.command("meri-odobrenja")
 def cmd_meri_odobrenja(
-    koliko: int = typer.Option(15, help="Koliko primera ispisati."),
+    koliko: int = typer.Option(10, help="Koliko primera ispisati."),
+    dobavljac: str = typer.Option(None, help="Samo taj PIB."),
 ) -> None:
     """Koliko knjižnih odobrenja bez artikla se može razrešiti iz napomene.
 
@@ -891,7 +892,7 @@ def cmd_meri_odobrenja(
     from .models import Document, DocumentType
     from .services.odobrenja import (
         artikal_po_modelu, artikli_sa_racuna, baze_po_godinama,
-        broj_originalnog_racuna, sifra_postoji_danas,
+        broj_originalnog_racuna, izaberi_stavku, sifra_postoji_danas,
     )
 
     with session_scope() as session:
@@ -899,7 +900,8 @@ def cmd_meri_odobrenja(
             session.scalars(
                 _select(Document)
                 .where(Document.document_type == DocumentType.CREDIT_NOTE)
-                .where(Document.archived == False)  # noqa: E712
+                # Arhivirana odobrenja su upravo istorija na kojoj ovo ima smisla
+                # meriti - bez njih se gleda dvadesetak najnovijih.
                 .order_by(Document.issue_date.desc())
             )
         )
@@ -916,44 +918,57 @@ def cmd_meri_odobrenja(
                 "stavke": [x.name or "" for x in d.lines],
             }
             for d in odobrenja
+            if not dobavljac or (d.supplier_vat or "") == dobavljac
         ]
 
     typer.echo(f"Knjižnih odobrenja: {len(podaci)}")
     ishod: Counter = Counter()
     po_godini: Counter = Counter()
+    bez_broja: Counter = Counter()
     primeri: list[str] = []
+    napomene: list[str] = []
 
     with get_erp_engine().connect() as conn:
         typer.echo(f"Baze koje smem da čitam: {', '.join(baze_po_godinama(conn)) or '—'}")
         for o in podaci:
+            # Odobrenje koje navodi artikal ne treba nikakvu pomoć - meri se samo
+            # ono gde stavka nije artikal ("Odobrenje po Saglasnosti broj …").
+            tekst_stavki = " ".join(o["stavke"]).lower()
+            trazi_pomoc = not o["stavke"] or any(
+                rec in tekst_stavki
+                for rec in ("saglasnost", "odobrenje po", "rabat", "naknadn")
+            )
+            if not trazi_pomoc:
+                ishod["stavka već navodi artikal"] += 1
+                continue
+            bez_broja[o["dobavljac"] or "?"] += 0  # da se dobavljač pojavi u preseku
             broj = broj_originalnog_racuna(o["napomena"])
             if broj is None:
                 ishod["napomena ne nosi broj računa"] += 1
+                bez_broja[o["dobavljac"] or "?"] += 1
+                if len(napomene) < koliko:
+                    n = " ".join((o["napomena"] or "(prazna)").split())
+                    napomene.append(f"   {o['broj']:<18} {(o['dobavljac'] or '?')[:22]:<22} {n[:90]}")
                 continue
             dobavljac = _analitika_dobavljaca(conn, o["mb"], o["pib"], o["racun"])
             if dobavljac is None:
                 ishod["dobavljač nije u NAZIVI"] += 1
                 continue
             nadjeno = artikli_sa_racuna(conn, dobavljac, broj)
-            if len(nadjeno) == 1:
-                a = nadjeno[0]
-                slaze = (
-                    o["iznos"] is not None
-                    and abs(float(a["nabavna"]) - float(o["iznos"])) < 1.0
-                )
+            a, kako = izaberi_stavku(nadjeno, o["iznos"])
+            if a is not None:
                 po_godini[a["baza"]] += 1
                 if not sifra_postoji_danas(conn, a["artikal"]):
-                    ishod["jedna stavka, ali šifre više nema u šifarniku"] += 1
+                    ishod["razrešeno, ali šifre više nema u šifarniku"] += 1
                 else:
-                    ishod["jedna stavka" + (" (iznos se slaže)" if slaze else "")] += 1
+                    ishod[f"razrešeno ({kako})"] += 1
                 if len(primeri) < koliko:
                     primeri.append(
                         f"   {o['broj']:<18} -> {broj:<14} {a['baza']:<10} {a['artikal']} "
-                        f"{a['naziv'][:28]:<28} nab {float(a['nabavna']):>10,.2f}"
-                        + ("  = osnovica" if slaze else "")
+                        f"{a['naziv'][:26]:<26} nab {float(a['nabavna']):>10,.2f}  {kako}"
                     )
             elif nadjeno:
-                ishod[f"više stavki na računu"] += 1
+                ishod[f"račun nađen, ali {kako}"] += 1
             else:
                 po_modelu = artikal_po_modelu(conn, o["napomena"])
                 ishod["račun nije nađen" + (", ali model jeste" if po_modelu else "")] += 1
@@ -971,6 +986,16 @@ def cmd_meri_odobrenja(
         typer.echo("Primeri razrešenih:")
         for p in primeri:
             typer.echo(p)
+    if bez_broja:
+        typer.echo("")
+        typer.echo("Odobrenja bez artikla, po dobavljaču (u zagradi bez broja računa):")
+        for ime, n in bez_broja.most_common(10):
+            typer.echo(f"   {ime[:40]:<40} ({n})")
+    if napomene:
+        typer.echo("")
+        typer.echo("Kako izgledaju napomene iz kojih broj nije izvučen:")
+        for n in napomene:
+            typer.echo(n)
 
 
 @app.command("osvezi-ubl")
