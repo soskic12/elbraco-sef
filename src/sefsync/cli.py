@@ -890,7 +890,8 @@ def cmd_meri_odobrenja(
     from .erp.kalkulacija import _analitika_dobavljaca
     from .models import Document, DocumentType
     from .services.odobrenja import (
-        artikal_po_modelu, artikli_sa_racuna, broj_originalnog_racuna,
+        artikal_po_modelu, artikli_sa_racuna, baze_po_godinama,
+        broj_originalnog_racuna, sifra_postoji_danas,
     )
 
     with session_scope() as session:
@@ -919,9 +920,11 @@ def cmd_meri_odobrenja(
 
     typer.echo(f"Knjižnih odobrenja: {len(podaci)}")
     ishod: Counter = Counter()
+    po_godini: Counter = Counter()
     primeri: list[str] = []
 
     with get_erp_engine().connect() as conn:
+        typer.echo(f"Baze koje smem da čitam: {', '.join(baze_po_godinama(conn)) or '—'}")
         for o in podaci:
             broj = broj_originalnog_racuna(o["napomena"])
             if broj is None:
@@ -938,11 +941,15 @@ def cmd_meri_odobrenja(
                     o["iznos"] is not None
                     and abs(float(a["nabavna"]) - float(o["iznos"])) < 1.0
                 )
-                ishod["jedna stavka" + (" (iznos se slaže)" if slaze else "")] += 1
+                po_godini[a["baza"]] += 1
+                if not sifra_postoji_danas(conn, a["artikal"]):
+                    ishod["jedna stavka, ali šifre više nema u šifarniku"] += 1
+                else:
+                    ishod["jedna stavka" + (" (iznos se slaže)" if slaze else "")] += 1
                 if len(primeri) < koliko:
                     primeri.append(
-                        f"   {o['broj']:<18} -> {broj:<14} {a['artikal']} "
-                        f"{a['naziv'][:30]:<30} nab {float(a['nabavna']):>10,.2f}"
+                        f"   {o['broj']:<18} -> {broj:<14} {a['baza']:<10} {a['artikal']} "
+                        f"{a['naziv'][:28]:<28} nab {float(a['nabavna']):>10,.2f}"
                         + ("  = osnovica" if slaze else "")
                     )
             elif nadjeno:
@@ -954,6 +961,11 @@ def cmd_meri_odobrenja(
     typer.echo("")
     for uzrok, n in ishod.most_common():
         typer.echo(f"  {n:>4}  {uzrok}")
+    if po_godini:
+        typer.echo("")
+        typer.echo("Iz koje godine je originalna faktura:")
+        for baza, n in po_godini.most_common():
+            typer.echo(f"  {n:>4}  {baza}")
     if primeri:
         typer.echo("")
         typer.echo("Primeri razrešenih:")

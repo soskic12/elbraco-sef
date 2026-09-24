@@ -44,8 +44,44 @@ def broj_originalnog_racuna(napomena: str | None) -> str | None:
     return broj or None
 
 
+_BAZE: list[str] | None = None
+
+
+def baze_po_godinama(conn: Connection) -> list[str]:
+    """Baze ERP-a po godinama, od najnovije, samo one koje nas nalog sme da cita.
+
+    ERP drzi godinu po bazi (ELBS_2026, ELBS_2025, ...). Knjizno odobrenje po
+    reklamaciji stize za robu koja je kupljena ranije - Bane, 24.09.: "ovakva
+    k.o. cisto stizu za robu kojoj je kalkulacija ulazna u prethodnim godinama".
+    Pretraga samo tekuce godine bi ih zato promasila.
+
+    Mereno 24.09.: nalog vidi ELBS_2026 i ELBS_2025; na starije nema pravo, pa se
+    tiho preskacu umesto da svaki upit puca.
+    """
+    global _BAZE
+    if _BAZE is None:
+        kandidati = [
+            r[0]
+            for r in conn.execute(
+                text(
+                    "select name from sys.databases where name like 'ELBS[_]20%' "
+                    "and state = 0 order by name desc"
+                )
+            )
+        ]
+        dostupne = []
+        for baza in kandidati:
+            try:
+                conn.execute(text(f"select top 1 1 from [{baza}].dbo.ULKALKUL"))
+                dostupne.append(baza)
+            except Exception:  # noqa: BLE001 - nema prava ili baza nije podignuta
+                continue
+        _BAZE = dostupne
+    return _BAZE
+
+
 def artikli_sa_racuna(conn: Connection, dobavljac: str, broj_racuna: str) -> list[dict]:
-    """Stavke ranije kalkulacije za taj broj racuna, iz veleprodaje i maloprodaje.
+    """Stavke ranije kalkulacije za taj broj racuna, kroz sve dostupne godine.
 
     Broj se poredi bez razmaka, jer ga dobavljac u napomeni pise razdvojeno
     ("851 VP-2026"), a u ERP-u stoji spojeno ("851VP-2026").
@@ -55,22 +91,40 @@ def artikli_sa_racuna(conn: Connection, dobavljac: str, broj_racuna: str) -> lis
         ("MKALKUL", "MPRULK"),
     )
     nadjeno: list[dict] = []
-    for zaglavlje, stavke in upiti:
-        red = conn.execute(
-            text(
-                f"select RTRIM(z.MAGACIN) magacin, RTRIM(z.BROJ) broj, "
-                f"RTRIM(s.ARTIKAL) artikal, RTRIM(s.NAZIV) naziv, "
-                f"s.KOLICINA kolicina, s.NAB_CENA nabavna "
-                f"from dbo.{zaglavlje} z join dbo.{stavke} s "
-                f"  on RTRIM(z.MAGACIN)=RTRIM(s.MAGACIN) and RTRIM(z.BROJ)=RTRIM(s.BROJ) "
-                f" and RTRIM(z.VRSTAKNJIZ)=RTRIM(s.VRSTAKNJIZ) "
-                f"where RTRIM(z.DOBAVLJAC)=:d "
-                f"  and REPLACE(RTRIM(z.BROJ_RN_DOB),' ','')=:b and s.KOLICINA > 0"
-            ),
-            {"d": dobavljac, "b": broj_racuna},
-        )
-        nadjeno.extend(dict(r._mapping) for r in red)
+    for baza in baze_po_godinama(conn):
+        for zaglavlje, stavke in upiti:
+            red = conn.execute(
+                text(
+                    f"select RTRIM(z.MAGACIN) magacin, RTRIM(z.BROJ) broj, "
+                    f"RTRIM(s.ARTIKAL) artikal, RTRIM(s.NAZIV) naziv, "
+                    f"s.KOLICINA kolicina, s.NAB_CENA nabavna "
+                    f"from [{baza}].dbo.{zaglavlje} z join [{baza}].dbo.{stavke} s "
+                    f"  on RTRIM(z.MAGACIN)=RTRIM(s.MAGACIN) and RTRIM(z.BROJ)=RTRIM(s.BROJ) "
+                    f" and RTRIM(z.VRSTAKNJIZ)=RTRIM(s.VRSTAKNJIZ) "
+                    f"where RTRIM(z.DOBAVLJAC)=:d "
+                    f"  and REPLACE(RTRIM(z.BROJ_RN_DOB),' ','')=:b and s.KOLICINA > 0"
+                ),
+                {"d": dobavljac, "b": broj_racuna},
+            )
+            nadjeno.extend(dict(r._mapping) | {"baza": baza} for r in red)
     return nadjeno
+
+
+def sifra_postoji_danas(conn: Connection, artikal: str) -> bool:
+    """Da li sifra iz stare godine i dalje postoji u tekucem sifarniku.
+
+    Bez ove provere bi predlog iz 2025. mogao da vodi na sifru koje vise nema,
+    pa bi kalkulacija pukla tek pri upisu.
+    """
+    return bool(
+        conn.execute(
+            text(
+                "select top 1 1 from dbo.ARTIKLI "
+                "where RTRIM(ARTIKAL)=:a and RTRIM(SIFRAMAG)='099'"
+            ),
+            {"a": artikal},
+        ).first()
+    )
 
 
 def artikal_po_modelu(conn: Connection, napomena: str | None) -> list[dict]:
