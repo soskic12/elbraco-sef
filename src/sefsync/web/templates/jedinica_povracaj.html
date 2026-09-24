@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin-top:0">{{ unit.name }} · povraćaj robe</h2>
+  <p class="small muted" style="margin-top:2px">
+    Knjižna odobrenja razvrstana na magacin {{ unit.erp_code }}.
+    Roba ovde ne stiže spolja — zato nema potvrde prijema; kalkulaciju upisuješ ti,
+    kad su sve stavke povezane.
+  </p>
+  <p class="small" style="margin-top:6px">
+    <strong>{{ spremno }}</strong> spremno za upis ·
+    <strong>{{ ceka_sifru }}</strong> čeka šifru
+    {% if popusta %} · <a href="/popusti"><strong>{{ popusta }}</strong> popusta za prenos</a>{% endif %}
+  </p>
+</div>
+
+{% for doc in documents %}
+{% set n = nacrti.get(doc.id) %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+    <div>
+      <a href="/dokument/{{ doc.id }}"><strong>{{ doc.document_number }}</strong></a>
+      <span class="muted small"> · {{ doc.issue_date }}</span><br>
+      <span class="small">{{ (doc.supplier_name or '')[:46] }}</span>
+    </div>
+    <div style="text-align:right">
+      <strong>{{ '%.2f'|format(doc.amount or 0) }}</strong>
+      <span class="muted small">{{ doc.currency }}</span><br>
+      {% if n and n.stanje.value == 'upisan' %}
+        <span class="tag ok">u ERP-u {{ n.erp_broj or '' }}</span>
+        <div class="muted small">{{ n.upisao }}</div>
+      {% elif n and n.stanje.value == 'spreman' %}
+        <form class="inline" method="post" action="/dokument/{{ doc.id }}/upisi-kalkulaciju"
+              onsubmit="return confirm('Upisati kalkulaciju za {{ doc.document_number }}?')">
+          <button type="submit">Upiši kalkulaciju</button>
+        </form>
+      {% elif n and n.stanje.value == 'ceka_sifru' %}
+        <span class="tag warn">čeka šifru</span>
+      {% elif n and n.stanje.value == 'ne_treba' %}
+        <span class="muted small">ne ide kroz kalkulaciju</span>
+      {% elif n %}
+        <span class="tag err">zaustavljena</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if doc.note %}
+  <div class="small muted" style="margin-top:6px;border-left:3px solid var(--line);padding-left:8px">
+    {{ doc.note[:260] }}
+  </div>
+  {% endif %}
+
+  {% if n and n.stanje.value == 'ceka_sifru' %}
+  <table class="small" style="width:100%;margin-top:8px">
+    <tr><th style="width:26px">#</th><th>Stavka sa odobrenja</th><th style="width:300px">Naša šifra</th></tr>
+    {% for s in n.nemapirane or [] %}
+    <tr>
+      <td>{{ s.line_no }}</td>
+      <td>{{ s.naziv }}
+        {% if s.predlog %}
+        <div class="small" style="margin-top:4px;padding:4px 6px;border-left:3px solid #2a7;
+                                  background:rgba(34,119,68,.07)">
+          predlog: <strong>{{ s.predlog.sifra }}</strong> {{ s.predlog.naziv }}<br>
+          <span class="muted">po računu {{ s.predlog.racun }} ({{ s.predlog.magacin }},
+            {{ s.predlog.baza }}), nabavna {{ '%.2f'|format(s.predlog.nabavna) }}</span>
+        </div>
+        {% endif %}
+      </td>
+      <td>
+        <form class="inline" method="post" action="/sifre/povezi">
+          <input type="hidden" name="document_id" value="{{ doc.id }}">
+          <input type="hidden" name="line_no" value="{{ s.line_no }}">
+          <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345"
+                 {% if s.predlog %}value="{{ s.predlog.sifra }}"{% endif %}>
+          <button type="submit">Poveži</button>
+        </form>
+        <form class="inline" method="post" action="/sifre/nije-artikal"
+              onsubmit="return confirm('Ova stavka nije artikal i neće ući u kalkulaciju?')">
+          <input type="hidden" name="document_id" value="{{ doc.id }}">
+          <input type="hidden" name="line_no" value="{{ s.line_no }}">
+          <button class="ghost small" type="submit">nije artikal</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if n and n.stanje.value == 'problem' %}
+  <div class="small" style="margin-top:6px;color:#b91c1c">{{ (n.problemi or [])|join('; ') }}</div>
+  {% endif %}
+</div>
+{% else %}
+<div class="card">Nema knjižnih odobrenja.</div>
+{% endfor %}
+
+{% endblock %}

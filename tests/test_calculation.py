@@ -807,3 +807,30 @@ def test_prepoznaje_kalkulaciju_koju_je_covek_napravio_rucno(monkeypatch):
 
     monkeypatch.setattr("sefsync.erp.kalkulacija.postojeca_kalkulacija", puca)
     assert N._vec_u_erpu(nacrt, engine=Engine()) is None
+
+
+def test_vrsta_ekrana_po_jedinici():
+    """Ilijana i Bogdan dobijaju svoje ekrane, objekat svoj.
+
+    Bane, 24.09.: „ilijana treba da ima svoj a ne operatorski ekran; 088 je u
+    stvari Bogdanovo, i po meni treba da ima prilagođen ekran".
+    """
+    from sefsync.models import BusinessUnit, UnitKind
+    from sefsync.web.app import (
+        EKRAN_OBJEKAT, EKRAN_POVRACAJ, EKRAN_USLUGE, _vrsta_ekrana,
+    )
+
+    povracaj = BusinessUnit(code="MAG010", name="Povrat robe",
+                            kind=UnitKind.WAREHOUSE, erp_code="010")
+    usluge = BusinessUnit(code="MAG088", name="BEZ EVIDENCIJE",
+                          kind=UnitKind.WAREHOUSE, erp_code="088")
+    objekat = BusinessUnit(code="MP002", name="APATIN",
+                           kind=UnitKind.RETAIL, erp_code="002")
+
+    assert _vrsta_ekrana(povracaj) == EKRAN_POVRACAJ
+    assert _vrsta_ekrana(usluge) == EKRAN_USLUGE
+    assert _vrsta_ekrana(objekat) == EKRAN_OBJEKAT
+
+    # jedinica bez erp_code pada na svoju sifru, ne puca
+    bez = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+    assert _vrsta_ekrana(bez) == EKRAN_OBJEKAT

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin-top:0">{{ unit.name }} · ulazni računi</h2>
+  <p class="small muted" style="margin-top:2px">
+    Računi bez robe — struja, zakup, komunalije, usluge. Razvrstani na magacin
+    {{ unit.erp_code }}. Niko ih ne prima u magacinu, pa kalkulaciju upisuješ ti.
+  </p>
+  <p class="small" style="margin-top:6px"><strong>{{ spremno }}</strong> spremno za upis</p>
+</div>
+
+<div class="card">
+  <table class="small" style="width:100%">
+    <tr>
+      <th>Račun</th><th>Dobavljač</th>
+      <th style="width:80px">Promet</th><th style="width:80px">Valuta</th>
+      <th style="width:110px">Iznos</th><th style="width:210px">Kalkulacija</th>
+    </tr>
+    {% for doc in documents %}
+    {% set n = nacrti.get(doc.id) %}
+    <tr>
+      <td><a href="/dokument/{{ doc.id }}">{{ doc.document_number }}</a></td>
+      <td>{{ (doc.supplier_name or '')[:34] }}</td>
+      <td>{{ doc.delivery_date or doc.issue_date }}</td>
+      <td>{{ doc.due_date or '—' }}</td>
+      <td style="text-align:right">{{ '%.2f'|format(doc.amount or 0) }}</td>
+      <td>
+        {% if n and n.stanje.value == 'upisan' %}
+          <span class="tag ok">u ERP-u {{ n.erp_broj or '' }}</span>
+          <div class="muted small">{{ n.upisao }}</div>
+        {% elif n and n.stanje.value == 'spreman' %}
+          <form class="inline" method="post" action="/dokument/{{ doc.id }}/upisi-kalkulaciju"
+                onsubmit="return confirm('Upisati kalkulaciju za {{ doc.document_number }}?')">
+            <button type="submit">Upiši kalkulaciju</button>
+          </form>
+        {% elif n and n.stanje.value == 'ne_treba' %}
+          <span class="muted small">ne ide kroz kalkulaciju</span>
+        {% elif n and n.stanje.value == 'problem' %}
+          <span class="tag err">zaustavljena</span>
+          <div class="muted small">{{ (n.problemi or [])|join('; ') }}</div>
+        {% else %}
+          <span class="muted small">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">Nema ulaznih računa.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% endblock %}

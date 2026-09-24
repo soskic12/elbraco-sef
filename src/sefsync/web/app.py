@@ -38,6 +38,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 
+from ..erp.kalkulacija import MAGACIN_ULAZNI_RACUN
 from ..routing.engine import MAGACIN_POVRACAJ
 from sqlalchemy.orm import selectinload
 from starlette.middleware.sessions import SessionMiddleware
@@ -523,7 +524,7 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
 
 
 @app.post("/dokument/{doc_id}/upisi-kalkulaciju")
-def upisi_kalkulaciju(doc_id: int, user: Operater) -> RedirectResponse:
+def upisi_kalkulaciju(doc_id: int, user: Korisnik) -> RedirectResponse:
     """Operater upisuje kalkulaciju bez potvrde prijema robe.
 
     Kod usluga (magacin 088) nema prijema robe - niko ne "primi" struju ili
@@ -532,6 +533,13 @@ def upisi_kalkulaciju(doc_id: int, user: Operater) -> RedirectResponse:
     """
     from ..config import get_settings as _get
     from ..services.nacrti import upisi_u_erp
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
 
     podesavanja = _get()
     if not podesavanja.erp_upis_kalkulacije:
@@ -630,6 +638,34 @@ def obrisi_sliku(
 # --------------------------------------------------------------------------- #
 
 
+EKRAN_POVRACAJ = "povracaj"
+EKRAN_USLUGE = "usluge"
+EKRAN_OBJEKAT = "objekat"
+
+
+def _vrsta_ekrana(unit) -> str:
+    """Koji ekran dobija covek vezan za tu jedinicu.
+
+    Objekat prima robu, pa mu treba spisak za prijem i slikanje. Magacin
+    povracaja (010) i ulazni racuni (088) ne primaju nista - tamo dokument
+    stigne i tu se zavrsi, pa im treba drugo: sifre, upis i pregled.
+    """
+    sifra = (unit.erp_code or unit.code or "").strip()
+    if sifra == MAGACIN_POVRACAJ:
+        return EKRAN_POVRACAJ
+    if sifra == MAGACIN_ULAZNI_RACUN:
+        return EKRAN_USLUGE
+    return EKRAN_OBJEKAT
+
+
+def _sme_na_dokument(session, user, doc) -> bool:
+    """Operater sme na svaki dokument, covek iz jedinice samo na svoje."""
+    if user.is_operator:
+        return True
+    jedinica = _unit_for(session, user)
+    return jedinica is not None and doc.business_unit_id == jedinica.id
+
+
 def _broj_popusta(session) -> int:
     """Koliko popusta ceka prenos - za oznaku u navigaciji."""
     from ..models import PopustZaPrenos
@@ -705,6 +741,48 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                 return RedirectResponse("/red", status_code=303)
             raise HTTPException(
                 403, f"Za šifru objekta {user.unit_code} nema poslovne jedinice u šifarniku."
+            )
+
+        vrsta = _vrsta_ekrana(unit)
+        if vrsta in (EKRAN_POVRACAJ, EKRAN_USLUGE):
+            # Ovde dokument ne prolazi kroz "prosledjivanje" - stigne i tu se
+            # zavrsi. Zato se ne filtrira po forwarded_at, kao kod objekata.
+            redovi = list(
+                session.scalars(
+                    select(Document)
+                    .options(selectinload(Document.business_unit))
+                    .where(
+                        Document.business_unit_id == unit.id,
+                        Document.archived == False,  # noqa: E712
+                    )
+                    .order_by(Document.issue_date.desc(), Document.id.desc())
+                    .limit(200)
+                )
+            )
+            nacrti = {
+                n.document_id: n
+                for n in session.scalars(
+                    select(NacrtKalkulacije).where(
+                        NacrtKalkulacije.document_id.in_([d.id for d in redovi] or [0])
+                    )
+                )
+            }
+            return templates.TemplateResponse(
+                request,
+                "jedinica_povracaj.html" if vrsta == EKRAN_POVRACAJ else "jedinica_usluge.html",
+                {
+                    "user": user,
+                    "unit": unit,
+                    "documents": redovi,
+                    "nacrti": nacrti,
+                    "popusta": _broj_popusta(session) if vrsta == EKRAN_POVRACAJ else 0,
+                    "ceka_sifru": sum(
+                        1 for n in nacrti.values() if n.stanje is StanjeNacrta.CEKA_SIFRU
+                    ),
+                    "spremno": sum(
+                        1 for n in nacrti.values() if n.stanje is StanjeNacrta.SPREMAN
+                    ),
+                },
             )
 
         # Spisak "sta treba slikati": stavke sa njegovih faktura kojima fali nasa
@@ -966,7 +1044,7 @@ def oznaci_pregledano(
 
 @app.post("/sifre/povezi")
 def sifre_povezi(
-    user: Operater,
+    user: Korisnik,
     document_id: int = Form(...),
     line_no: int = Form(...),
     erp_item_code: str = Form(...),
@@ -974,14 +1052,24 @@ def sifre_povezi(
 ) -> RedirectResponse:
     from ..services.nacrti import povezi_sifru
 
+    # Ilijana povezuje sifre na svojim odobrenjima, pa ekran vise nije samo
+    # operaterski. Ko nije operater sme samo dokumente svoje jedinice.
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+    nazad = "/sifre" if user.is_operator else "/moja-jedinica"
+
     try:
         povezi_sifru(
             document_id, line_no, erp_item_code,
             korisnik=user.login, pamti=not ne_pamti,
         )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
-        return _back("/sifre", str(exc), False)
-    return _back("/sifre", f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")
+        return _back(nazad, str(exc), False)
+    return _back(nazad, f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")
 
 
 @app.get("/sifre/predlog/{document_id}/{line_no}", response_class=HTMLResponse)
