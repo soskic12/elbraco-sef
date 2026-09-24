@@ -759,3 +759,51 @@ def test_udeo_popusta():
     assert 0.36 < p.udeo < 0.38
     assert p.otvoren
     assert PopustZaPrenos(document_id=2, iznos=100.0, nabavna=None).udeo is None
+
+
+def test_prepoznaje_kalkulaciju_koju_je_covek_napravio_rucno(monkeypatch):
+    """Ako je poslovođa kalkulaciju napravio rukom, panel to mora da vidi.
+
+    Prelazak ide odjednom za sve, pa će se to dešavati. Upis bi duplikat odbio,
+    ali tek kad neko klikne — do tada bi panel tražio prijem robe za fakturu koja
+    je već zaknjižena.
+    """
+    from sefsync.erp.kalkulacija import Nacrt
+    from sefsync.services import nacrti as N
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class Engine:
+        def connect(self):
+            return Conn()
+
+    nacrt = Nacrt(
+        document_id=1, tabela_zaglavlja="ULKALKUL", tabela_stavki="PRULKALK",
+        magacin="021",
+        zaglavlje={"BROJ_RN_DOB": "FA-5543-03/26", "DOBAVLJAC": "00905"},
+    )
+
+    monkeypatch.setattr(
+        "sefsync.erp.kalkulacija.postojeca_kalkulacija",
+        lambda conn, broj, dob: "ULKALKUL 021/00286" if broj and dob else None,
+    )
+    assert N._vec_u_erpu(nacrt, engine=Engine()) == "ULKALKUL 021/00286"
+
+    # bez broja računa ili dobavljača nema po čemu da se traži
+    prazan = Nacrt(document_id=2, tabela_zaglavlja="ULKALKUL", tabela_stavki="PRULKALK",
+                   magacin="021", zaglavlje={})
+    assert N._vec_u_erpu(prazan, engine=Engine()) is None
+
+    # ERP ume da bude nedostupan - to ne sme da obori nacrt
+    def puca(*a, **k):
+        from sqlalchemy.exc import OperationalError
+
+        raise OperationalError("veza", None, Exception("nema ERP-a"))
+
+    monkeypatch.setattr("sefsync.erp.kalkulacija.postojeca_kalkulacija", puca)
+    assert N._vec_u_erpu(nacrt, engine=Engine()) is None

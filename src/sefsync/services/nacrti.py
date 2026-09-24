@@ -15,6 +15,7 @@ import re
 from collections import Counter
 
 from sqlalchemy import and_, or_, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..db import session_scope
 from ..erp.connection import get_erp_engine
@@ -129,6 +130,31 @@ def razlozi_cekanja(engine=None) -> dict:
     }
 
 
+RUCNO_U_ERPU = "ručno u ERP-u"
+
+
+def _vec_u_erpu(nacrt, *, engine=None) -> str | None:
+    """Vraca oznaku kalkulacije ako za taj racun vec postoji u ERP-u.
+
+    Prelazak na novi nacin rada ide odjednom za sve, pa ce se desavati da
+    poslovodja napravi kalkulaciju rukom kao do sada. Upis to hvata i odbija
+    duplikat, ali tek kad neko klikne - do tada panel trazi prijem robe za
+    fakturu koja je vec zaknjizena.
+    """
+    from ..erp.kalkulacija import postojeca_kalkulacija
+
+    broj = str(nacrt.zaglavlje.get("BROJ_RN_DOB") or "").strip()
+    dobavljac = str(nacrt.zaglavlje.get("DOBAVLJAC") or "").strip()
+    if not broj or not dobavljac:
+        return None
+    try:
+        with (engine or get_erp_engine()).connect() as conn:
+            return postojeca_kalkulacija(conn, broj, dobavljac)
+    except SQLAlchemyError as exc:
+        log.info("Provera postojece kalkulacije nije prosla: %s", exc)
+        return None
+
+
 def _stanje(nacrt) -> StanjeNacrta:
     if nacrt.problemi:
         return StanjeNacrta.PROBLEM
@@ -157,7 +183,25 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
         if red.stanje is StanjeNacrta.UPISAN:
             # Vec je u ERP-u - ponovno racunanje ne sme da vrati stanje unazad.
             return red
-        red.stanje = _stanje(nacrt)
+        stanje = _stanje(nacrt)
+        if stanje is StanjeNacrta.SPREMAN:
+            rucno = _vec_u_erpu(nacrt, engine=engine)
+            if rucno:
+                # Poslovodja je kalkulaciju napravio rukom. Panel to mora da
+                # prepozna, inace bi do kraja veka trazio prijem robe za nesto
+                # sto je vec zaknjizeno - a operater bi na dugme dobio gresku
+                # umesto objasnjenja.
+                red.stanje = StanjeNacrta.UPISAN
+                red.erp_broj = rucno
+                red.upisao = RUCNO_U_ERPU
+                red.upisano_u = utcnow()
+                red.magacin = nacrt.magacin or None
+                red.tabela = nacrt.tabela_zaglavlja or None
+                red.racunato_u = utcnow()
+                session.flush()
+                session.expunge(red)
+                return red
+        red.stanje = stanje
         red.magacin = nacrt.magacin or None
         red.tabela = nacrt.tabela_zaglavlja or None
         red.iznos = nacrt.zaglavlje.get("IZNOS_ZA_NAP")
@@ -177,8 +221,6 @@ def _zabelezi_popust(document_id: int, nacrt, *, engine=None) -> None:
     Takvo odobrenje ide na 088 i tamo se gubi, a ona je ta koja popust prenosi
     objektu koji ostecen uredjaj prodaje. Zapis ostaje otvoren dok ga ne prenese.
     """
-    from sqlalchemy.exc import SQLAlchemyError
-
     from ..erp.kalkulacija import MAGACIN_ULAZNI_RACUN, _analitika_dobavljaca
     from ..models import PopustZaPrenos
     from .odobrenja import popust_za_uredjaj
