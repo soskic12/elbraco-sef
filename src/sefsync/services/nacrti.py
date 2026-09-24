@@ -166,7 +166,80 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
         red.racunato_u = utcnow()
         session.flush()
         session.expunge(red)
-        return red
+
+    _zabelezi_popust(document_id, nacrt, engine=engine)
+    return red
+
+
+def _zabelezi_popust(document_id: int, nacrt, *, engine=None) -> None:
+    """Knjizno odobrenje na deo vrednosti uredjaja - zabelezi da Ilijana vidi.
+
+    Takvo odobrenje ide na 088 i tamo se gubi, a ona je ta koja popust prenosi
+    objektu koji ostecen uredjaj prodaje. Zapis ostaje otvoren dok ga ne prenese.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from ..erp.kalkulacija import MAGACIN_ULAZNI_RACUN, _analitika_dobavljaca
+    from ..models import PopustZaPrenos
+    from .odobrenja import popust_za_uredjaj
+
+    if nacrt.magacin != MAGACIN_ULAZNI_RACUN:
+        return
+
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None or doc.document_type is not DocumentType.CREDIT_NOTE:
+            return
+        if session.get(PopustZaPrenos, document_id) is not None:
+            return  # vec zabelezen, ne dira se trag o prenosu
+        podaci = {
+            "mb": doc.supplier_reg_no, "pib": doc.supplier_vat,
+            "racun": doc.payment_account, "napomena": doc.note,
+            "osnovica": doc.sum_without_vat,
+        }
+
+    try:
+        with (engine or get_erp_engine()).connect() as conn:
+            dobavljac = _analitika_dobavljaca(
+                conn, podaci["mb"], podaci["pib"], podaci["racun"]
+            )
+            nalaz = popust_za_uredjaj(
+                conn,
+                napomena=podaci["napomena"],
+                dobavljac=dobavljac,
+                osnovica=podaci["osnovica"],
+            )
+    except SQLAlchemyError as exc:
+        log.info("Popust za #%s nije proveren: %s", document_id, exc)
+        return
+    if nalaz is None:
+        return
+
+    with session_scope() as session:
+        session.add(
+            PopustZaPrenos(
+                document_id=document_id,
+                erp_item_code=nalaz["sifra"],
+                naziv_artikla=nalaz["naziv"],
+                iznos=nalaz["iznos"],
+                nabavna=nalaz["nabavna"],
+                broj_racuna=nalaz["racun"],
+                baza_godine=nalaz["baza"],
+            )
+        )
+    log.info(
+        "Popust za prenos: #%s %s (%s od %s)",
+        document_id, nalaz["sifra"], nalaz["iznos"], nalaz["nabavna"],
+    )
+
+    # Mejl kaze da je stiglo, ekran cuva trag sta je uradjeno - jedno bez drugog
+    # ne radi posao: mejl se izgubi, a ekran niko ne gleda dok ne zna da ima sta.
+    try:
+        from ..notify.dispatcher import Dispatcher
+
+        Dispatcher().notify_popust(document_id)
+    except Exception as exc:  # noqa: BLE001 - posta ne sme da obori nacrt
+        log.warning("Obaveštenje o popustu za #%s nije poslato: %s", document_id, exc)
 
 
 def _upisi_stanje(document_id: int, stanje: StanjeNacrta) -> NacrtKalkulacije:

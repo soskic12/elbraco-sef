@@ -6,6 +6,8 @@ import logging
 from html import escape
 from pathlib import Path
 
+from sqlalchemy import select
+
 from ..config import Settings, get_settings
 from ..db import session_scope
 from ..models import (
@@ -118,6 +120,53 @@ class Dispatcher:
                 if sent_any and doc.state is ProcessState.ROUTED:
                     doc.state = ProcessState.NOTIFIED
         return sent_any
+
+    def notify_popust(self, doc_id: int) -> bool:
+        """Javlja magacinu povracaja da je stigao popust koji ide dalje u objekat.
+
+        Takvo odobrenje ide na 088 kao finansijsko, pa se na ekranu magacina ne
+        pojavi samo od sebe - a Ilijana je ta koja popust prenosi objektu koji
+        ostecen uredjaj prodaje.
+        """
+        from ..models import PopustZaPrenos
+        from ..routing.engine import MAGACIN_POVRACAJ
+
+        with session_scope() as session:
+            red = session.get(PopustZaPrenos, doc_id)
+            doc = session.get(Document, doc_id)
+            if red is None or doc is None:
+                return False
+            magacin = session.scalars(
+                select(BusinessUnit).where(BusinessUnit.erp_code == MAGACIN_POVRACAJ)
+            ).first()
+            emails = magacin.email_list() if magacin else self._fallback_emails()
+            udeo = f"{red.udeo * 100:.0f} %" if red.udeo else "—"
+            naslov = (
+                f"Popust za prenos: {red.erp_item_code} {red.naziv_artikla} "
+                f"({money(red.iznos, doc.currency)})"
+            )
+            telo = (
+                f"Dobavljač {doc.supplier_name} odobrio je {money(red.iznos, doc.currency)} "
+                f"na uređaj {red.erp_item_code} {red.naziv_artikla}, čija je nabavna "
+                f"{money(red.nabavna, doc.currency)} — dakle {udeo} vrednosti.\n\n"
+                f"Odobrenje: {doc.document_number} od {doc.issue_date}\n"
+                f"Originalni račun: {red.broj_racuna} ({red.baza_godine})\n\n"
+                "Roba ostaje kod nas, pa popust treba preneti objektu koji taj uređaj "
+                "prodaje. Kad to uradiš, zabeleži u panelu:\n"
+                f"{self.settings.public_base_url.rstrip('/')}/popusti"
+            )
+            message = Message(subject=naslov, body=telo, html=None)
+            proba = self.settings.notify_override_to.strip()
+            if proba:
+                message.subject = f"[PROBA → {magacin.code if magacin else '010'}] {message.subject}"
+                emails = [x.strip() for x in proba.split(",") if x.strip()]
+
+        poslato = False
+        for result in self.email.send(emails, message):
+            poslato = poslato or result.ok
+        if not poslato:
+            log.warning("Obaveštenje o popustu za #%s nije poslato", doc_id)
+        return poslato
 
     def notify_receipt(self, doc_id: int, confirmed_by: str) -> bool:
         """Javlja operateru koji je prosledio da je poslovođa potvrdila prijem.

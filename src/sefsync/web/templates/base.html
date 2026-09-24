@@ -117,8 +117,10 @@
       <a href="/sifre">Šifre</a>
       <a href="/pravila">Pravila</a>
       <a href="/tacnost">Tačnost</a>
+      <a href="/popusti">Popusti{% if popusta %} ({{ popusta }}){% endif %}</a>
     {% elif user %}
       <a href="/moja-jedinica">Moja jedinica</a>
+      {% if popusta %}<a href="/popusti">Popusti ({{ popusta }})</a>{% endif %}
     {% endif %}
   </nav>
   <span class="spacer"></span>

@@ -37,6 +37,8 @@ from fastapi import (
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
+
+from ..routing.engine import MAGACIN_POVRACAJ
 from sqlalchemy.orm import selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -307,6 +309,7 @@ def queue(
             request,
             "queue.html",
             {
+                "popusta": _broj_popusta(session),
                 "documents": rows,
                 "units": units,
                 "brojaci": brojaci,
@@ -627,6 +630,72 @@ def obrisi_sliku(
 # --------------------------------------------------------------------------- #
 
 
+def _broj_popusta(session) -> int:
+    """Koliko popusta ceka prenos - za oznaku u navigaciji."""
+    from ..models import PopustZaPrenos
+
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(PopustZaPrenos)
+            .where(PopustZaPrenos.preneto_at.is_(None))
+        )
+        or 0
+    )
+
+
+@app.get("/popusti", response_class=HTMLResponse)
+def popusti(request: Request, user: Korisnik):
+    """Odobrenja na deo vrednosti uređaja — popust koji ide dalje u objekat.
+
+    Vidi ih Ilijana (jedinica povraćaja) i operateri. Poslovođa ne — njemu se
+    popust prenosi, ne on njega prenosi.
+    """
+    from ..models import PopustZaPrenos
+
+    with session_scope() as session:
+        if not user.is_operator:
+            jedinica = _unit_for(session, user)
+            if jedinica is None or (jedinica.erp_code or jedinica.code).strip() != MAGACIN_POVRACAJ:
+                raise HTTPException(403, "Popuste vidi magacin povraćaja.")
+
+        upit = (
+            select(PopustZaPrenos)
+            .options(selectinload(PopustZaPrenos.document))
+            .order_by(PopustZaPrenos.otkriveno_u.desc())
+        )
+        svi = list(session.scalars(upit))
+        otvoreni = [p for p in svi if p.otvoren]
+        preneti = [p for p in svi if not p.otvoren][:30]
+        return templates.TemplateResponse(
+            request,
+            "popusti.html",
+            {"user": user, "otvoreni": otvoreni, "preneti": preneti,
+             "popusta": len(otvoreni)},
+        )
+
+
+@app.post("/popusti/{doc_id}/preneto")
+def popust_preneto(
+    doc_id: int,
+    user: Korisnik,
+    objekat: str = Form(...),
+    napomena: str = Form(""),
+) -> RedirectResponse:
+    """Ilijana beleži kome je popust prenet — zapis prestaje da bude otvoren."""
+    from ..models import PopustZaPrenos, utcnow as _sada
+
+    with session_scope() as session:
+        red = session.get(PopustZaPrenos, doc_id)
+        if red is None:
+            return _back("/popusti", "Taj popust nije zabeležen.", False)
+        red.preneto_u_objekat = objekat.strip()[:20]
+        red.napomena = (napomena or "").strip()[:500] or None
+        red.preneto_at = _sada()
+        red.preneto_by = user.login
+    return _back("/popusti", f"Zabeleženo — popust prenet u objekat {objekat.strip()}.")
+
+
 @app.get("/moja-jedinica", response_class=HTMLResponse)
 def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
     with session_scope() as session:
@@ -704,6 +773,11 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
             request,
             "unit.html",
             {
+                "popusta": (
+                    _broj_popusta(session)
+                    if (unit.erp_code or unit.code).strip() == MAGACIN_POVRACAJ
+                    else 0
+                ),
                 "unit": unit,
                 "documents": rows,
                 "ceka": ceka,

@@ -654,3 +654,57 @@ class Slika(Base):
     poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     document: Mapped[Document] = relationship()
+
+
+class PopustZaPrenos(Base):
+    """Naknadni popust koji je dobavljac odobrio za jedan uredjaj.
+
+    Knjizno odobrenje ume da bude dve razlicite stvari. Kad dobavljac odobri ceo
+    iznos uredjaja, roba se vraca i ide na 010. Kad odobri samo deo - jer je
+    uredjaj stigao ostecen - roba ostaje kod nas i prodaje se jeftinije, pa
+    odobrenje ide na 088 kao finansijsko.
+
+    Problem je sto to drugo zavrsi na 088, gde ga Ilijana ne vidi, a ona je ta
+    koja popust prenosi objektu koji taj ostecen uredjaj prodaje. Bane, 24.09.:
+    "takav dokument po meni treba da zavrsi u 088, ali da ilijana o istom bude
+    obavestena, jer taj dodatni popust ona dalje treba da prenese u mpo koji
+    prodaje takav ostecen uredjaj".
+
+    Zato se takvo odobrenje ovde zapise i ostane otvoreno dok se ne prenese -
+    mejl kaze da je stiglo, a ekran cuva trag sta je uradjeno.
+    """
+
+    __tablename__ = "popust_za_prenos"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Uredjaj na koji se popust odnosi - nadjen preko broja fakture iz napomene.
+    erp_item_code: Mapped[str | None] = mapped_column(String(50), default=None)
+    naziv_artikla: Mapped[str | None] = mapped_column(String(300), default=None)
+    # Iznos odobrenja i nabavna cena tog uredjaja: odnos je ono sto razdvaja
+    # popust od povrata, pa stoji uz zapis da se moze proveriti.
+    iznos: Mapped[float | None] = mapped_column(Float, default=None)
+    nabavna: Mapped[float | None] = mapped_column(Float, default=None)
+    broj_racuna: Mapped[str | None] = mapped_column(String(100), default=None)
+    baza_godine: Mapped[str | None] = mapped_column(String(40), default=None)
+    otkriveno_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    # Trag: kome je popust prenet i kada.
+    preneto_u_objekat: Mapped[str | None] = mapped_column(String(20), default=None)
+    preneto_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    preneto_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    napomena: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    document: Mapped[Document] = relationship()
+
+    @property
+    def otvoren(self) -> bool:
+        return self.preneto_at is None
+
+    @property
+    def udeo(self) -> float | None:
+        """Koliki deo vrednosti uredjaja je odobren - 0,37 znaci 37 %."""
+        if not self.nabavna or self.iznos is None:
+            return None
+        return abs(self.iznos) / abs(self.nabavna)

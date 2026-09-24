@@ -230,3 +230,41 @@ def predlog_iz_napomene(
         "nabavna": float(stavka["nabavna"]),
         "kako": kako,
     }
+
+
+def popust_za_uredjaj(
+    conn: Connection,
+    *,
+    napomena: str | None,
+    dobavljac: str | None,
+    osnovica: float | None,
+) -> dict | None:
+    """Vraca uredjaj i iznose kad je odobren DEO njegove vrednosti, inace None.
+
+    Razlika izmedju povrata i popusta je u iznosu, ne u tekstu. Mereno na
+    odobrenjima cija napomena imenuje fakturu: 61 je na ceo iznos uredjaja
+    (razduzenje, ide na 010), a 5 na deo (ostecen uredjaj, ide na 088 i prenosi
+    se objektu koji ga prodaje).
+    """
+    if not dobavljac or osnovica is None:
+        return None
+    broj = broj_originalnog_racuna(napomena)
+    if not broj:
+        return None
+    stavke = artikli_sa_racuna(conn, dobavljac, broj)
+    if not stavke:
+        return None
+
+    osn = abs(float(osnovica))
+    blizu = min(stavke, key=lambda x: abs(abs(float(x["nabavna"])) - osn))
+    nab = abs(float(blizu["nabavna"]))
+    if nab <= 0 or osn >= nab - 1.0:
+        return None  # ceo iznos (ili vise) - to je povrat, ne popust
+    return {
+        "sifra": blizu["artikal"],
+        "naziv": blizu["naziv"],
+        "iznos": osn,
+        "nabavna": nab,
+        "racun": broj,
+        "baza": blizu["baza"],
+    }

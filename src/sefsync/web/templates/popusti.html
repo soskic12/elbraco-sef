@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin-top:0">Popusti za prenos u objekat</h2>
+  <p class="small muted" style="margin-top:4px">
+    Dobavljač je odobrio <strong>deo</strong> vrednosti uređaja — najčešće zato što je
+    stigao oštećen. Roba ostaje kod nas i prodaje se jeftinije, pa odobrenje ide na 088
+    kao finansijsko. Popust treba preneti objektu koji taj uređaj prodaje.
+  </p>
+
+  {% if otvoreni %}
+  <table class="small" style="width:100%;margin-top:10px">
+    <tr>
+      <th>Odobrenje</th><th>Dobavljač</th><th>Uređaj</th>
+      <th style="width:110px">Odobreno</th><th style="width:110px">Nabavna</th>
+      <th style="width:60px">Udeo</th><th style="width:300px">Prenos</th>
+    </tr>
+    {% for p in otvoreni %}
+    <tr>
+      <td><a href="/dokument/{{ p.document_id }}">{{ p.document.document_number }}</a><br>
+        <span class="muted">{{ p.document.issue_date }}</span></td>
+      <td>{{ (p.document.supplier_name or '')[:28] }}</td>
+      <td><strong>{{ p.erp_item_code }}</strong> {{ p.naziv_artikla }}<br>
+        <span class="muted">po računu {{ p.broj_racuna }} ({{ p.baza_godine }})</span></td>
+      <td>{{ '%.2f'|format(p.iznos) }}</td>
+      <td>{{ '%.2f'|format(p.nabavna) }}</td>
+      <td>{{ '%.0f%%'|format(p.udeo * 100) if p.udeo else '—' }}</td>
+      <td>
+        <form class="inline" method="post" action="/popusti/{{ p.document_id }}/preneto">
+          <input type="text" name="objekat" size="6" placeholder="001" required
+                 title="Objekat kome je popust prenet">
+          <input type="text" name="napomena" size="20" placeholder="napomena (nije obavezno)">
+          <button type="submit">Preneto</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>Nema popusta koji čekaju prenos.</p>
+  {% endif %}
+</div>
+
+{% if preneti %}
+<div class="card">
+  <h3 style="margin-top:0">Preneto</h3>
+  <table class="small" style="width:100%">
+    <tr><th>Odobrenje</th><th>Uređaj</th><th style="width:110px">Iznos</th>
+        <th style="width:70px">Objekat</th><th style="width:180px">Kada i ko</th><th>Napomena</th></tr>
+    {% for p in preneti %}
+    <tr>
+      <td><a href="/dokument/{{ p.document_id }}">{{ p.document.document_number }}</a></td>
+      <td>{{ p.erp_item_code }} {{ p.naziv_artikla }}</td>
+      <td>{{ '%.2f'|format(p.iznos) }}</td>
+      <td>{{ p.preneto_u_objekat }}</td>
+      <td>{{ p.preneto_at.strftime('%d.%m.%Y %H:%M') }}, {{ p.preneto_by }}</td>
+      <td class="muted">{{ p.napomena or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

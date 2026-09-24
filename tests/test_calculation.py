@@ -689,3 +689,73 @@ def test_izbor_stavke_sa_originalne_fakture():
     assert stavka is not None and stavka["artikal"] == "92815"
 
     assert izaberi_stavku([], 100.0)[0] is None
+
+
+def test_popust_se_prepoznaje_po_tome_sto_je_manji_od_nabavne(db):
+    """Odobren deo vrednosti je popust; ceo iznos je povrat i ne beleži se ovde.
+
+    Mereno na odobrenjima čija napomena imenuje fakturu: 61 je na ceo iznos
+    uređaja, 5 na deo. Bane: deo znači da je uređaj stigao oštećen, roba ostaje
+    kod nas i prodaje se jeftinije.
+    """
+    from sefsync.services.odobrenja import popust_za_uredjaj
+
+    class Red:
+        def __init__(self, nab):
+            self._mapping = {
+                "magacin": "008", "broj": "00153", "artikal": "93568",
+                "naziv": "Beko RS 9152WN", "kolicina": 1.0, "nabavna": nab,
+            }
+
+    class Conn:
+        def __init__(self, nab):
+            self.nab = nab
+
+        def execute(self, upit, *a, **k):
+            tekst = str(upit)
+            if "sys.databases" in tekst:
+                return [("ELBS_2026",)]
+            if "ARTIKLI" in tekst:
+                return self          # sifra postoji danas
+            if "KALKUL" in tekst:
+                return [Red(self.nab)]
+            return self
+
+        def first(self):
+            return (1,)
+
+        def __iter__(self):
+            return iter(())
+
+    import sefsync.services.odobrenja as O
+    O._BAZE = None
+
+    napomena = "Odobreno za frizider, po racunu broj 851 VP-2026 od 16.03.2026."
+
+    # odobreno 4.671,57 od 12.630,98 - popust zbog oštećenja
+    nalaz = popust_za_uredjaj(Conn(12630.98), napomena=napomena,
+                              dobavljac="00142", osnovica=4671.57)
+    assert nalaz is not None
+    assert nalaz["sifra"] == "93568"
+    assert nalaz["nabavna"] == 12630.98
+    O._BAZE = None
+
+    # odobren ceo iznos - to je povrat, ne popust
+    assert popust_za_uredjaj(Conn(12630.98), napomena=napomena,
+                             dobavljac="00142", osnovica=12630.98) is None
+    O._BAZE = None
+
+    # bez napomene nema šta da se traži
+    assert popust_za_uredjaj(Conn(12630.98), napomena=None,
+                             dobavljac="00142", osnovica=100.0) is None
+    O._BAZE = None
+
+
+def test_udeo_popusta():
+    """Koliki deo vrednosti uređaja je odobren - stoji uz zapis da se vidi."""
+    from sefsync.models import PopustZaPrenos
+
+    p = PopustZaPrenos(document_id=1, iznos=4671.57, nabavna=12630.98)
+    assert 0.36 < p.udeo < 0.38
+    assert p.otvoren
+    assert PopustZaPrenos(document_id=2, iznos=100.0, nabavna=None).udeo is None

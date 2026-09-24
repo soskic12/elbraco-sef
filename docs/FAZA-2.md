@@ -1586,3 +1586,22 @@ poklopi; kad je manji, to je popust i artikal se ne predlaže.
 
 **Ostaje nerešeno:** popust završi na 088, gde ga Ilijana ne vidi, a treba da ga
 prenese u objekat koji prodaje oštećen uređaj.
+
+### Popust za prenos — ekran i mejl (24.09.)
+
+Odobrenje na **deo** vrednosti uređaja ide na 088 kao finansijsko i tamo se gubi.
+Ilijana je ta koja taj popust prenosi objektu koji oštećen uređaj prodaje, a na
+088 ga ne vidi. Bane je tražio oba puta: mejl da sazna, ekran da ostane trag.
+
+Kako radi: kad se nacrt osvežava, odobrenje koje ide na 088 se proverava — ako
+napomena imenuje fakturu i odobreni iznos je **manji** od nabavne tog uređaja,
+upisuje se u `popust_za_prenos` i magacin povraćaja dobija mejl.
+
+Ekran `/popusti` vidi magacin povraćaja i operateri, ne i poslovođe: njima se
+popust prenosi, ne oni njega prenose. Zapis ostaje otvoren dok Ilijana ne upiše
+**u koji objekat** je prenet; tada dobija vreme, ime i napomenu.
+
+U navigaciji stoji broj otvorenih, jer ekran koji se ne otvara ne pomaže.
+
+**Šta se namerno ne radi:** app ne odlučuje kom objektu popust pripada. Uređaj se
+prodaje u više objekata, a koji ga je preuzeo oštećenog zna Ilijana.
