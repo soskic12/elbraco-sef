@@ -633,3 +633,20 @@ def test_knjizno_odobrenje_nosi_tip_povrat_robe(db):
     for stavka in nacrt.stavke:
         assert stavka["IDPDV"] == K.TIP_POVRAT_ROBE
         assert stavka["KOLICINA"] < 0      # odobrenje ulazi minusom
+
+
+def test_broj_racuna_iz_napomene():
+    """Iz napomene knjižnog odobrenja se vadi broj fakture koju ispravlja.
+
+    Pravi primer (Eurotehna, 615FN-2026): „Odobreno za ves masinu WPNA14A3PWIFI,
+    po racunu broj 851 VP-2026 od 16.03.2026.“ Broj je u ERP-u zapisan spojeno
+    („851VP-2026“), pa se razmaci uklanjaju.
+    """
+    from sefsync.services.odobrenja import broj_originalnog_racuna as broj
+
+    assert broj("Odobreno za ves masinu WPNA14A3PWIFI, po racunu broj 851 VP-2026 "
+                "od 16.03.2026.") == "851VP-2026"
+    assert broj("Odobrenje po računu br. 1234/26 od 01.01.2026") == "1234/26"
+    assert broj("po fakturi 77VP-2026, reklamacija") == "77VP-2026"
+    assert broj("Nema broja fakture ovde") is None
+    assert broj(None) is None

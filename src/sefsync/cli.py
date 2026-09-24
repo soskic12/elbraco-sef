@@ -870,6 +870,97 @@ def _ispisi_stavke(docs, broj: str) -> None:
         typer.echo("")
 
 
+@app.command("meri-odobrenja")
+def cmd_meri_odobrenja(
+    koliko: int = typer.Option(15, help="Koliko primera ispisati."),
+) -> None:
+    """Koliko knjižnih odobrenja bez artikla se može razrešiti iz napomene.
+
+    Eurotehna u stavku upiše „Odobrenje po Saglasnosti broj …“, što nikad neće
+    imati našu šifru, a u napomeni stoji broj fakture koju odobrenje ispravlja.
+    Ovo meri koliko puta se po tom broju nađe tačno jedna ranija stavka — dakle
+    koliko bi se moglo predložiti samo, bez čoveka.
+    """
+    _boot()
+    from collections import Counter
+
+    from sqlalchemy import select as _select
+
+    from .erp.connection import get_erp_engine
+    from .erp.kalkulacija import _analitika_dobavljaca
+    from .models import Document, DocumentType
+    from .services.odobrenja import (
+        artikal_po_modelu, artikli_sa_racuna, broj_originalnog_racuna,
+    )
+
+    with session_scope() as session:
+        odobrenja = list(
+            session.scalars(
+                _select(Document)
+                .where(Document.document_type == DocumentType.CREDIT_NOTE)
+                .where(Document.archived == False)  # noqa: E712
+                .order_by(Document.issue_date.desc())
+            )
+        )
+        podaci = [
+            {
+                "id": d.id,
+                "broj": d.document_number,
+                "dobavljac": d.supplier_name,
+                "pib": d.supplier_vat,
+                "mb": d.supplier_reg_no,
+                "racun": d.payment_account,
+                "napomena": d.note,
+                "iznos": d.sum_without_vat,
+                "stavke": [x.name or "" for x in d.lines],
+            }
+            for d in odobrenja
+        ]
+
+    typer.echo(f"Knjižnih odobrenja: {len(podaci)}")
+    ishod: Counter = Counter()
+    primeri: list[str] = []
+
+    with get_erp_engine().connect() as conn:
+        for o in podaci:
+            broj = broj_originalnog_racuna(o["napomena"])
+            if broj is None:
+                ishod["napomena ne nosi broj računa"] += 1
+                continue
+            dobavljac = _analitika_dobavljaca(conn, o["mb"], o["pib"], o["racun"])
+            if dobavljac is None:
+                ishod["dobavljač nije u NAZIVI"] += 1
+                continue
+            nadjeno = artikli_sa_racuna(conn, dobavljac, broj)
+            if len(nadjeno) == 1:
+                a = nadjeno[0]
+                slaze = (
+                    o["iznos"] is not None
+                    and abs(float(a["nabavna"]) - float(o["iznos"])) < 1.0
+                )
+                ishod["jedna stavka" + (" (iznos se slaže)" if slaze else "")] += 1
+                if len(primeri) < koliko:
+                    primeri.append(
+                        f"   {o['broj']:<18} -> {broj:<14} {a['artikal']} "
+                        f"{a['naziv'][:30]:<30} nab {float(a['nabavna']):>10,.2f}"
+                        + ("  = osnovica" if slaze else "")
+                    )
+            elif nadjeno:
+                ishod[f"više stavki na računu"] += 1
+            else:
+                po_modelu = artikal_po_modelu(conn, o["napomena"])
+                ishod["račun nije nađen" + (", ali model jeste" if po_modelu else "")] += 1
+
+    typer.echo("")
+    for uzrok, n in ishod.most_common():
+        typer.echo(f"  {n:>4}  {uzrok}")
+    if primeri:
+        typer.echo("")
+        typer.echo("Primeri razrešenih:")
+        for p in primeri:
+            typer.echo(p)
+
+
 @app.command("osvezi-ubl")
 def cmd_reparse(
     dokument: int = typer.Option(None, "--dokument", help="Samo taj dokument (ID iz panela)."),
