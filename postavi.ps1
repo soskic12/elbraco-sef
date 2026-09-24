@@ -109,7 +109,16 @@ function Ko-Drzi-Port($broj) {
     try {
         $veza = Get-NetTCPConnection -LocalPort $broj -State Listen -ErrorAction Stop |
                 Select-Object -First 1
-        return Get-Process -Id $veza.OwningProcess -ErrorAction Stop
+        $proces = Get-Process -Id $veza.OwningProcess -ErrorAction Stop
+        # Servis se pokrece sistemskim Python-om nad nasim kodom, pa `Path` pokazuje
+        # u Python instalaciju a ne u C:\efakture. Komandna linija je ta koja kaze
+        # cije se to zapravo vrti.
+        $linija = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proces.Id)" `
+                   -ErrorAction SilentlyContinue).CommandLine
+        return [pscustomobject]@{
+            Id = $proces.Id; ProcessName = $proces.ProcessName
+            Path = $proces.Path; CommandLine = $linija
+        }
     } catch { return $null }
 }
 
@@ -120,8 +129,10 @@ try {
     Write-Host "   port ${Port}: slobodan"
 } catch {
     $vlasnik = Ko-Drzi-Port $Port
-    $nas = $vlasnik -and $vlasnik.Path -and
-           $vlasnik.Path.StartsWith($Odrediste, [StringComparison]::OrdinalIgnoreCase)
+    $nas = $vlasnik -and (
+        ($vlasnik.Path -and $vlasnik.Path.StartsWith($Odrediste, [StringComparison]::OrdinalIgnoreCase)) -or
+        ($vlasnik.CommandLine -and $vlasnik.CommandLine -like "*$Odrediste*")
+    )
     if ($nas) {
         Write-Host "   port ${Port}: drzi ga panel koji radi (PID $($vlasnik.Id)) - zaustavicu ga pre kopiranja"
     } else {
