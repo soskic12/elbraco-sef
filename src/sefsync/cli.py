@@ -897,7 +897,7 @@ def cmd_meri_odobrenja(
     from sqlalchemy import select as _select
 
     from .erp.connection import get_erp_engine
-    from .erp.kalkulacija import _analitika_dobavljaca
+    from .erp.kalkulacija import _analitika_dobavljaca, _nasa_sifra
     from .models import Document, DocumentType
     from .services.odobrenja import (
         artikal_po_modelu, artikli_sa_racuna, baze_po_godinama,
@@ -924,11 +924,19 @@ def cmd_meri_odobrenja(
                 "racun": d.payment_account,
                 "napomena": d.note,
                 "iznos": d.sum_without_vat,
-                "stavke": [x.name or "" for x in d.lines],
+                "linije": [x for x in d.lines if not x.nije_artikal],
             }
             for d in odobrenja
             if not dobavljac or (d.supplier_vat or "") == dobavljac
         ]
+        # `_nasa_sifra` gleda i mapiranja u panelu, pa mora unutar sesije.
+        with get_erp_engine().connect() as conn:
+            for o in podaci:
+                o["bez_sifre"] = any(
+                    _nasa_sifra(session, conn, o["pib"], linija)[0] is None
+                    for linija in o["linije"]
+                ) or not o["linije"]
+                del o["linije"]
 
     typer.echo(f"Knjižnih odobrenja: {len(podaci)}")
     ishod: Counter = Counter()
@@ -940,14 +948,11 @@ def cmd_meri_odobrenja(
     with get_erp_engine().connect() as conn:
         typer.echo(f"Baze koje smem da čitam: {', '.join(baze_po_godinama(conn)) or '—'}")
         for o in podaci:
-            # Odobrenje koje navodi artikal ne treba nikakvu pomoć - meri se samo
-            # ono gde stavka nije artikal ("Odobrenje po Saglasnosti broj …").
-            tekst_stavki = " ".join(o["stavke"]).lower()
-            trazi_pomoc = not o["stavke"] or any(
-                rec in tekst_stavki
-                for rec in ("saglasnost", "odobrenje po", "rabat", "naknadn")
-            )
-            if not trazi_pomoc:
+            # Da li odobrenju treba pomoć ne procenjuje se po nazivu stavke nego
+            # po tome da li stavka uopšte dobije šifru. Prva verzija je tražila
+            # ključne reči i promašila „KNJIZNO ODOBRENJE 20%“ (EWE COMP), koje
+            # jeste stavka bez artikla.
+            if not o["bez_sifre"]:
                 ishod["stavka već navodi artikal"] += 1
                 continue
             bez_broja[o["dobavljac"] or "?"] += 0  # da se dobavljač pojavi u preseku

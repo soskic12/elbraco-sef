@@ -28,7 +28,7 @@ from sqlalchemy.engine import Connection
 _BROJ_RACUNA = re.compile(
     # "po racunu", "po racun", "po fakturi", "po otpremnici" - dobavljaci ne paze
     # na padez, a 587FN-2026 glasi bas "po racun broj 2082 VP-2026".
-    r"po\s+(?:ra[cč]un\w*|fakt\w*|otprem\w*)\s*(?:broj|br\.?)?\s*"
+    r"po\s+(?:ra[cč]un\w*|fakt\w*|otprem\w*)\s*[:\-]?\s*(?:broj|br\.?)?\s*[:\-]?\s*"
     r"([0-9][0-9A-Za-z\-/ ]{2,24}?)"
     r"(?=\s+od\b|\s*[,.;]|$)",
     re.IGNORECASE,
