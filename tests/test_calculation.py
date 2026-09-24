@@ -650,3 +650,34 @@ def test_broj_racuna_iz_napomene():
     assert broj("po fakturi 77VP-2026, reklamacija") == "77VP-2026"
     assert broj("Nema broja fakture ovde") is None
     assert broj(None) is None
+
+
+def test_izbor_stavke_sa_originalne_fakture():
+    """Kad faktura ima više redova, iznos odobrenja bira pravi.
+
+    Mereno: to je samo pretvorilo 49 slučajeva iz „više stavki“ u razrešeno, a
+    predlog se poklopio sa čovekovim izborom u 50 od 52 provere.
+    """
+    from sefsync.services.odobrenja import izaberi_stavku
+
+    veš = {"artikal": "84678", "naziv": "Gorenje WPNA 14 A3PWIFI", "nabavna": 43470.70}
+    frižider = {"artikal": "92815", "naziv": "Gorenje RB 413 EPW4", "nabavna": 19610.0}
+
+    assert izaberi_stavku([veš], None)[0] is veš            # jedina stavka
+    assert izaberi_stavku([veš, frižider], 43470.70)[0] is veš
+    assert izaberi_stavku([veš, frižider], 19610.0)[0] is frižider
+
+    # ništa ne odgovara iznosu - bolje bez predloga nego pogrešan
+    stavka, kako = izaberi_stavku([veš, frižider], 999.0)
+    assert stavka is None and "iznosu" in kako
+
+    # dva različita artikla sa istim iznosom se ne razrešavaju sama
+    isti = dict(frižider, artikal="99999", naziv="Drugi uređaj")
+    stavka, kako = izaberi_stavku([frižider, isti], 19610.0)
+    assert stavka is None
+
+    # isti artikal u dva reda jeste jedan odgovor
+    stavka, _ = izaberi_stavku([frižider, dict(frižider)], 19610.0)
+    assert stavka is not None and stavka["artikal"] == "92815"
+
+    assert izaberi_stavku([], 100.0)[0] is None

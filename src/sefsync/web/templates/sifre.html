@@ -82,12 +82,22 @@
         <form class="inline" method="post" action="/sifre/povezi">
           <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
           <input type="hidden" name="line_no" value="{{ s.line_no }}">
-          <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345">
+          <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345"
+                 {% if s.predlog %}value="{{ s.predlog.sifra }}"{% endif %}>
           <button type="submit">Poveži</button>
           <label class="small muted" style="display:block"
                  title="Za dobavljače koji jednom šifrom pokrivaju više naših artikala (boje, veličine)">
             <input type="checkbox" name="ne_pamti" value="1"> ne pamti vezu</label>
         </form>
+        {% if s.predlog %}
+        <div class="small" style="margin:4px 0;padding:4px 6px;border-left:3px solid var(--ok, #2a7);
+                                  background:rgba(34,119,68,.07)">
+          predlog: <strong>{{ s.predlog.sifra }}</strong> {{ s.predlog.naziv }}<br>
+          <span class="muted">po računu {{ s.predlog.racun }}
+            ({{ s.predlog.magacin }}, {{ s.predlog.baza }}), nabavna
+            {{ '%.2f'|format(s.predlog.nabavna) }} — {{ s.predlog.kako }}</span>
+        </div>
+        {% endif %}
         <a class="small" href="/sifre/predlog/{{ nacrt.document_id }}/{{ s.line_no }}">predlog&nbsp;artikla</a>
         <form class="inline" method="post" action="/sifre/nije-artikal"
               onsubmit="return confirm('Ova stavka nije artikal i neće ući u kalkulaciju?')">

@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
@@ -358,6 +358,23 @@ def pripremi(
 
         trenutak = dt.datetime.now()
 
+        # Knjizno odobrenje koje ne navodi artikal nego vezu ka saglasnosti:
+        # artikal se trazi po broju fakture iz napomene. Racuna se jednom za ceo
+        # dokument, jer se napomena odnosi na dokument a ne na pojedinu stavku.
+        predlog = None
+        if doc.document_type is DocumentType.CREDIT_NOTE:
+            from ..services.odobrenja import predlog_iz_napomene
+
+            try:
+                predlog = predlog_iz_napomene(
+                    conn,
+                    napomena=doc.note,
+                    dobavljac=dobavljac,
+                    osnovica=doc.sum_without_vat,
+                )
+            except SQLAlchemyError as exc:  # stare godine ume da nema
+                log.info("Predlog iz napomene za #%s nije izracunat: %s", document_id, exc)
+
         for linija in linije:
             if linija.nije_artikal:
                 # Covek je rekao da to nije artikal - ne trazi se sifra i ne ulazi
@@ -376,6 +393,7 @@ def pripremi(
                         "kolicina": linija.quantity,
                         "cena": linija.price,
                         "jedinica": linija.unit_code or "",
+                        "predlog": predlog,
                     }
                 )
                 continue

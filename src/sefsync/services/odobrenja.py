@@ -183,3 +183,37 @@ def izaberi_stavku(nadjeno: list[dict], osnovica: float | None) -> tuple[dict | 
             return po_iznosu[0], "po iznosu (isti artikal u vise redova)"
         return None, "vise stavki sa istim iznosom"
     return None, "nijedna stavka ne odgovara iznosu"
+
+
+def predlog_iz_napomene(
+    conn: Connection,
+    *,
+    napomena: str | None,
+    dobavljac: str | None,
+    osnovica: float | None,
+) -> dict | None:
+    """Predlog artikla za odobrenje koje ga ne navodi. None kad nema pouzdanog.
+
+    Mereno na 967 odobrenja: razresava 53 slucaja, a predlog se poklapa sa onim
+    sto je covek uneo u 50 od 52 provere. Zato ide na potvrdu, ne pravo u
+    kalkulaciju - jedan od dva promasaja je bio stvarno drugi uredjaj.
+    """
+    if not dobavljac:
+        return None
+    broj = broj_originalnog_racuna(napomena)
+    if not broj:
+        return None
+    stavka, kako = izaberi_stavku(artikli_sa_racuna(conn, dobavljac, broj), osnovica)
+    if stavka is None:
+        return None
+    if not sifra_postoji_danas(conn, stavka["artikal"]):
+        return None
+    return {
+        "sifra": stavka["artikal"],
+        "naziv": stavka["naziv"],
+        "racun": broj,
+        "baza": stavka["baza"],
+        "magacin": stavka["magacin"],
+        "nabavna": float(stavka["nabavna"]),
+        "kako": kako,
+    }
