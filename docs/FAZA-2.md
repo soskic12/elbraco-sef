@@ -1605,3 +1605,46 @@ U navigaciji stoji broj otvorenih, jer ekran koji se ne otvara ne pomaže.
 
 **Šta se namerno ne radi:** app ne odlučuje kom objektu popust pripada. Uređaj se
 prodaje u više objekata, a koji ga je preuzeo oštećenog zna Ilijana.
+
+### Četvrti tok proveren: povrat na 010 (24.09.)
+
+`ULKALKUL 010/00494`, knjižno odobrenje `Z-113/26`, jedna stavka. Poređenje svih
+kolona naspram 200 zapisa koje je ERP sam napravio na 010 izlazi prazno — osim
+`PROKNJIZENO` (naša 0, stari uzorci zaključani 2), što **mora** da ostane različito.
+
+Provere koje važe baš za povrat, sve prolaze:
+
+| | |
+|---|---|
+| količina negativna, **nabavna pozitivna** | ✓ |
+| `IDPDV` 35 („Povrat robe") | ✓ |
+| osnovica, PDV i ukupno negativni u zaglavlju | ✓ |
+| zbir stavki = zaglavlje; osnovica + PDV = za naplatu | ✓ |
+
+Usput je proveren i rabat, koji je Bane tražio da se uračuna: `FAK_CENA` 330.833,33,
+`RABAT_PROC` 15, `NAB_CENA` 281.208,33 — tačno 85 % bruto cene.
+
+**Kako se razlikuje naš zapis od ljudskog:** RBR se završava sa `sefsync` (servis ne
+prosleđuje prijavljenog korisnika, `KORISNIK` je konstanta) i `PROKNJIZENO` je 0.
+Dva puta smo tokom provere gledali ljudske zapise misleći da su naši — `010/00484`
+(Ilijana) i `010/00493` (Bogdan). Zato provera uvek gleda ta dva polja prvo.
+
+### Sva četiri toka
+
+| tok | zapis | posebno provereno |
+|---|---|---|
+| usluga | `ULKALKUL 088/02530` | podela PDV evidencije (TIP 1 + 23), bez stavki |
+| veleprodaja | `ULKALKUL 021/00227` | tarifa, RBR, rabat po stavkama, `IDPDV` |
+| maloprodaja | `MKALKUL 008/00466` | marža, `MALACENA`, `MPVRED1/2`, `UKAL_PDV1/2` |
+| **povrat** | `ULKALKUL 010/00494` | predznaci, `IDPDV` 35, rabat |
+
+### Starije godine su dodale 17 povrata
+
+Posle grantova za 2024, 2023 i 2022 (Bane, 24.09.) pretraga vidi pet godina:
+
+| | 2 godine | 5 godina |
+|---|---|---|
+| povrat staje, **ima predlog** | 53 | **70** |
+| povrat staje, nema predloga | 182 | 165 |
+
+Pokrivenost 23 % → 30 % od 235 povrata koji stanu.
