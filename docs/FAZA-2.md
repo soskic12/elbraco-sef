@@ -1648,3 +1648,12 @@ Posle grantova za 2024, 2023 i 2022 (Bane, 24.09.) pretraga vidi pet godina:
 | povrat staje, nema predloga | 182 | 165 |
 
 Pokrivenost 23 % → 30 % od 235 povrata koji stanu.
+
+**Tačnost posle svega: 68 od 69** (provereno naspram artikla koji je čovek uneo).
+Jedini neslaganje je dupliran artikal — `84655 Gorenje RIU 609 EA1` i
+`95961 GorenjeRIU609EA1` su isti uređaj pod dve šifre. Pravi promašaj
+(`568FN-2026`) je nestao kad je uvedena provera iznosa.
+
+Isti uređaj pod dve šifre nije samo kozmetika: stanje se deli na dva mesta, pa ni
+jedno ne pokazuje koliko komada stvarno ima. Vredi pogledati koliko je takvih
+parova u šifarniku — zaseban posao.
