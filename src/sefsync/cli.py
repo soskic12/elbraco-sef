@@ -707,6 +707,8 @@ def cmd_nacrti(
         False, "--osvezi", help="Preračunaj nacrte (inače samo ispiše zatečeno stanje)."
     ),
     limit: int = typer.Option(None, help="Samo toliko najnovijih dokumenata."),
+    magacin: str = typer.Option(None, help="Ispiši i spisak za taj magacin (npr. 010)."),
+    stanje: str = typer.Option("spreman", help="Koje stanje ispisati uz --magacin."),
 ) -> None:
     """Stanje kalkulacija koje aplikacija sklapa: šta je spremno, a šta čeka čoveka."""
     _boot()
@@ -732,6 +734,32 @@ def cmd_nacrti(
 
     for kljuc, vrednost in brojac.items():
         typer.echo(f"  {kljuc.replace('_', ' '):<12} {vrednost}")
+
+    if magacin:
+        from sqlalchemy.orm import selectinload as _selectinload
+
+        from .models import Document
+
+        with session_scope() as session:
+            redovi = list(
+                session.scalars(
+                    _select(NacrtKalkulacije)
+                    .options(_selectinload(NacrtKalkulacije.document))
+                    .where(NacrtKalkulacije.magacin == magacin)
+                    .where(NacrtKalkulacije.stanje == StanjeNacrta(stanje))
+                    .join(Document, Document.id == NacrtKalkulacije.document_id)
+                    .order_by(Document.issue_date.desc())
+                )
+            )
+            typer.echo("")
+            typer.echo(f"Magacin {magacin}, stanje „{stanje}“: {len(redovi)}")
+            for r in redovi[:25]:
+                d = r.document
+                typer.echo(
+                    f"   #{r.document_id:<6} {d.issue_date}  {(d.document_number or '?'):<22}"
+                    f" {(d.supplier_name or '')[:28]:<28} {r.iznos or 0:>12,.2f}"
+                )
+
     if not osvezi:
         typer.echo("")
         typer.echo("Za ponovno računanje: sefsync nacrti --osvezi")
