@@ -663,7 +663,15 @@ def test_izbor_stavke_sa_originalne_fakture():
     veš = {"artikal": "84678", "naziv": "Gorenje WPNA 14 A3PWIFI", "nabavna": 43470.70}
     frižider = {"artikal": "92815", "naziv": "Gorenje RB 413 EPW4", "nabavna": 19610.0}
 
-    assert izaberi_stavku([veš], None)[0] is veš            # jedina stavka
+    assert izaberi_stavku([veš], None)[0] is veš            # jedina stavka, iznos nepoznat
+    assert izaberi_stavku([veš], 43470.70)[0] is veš       # jedina stavka, iznos se slaže
+
+    # Jedina stavka ali iznos ne odgovara: 568FN-2026 je odobrenje na 25.066,44
+    # za uređaj čija je nabavna 18.108,40 - to nije taj uređaj.
+    stavka, kako = izaberi_stavku([veš], 20000.0)
+    assert stavka is None and "popust" in kako          # odobren deo vrednosti
+    stavka, kako = izaberi_stavku([frižider], 25066.44)
+    assert stavka is None and "vise od nabavne" in kako
     assert izaberi_stavku([veš, frižider], 43470.70)[0] is veš
     assert izaberi_stavku([veš, frižider], 19610.0)[0] is frižider
 

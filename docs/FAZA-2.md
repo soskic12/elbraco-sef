@@ -1558,3 +1558,31 @@ uobičajenog, jer pogrešna PJ ostavlja manjak koji se ne vidi kao greška.
 Broj je bio tačan, ali je merio zatečeno stanje baze, a ne ponašanje koda. Kad se
 meri „da li app radi kako treba", mora se pustiti kod, a ne čitati šta je zapisano
 od ranije.
+
+### Povrat ili popust — razdvaja ih iznos (24.09.)
+
+Bane: „odobren popust za šporet GK6C62XC … to nije povrat robe, već verovatno
+dodatni rabat zato što je uređaj stigao oštećen; takav dokument treba da završi u
+088, ali da Ilijana bude obaveštena, jer taj popust dalje prenosi u MPO koji
+prodaje takav uređaj. Ovo u slučaju da popust nije u kompletnom iznosu vrednosti
+— ako je ceo iznos, onda nije oštećenje nego smo razduženi za ceo aparat."
+
+Mereno na odobrenjima čija napomena imenuje fakturu:
+
+| odnos osnovice i nabavne | šta je | koliko |
+|---|---|---|
+| **jednako** | razduženi za ceo aparat → povrat | **61** |
+| **manje** | oštećenje/popust → 088 | **5** |
+| veće | ne odnosi se na taj uređaj | 1 |
+
+**Razvrstavanje ovo već radi kako treba** — sva četiri proverena popusta i app i
+čovek šalju na 088 (nemaju vezu ka fakturi). Pravilo o iznosu zato ne dira
+razvrstavanje nego **predlog artikla**.
+
+Time je nestao i jedini stvarni promašaj od 52 provere: `568FN-2026`, odobrenje na
+25.066,44 za uređaj čija je nabavna 18.108,40. Kod ga je prihvatio jer je faktura
+imala jednu stavku — **bez provere iznosa**. Sada se predlog daje samo kad se iznos
+poklopi; kad je manji, to je popust i artikal se ne predlaže.
+
+**Ostaje nerešeno:** popust završi na 088, gde ga Ilijana ne vidi, a treba da ga
+prenese u objekat koji prodaje oštećen uređaj.

@@ -168,10 +168,23 @@ def izaberi_stavku(nadjeno: list[dict], osnovica: float | None) -> tuple[dict | 
     """
     if not nadjeno:
         return None, "nema"
-    if len(nadjeno) == 1:
-        return nadjeno[0], "jedina stavka"
     if osnovica is None:
+        if len(nadjeno) == 1:
+            return nadjeno[0], "jedina stavka, bez provere iznosa"
         return None, "vise stavki, odobrenje bez osnovice"
+
+    # Iznos mora da se poklopi i kad je stavka jedina. 568FN-2026 je odobrenje na
+    # 25.066,44 za uredjaj cija je nabavna 18.108,40 - kod je to prihvatio kao
+    # predlog jer je faktura imala jednu stavku, a Ilijana je izabrala drugi
+    # artikal i bila u pravu. To je bio jedini stvarni promasaj od 52 provere.
+    if len(nadjeno) == 1:
+        jedina = nadjeno[0]
+        razlika = float(jedina["nabavna"]) - float(osnovica)
+        if abs(razlika) < 1.0:
+            return jedina, "jedina stavka, iznos se slaze"
+        if razlika > 0:
+            return None, "odobren deo vrednosti - popust, ne povrat"
+        return None, "odobreno vise od nabavne - nije taj uredjaj"
 
     po_iznosu = [x for x in nadjeno if abs(float(x["nabavna"]) - float(osnovica)) < 1.0]
     if len(po_iznosu) == 1:
