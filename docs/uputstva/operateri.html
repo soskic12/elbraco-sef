@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="sr"><head><meta charset="utf-8">
+<title>Panel za e-fakture — uputstvo za operatere</title>
+<link rel="stylesheet" href="_stil.css"></head>
+<body>
+
+<h1>Panel za e-fakture — uputstvo za operatere</h1>
+<p class="uvod">Za Dušana, Ninu, Bogdana i Ilijanu. Svako ima svoj deo — pročitaj
+zajednički deo, pa svoj.</p>
+
+<h2>Ko radi šta</h2>
+<table>
+  <tr><th style="width:28mm">Ko</th><th>Deo posla</th><th style="width:30mm">Ekran</th></tr>
+  <tr><td>Nina</td><td>Red dokumenata: proverava razvrstavanje i prosleđuje objektima</td><td>Red</td></tr>
+  <tr><td>Dušan</td><td>Otvara šifre artikala po slikama iz objekata</td><td>Šifre</td></tr>
+  <tr><td>Ilijana</td><td>Povraćaji i knjižna odobrenja, popusti za prenos</td><td>Red, Popusti</td></tr>
+  <tr><td>Bogdan</td><td>— dopuniti —</td><td>—</td></tr>
+</table>
+
+<h2>Zajedničko</h2>
+<h3>Prijava</h3>
+<p><code>http://efakture.technolandkartica.net</code> — ERP nalog i lozinka, isti kao za program.</p>
+
+<h3>Odakle dolaze dokumenti</h3>
+<p>Panel svakih 15 minuta pita SEF ima li nešto novo. Dokument koji stigne sam se
+razvrsta na poslovnu jedinicu po pravilima — tačno u oko 93 slučaja od 100.
+Tvoj posao je onih ostalih sedam i potvrda da je ostalo dobro.</p>
+
+<div class="paznja">
+  <strong>Status „Nova“ na SEF-u.</strong> Panel namerno ne otvara dokumente koji su
+  na portalu još uvek „Nova“, da vam ne pomeri spisak. Zato u panelu postoji sopstvena
+  oznaka <strong>nepregledano</strong> — nju gledajte, ne status na portalu.
+</div>
+
+<h2>Red dokumenata</h2>
+<h3>1. Proveri razvrstavanje</h3>
+<p>Uz svaki dokument piše na koju jedinicu je razvrstan i po kom pravilu. Ako nije dobro,
+promeni jedinicu iz padajućeg spiska — aplikacija iz ispravke uči.</p>
+
+<h3>2. Prosledi objektu</h3>
+<p>Dugme <span class="dugme">Potvrdi i prosledi poslovnoj jedinici</span> radi oboje
+odjednom: potvrđuje razvrstavanje i šalje obaveštenje poslovođi. Dok ne klikneš,
+poslovođa dokument <strong>ne vidi</strong>.</p>
+
+<h3>3. Prihvatanje na SEF-u</h3>
+<p>Prihvatanje fakture je pravni čin i radi se svesno, dugmetom
+<span class="dugme">Prihvati na SEF-u</span>. Aplikacija to ne radi sama.</p>
+
+<h2 class="nova-strana">Šifre artikala — Dušan</h2>
+<p>Ekran <strong>Šifre</strong> pokazuje stavke kojima fali naša šifra, sa svim što
+treba da je otvoriš: naziv sa fakture, šifra dobavljača, barkod, količina, cena — i
+<strong>slika</strong> koju je poslao poslovođa.</p>
+
+<h3>Kad znaš šifru</h3>
+<p>Upiši je i klikni <span class="dugme">Poveži</span>. Veza se pamti — sledeći put
+kad isti dobavljač pošalje isti artikal, aplikacija ga prepoznaje sama.</p>
+<div class="paznja">
+  Ako dobavljač <strong>jednom svojom šifrom</strong> pokriva više naših artikala
+  (boje, veličine), čekiraj <em>ne pamti vezu</em>. Inače bi sledeća faktura dobila
+  pogrešnu boju.
+</div>
+
+<h3>Kad stavka nije artikal</h3>
+<p>„Odobrenje po saglasnosti“, troškovi transporta i slično nikad neće imati šifru.
+Klikni <span class="dugme">nije artikal</span> — izlazi sa spiska i ne ulazi u kalkulaciju.</p>
+
+<h3>Nova šifra</h3>
+<p>Za novu šifru koristi <em>predlog artikla</em> — aplikacija predlaže prvu slobodnu
+iz većeg slobodnog opsega, pa se šifre ne troše nasumično.</p>
+
+<h2 class="nova-strana">Povraćaji i odobrenja — Ilijana</h2>
+<h3>Knjižno odobrenje za povrat robe</h3>
+<p>Odobrenje kojim dobavljač priznaje <strong>ceo iznos</strong> uređaja znači da smo
+razduženi — ide na magacin 010 kao povraćaj. Kalkulacija ulazi u minus:
+količina negativna, nabavna cena ostaje pozitivna.</p>
+
+<h3>Kad odobrenje ne navodi artikal</h3>
+<p>Neki dobavljači (Eurotehna) u stavku upišu samo „Odobrenje po Saglasnosti broj…“.
+Aplikacija tada traži artikal <strong>po broju fakture iz napomene</strong>, kroz sve
+godine unazad do 2022, i predlaže ga zeleno uz stavku — sa brojem originalnog računa,
+magacinom i nabavnom cenom.</p>
+<div class="ok">
+  Predlog je pogodio u <strong>68 od 69</strong> provera. Svejedno se potvrđuje ručno:
+  klikni <span class="dugme">Poveži</span> ako je dobro, ili prekucaj šifru ako nije.
+</div>
+
+<h3>Popusti za prenos</h3>
+<p>Kad dobavljač odobri <strong>samo deo</strong> vrednosti uređaja — jer je stigao
+oštećen — roba ostaje kod nas i prodaje se jeftinije. Takvo odobrenje ide na 088 kao
+finansijsko, a ti dobijaš mejl i zapis na ekranu <strong>Popusti</strong>.</p>
+<p>Kad popust preneseš objektu koji taj uređaj prodaje, upiši broj objekta i klikni
+<span class="dugme">Preneto</span>. Zapis do tada stoji otvoren, a u navigaciji piše
+koliko ih čeka.</p>
+
+<h2 class="nova-strana">Prelazak na novi način rada</h2>
+<div class="vazno">
+  <strong>Isti dokument se ne radi dvaput.</strong> Ako je poslovođa kalkulaciju
+  napravio ručno, aplikacija to prepozna i označi dokument kao <em>u ERP-u (ručno)</em>
+  — neće napraviti drugu. Ali ako aplikacija upiše prvа, pa neko napravi i ručno,
+  <strong>u ERP-u ostaju dve</strong>. Zato: pre nego što bilo ko nešto unosi ručno,
+  pogleda se panel.
+</div>
+
+<h3>Šta aplikacija nikad ne radi sama</h3>
+<ul>
+  <li>Ne prihvata fakturu na SEF-u.</li>
+  <li>Ne knjiži kalkulaciju — upisuje je kao otvorenu, knjiženje ostaje u ERP-u.</li>
+  <li>Ne prosleđuje dokument objektu dok operater ne klikne.</li>
+  <li>Ne otvara šifre i ne bira kom objektu popust pripada.</li>
+</ul>
+
+<h3>Ako nešto zaškripi</h3>
+<table>
+  <tr><th style="width:55mm">Šta se desilo</th><th>Šta radiš</th></tr>
+  <tr><td>Dokument nije razvrstan</td><td>Dodeli jedinicu ručno; ako se ponavlja kod istog dobavljača, javi da se napravi pravilo</td></tr>
+  <tr><td>Kalkulacija „čeka šifru“</td><td>Ekran Šifre — poveži šifru ili označi da nije artikal</td></tr>
+  <tr><td>Kalkulacija „zaustavljena“</td><td>Piše razlog (dobavljač van šifarnika, šifra bez artikla) — reši pa osveži</td></tr>
+  <tr><td>Poslovođa kaže da nema fakturu</td><td>Proveri je li prosleđena — dok se ne klikne „Potvrdi i prosledi“, on je ne vidi</td></tr>
+</table>
+
+<footer>
+  ELBRACO GROUP · panel za e-fakture · uputstvo za operatere<br>
+  Verzija za prvi talas prelaska.
+</footer>
+
+</body></html>
