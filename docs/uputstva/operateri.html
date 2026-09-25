@@ -8,13 +8,21 @@
 <p class="uvod">Za Dušana, Ninu, Bogdana i Ilijanu. Svako ima svoj deo — pročitaj
 zajednički deo, pa svoj.</p>
 
+<div class="vazno">
+  <strong>Novi način rada počinje ______________ .</strong><br>
+  Dokument koji je u panel stigao pre tog dana nema ni potvrdu prijema ni upis
+  kalkulacije — stoji oznaka „stiglo pre prelaska“. Te fakture poslovođe završavaju
+  u ERP-u, kao i do sada. Granica je upisana u aplikaciju, ne samo u uputstvo.
+</div>
+
 <h2>Ko radi šta</h2>
 <table>
   <tr><th style="width:28mm">Ko</th><th>Deo posla</th><th style="width:30mm">Ekran</th></tr>
   <tr><td>Nina</td><td>Red dokumenata: proverava razvrstavanje i prosleđuje objektima</td><td>Red</td></tr>
   <tr><td>Dušan</td><td>Otvara šifre artikala po slikama iz objekata</td><td>Šifre</td></tr>
   <tr><td>Ilijana</td><td>Povraćaji i knjižna odobrenja, popusti za prenos</td><td>Red, Popusti</td></tr>
-  <tr><td>Bogdan</td><td>— dopuniti —</td><td>—</td></tr>
+  <tr><td>Bogdan</td><td>Ulazni računi bez robe (088): struja, zakup, komunalije, usluge,
+    finansijska knjižna odobrenja</td><td>Moja jedinica</td></tr>
 </table>
 
 <h2>Zajedničko</h2>
@@ -36,6 +44,13 @@ Tvoj posao je onih ostalih sedam i potvrda da je ostalo dobro.</p>
 <h3>1. Proveri razvrstavanje</h3>
 <p>Uz svaki dokument piše na koju jedinicu je razvrstan i po kom pravilu. Ako nije dobro,
 promeni jedinicu iz padajućeg spiska — aplikacija iz ispravke uči.</p>
+
+<div class="paznja">
+  <strong>Ispravka razvrstavanja više ne pravi pravilo sama od sebe.</strong>
+  Uz izbor jedinice stoji čekboks <em>pravilo</em> — bez njega ispravka važi samo za
+  taj dokument. Štikliraj ga tek kad znaš da će se isto ponavljati; jednokratna
+  ispravka ne treba da postane trajno pravilo.
+</div>
 
 <h3>2. Prosledi objektu</h3>
 <p>Dugme <span class="dugme">Potvrdi i prosledi poslovnoj jedinici</span> radi oboje
@@ -92,6 +107,26 @@ finansijsko, a ti dobijaš mejl i zapis na ekranu <strong>Popusti</strong>.</p>
 <span class="dugme">Preneto</span>. Zapis do tada stoji otvoren, a u navigaciji piše
 koliko ih čeka.</p>
 
+<h2 class="nova-strana">Ulazni računi — Bogdan</h2>
+<p>Ekran <strong>Moja jedinica</strong> pokazuje račune bez robe: struja, zakup,
+komunalije, usluge i finansijska knjižna odobrenja. Njih niko ne prima u magacinu,
+pa kalkulaciju pušta kancelarija — dugmetom <span class="dugme">Upiši kalkulaciju</span>.</p>
+
+<h3>Šta aplikacija uradi sama</h3>
+<ul>
+  <li>uzima <strong>datum prometa</strong> sa fakture, ne datum slanja</li>
+  <li>razdvaja PDV po stopama — opšta i posebna idu u odvojena polja</li>
+  <li>kad je na računu deo <strong>bez PDV-a</strong> (npr. 349,00 kod EPS-a),
+      upisuje ga kao zaseban red poreske evidencije, tip 23</li>
+</ul>
+<p>Kalkulacija se upisuje kao <strong>otvorena</strong>. Knjiženje ostaje u ERP-u i
+radi se kao i do sada.</p>
+
+<div class="paznja">
+  Ako račun ne nosi rok plaćanja, u valutu ide datum prometa — tako ERP radi na
+  svim svojim zapisima.
+</div>
+
 <h2 class="nova-strana">Prelazak na novi način rada</h2>
 <div class="vazno">
   <strong>Isti dokument se ne radi dvaput.</strong> Ako je poslovođa kalkulaciju
@@ -109,6 +144,13 @@ koliko ih čeka.</p>
   <li>Ne otvara šifre i ne bira kom objektu popust pripada.</li>
 </ul>
 
+<h3>Čišćenje na dan prelaska — Nina i Dušan</h3>
+<p>U redu će ostati fakture od pre prelaska koje niko više neće dirati. Njih
+<strong>arhivirajte</strong> da ne stoje ljudima na putu. Arhiviranje ne briše ništa —
+dokument se i dalje nađe pretragom.</p>
+<p>Ne arhivirajte ono za šta roba tek treba da stigne: poslovođa i za to pravi
+kalkulaciju u ERP-u, ali fakturu treba da vidi.</p>
+
 <h3>Ako nešto zaškripi</h3>
 <table>
   <tr><th style="width:55mm">Šta se desilo</th><th>Šta radiš</th></tr>
@@ -116,6 +158,8 @@ koliko ih čeka.</p>
   <tr><td>Kalkulacija „čeka šifru“</td><td>Ekran Šifre — poveži šifru ili označi da nije artikal</td></tr>
   <tr><td>Kalkulacija „zaustavljena“</td><td>Piše razlog (dobavljač van šifarnika, šifra bez artikla) — reši pa osveži</td></tr>
   <tr><td>Poslovođa kaže da nema fakturu</td><td>Proveri je li prosleđena — dok se ne klikne „Potvrdi i prosledi“, on je ne vidi</td></tr>
+  <tr><td>Poslovođa kaže da nema dugme</td><td>Verovatno je faktura stigla pre prelaska — to je namerno, ide u ERP</td></tr>
+  <tr><td>Kalkulacija je već u ERP-u</td><td>Panel je sam prepozna i označi „u ERP-u (ručno)“ — ne pravi se druga</td></tr>
 </table>
 
 <footer>
