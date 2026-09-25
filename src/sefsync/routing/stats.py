@@ -59,11 +59,26 @@ def sazetak(session: Session) -> dict:
     )
     sumnjiva = [r for r in pravila if r.misses > 0]
 
+    # Koliko je dokumenata koje je pravilo stvarno odlucilo. `hits` se broji tek
+    # kad operater potvrdi, pa pravilo koje radi a niko ga ne potvrdjuje izgleda
+    # kao da se nikad nije okinulo. Mereno 25.09.: od 233 pravila odlucilo je
+    # nesto njih 53, a 180 nikad nista - to se na spisku nije videlo.
+    odlucilo = {
+        rid: n
+        for rid, n in session.execute(
+            select(Document.routing_rule_id, func.count())
+            .where(Document.routing_rule_id.isnot(None))
+            .group_by(Document.routing_rule_id)
+        )
+    }
+
     return {
         "tacnost": tacnost,
         "po_izvoru": po_izvoru,
         "pravila": pravila,
         "sumnjiva": sumnjiva,
+        "odlucilo": odlucilo,
+        "mrtvih": sum(1 for r in pravila if odlucilo.get(r.id, 0) == 0),
         "ukupno": broj(aktivni),
         "nerazvrstano": broj(aktivni, Document.business_unit_id.is_(None)),
         "neprovereno": broj(

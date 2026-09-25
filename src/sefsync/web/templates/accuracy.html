@@ -71,21 +71,29 @@
 </table>
 
 <h2>Sva pravila po učinku</h2>
+<p class="small muted">„Odlučilo“ je broj dokumenata koje je pravilo stvarno razvrstalo.
+„Pogodaka“ se broji tek kad operater potvrdi razvrstavanje, pa pravilo koje radi a niko
+ga ne potvrđuje ima nulu — zato su te dve kolone različite.
+{% if mrtvih %}<strong>{{ mrtvih }}</strong> od {{ pravila|length }} pravila nikad ništa
+nije odlučilo.{% endif %}</p>
 <table>
   <thead><tr><th class="num">Prior.</th><th>Polje</th><th>Šablon</th><th>PJ</th>
-    <th class="num">Pogodaka</th><th class="num">Promašaja</th></tr></thead>
+    <th class="num">Odlučilo</th><th class="num">Pogodaka</th><th class="num">Promašaja</th></tr></thead>
   <tbody>
     {% for r in pravila %}
-    <tr>
+    {% set n = odlucilo.get(r.id, 0) %}
+    <tr {% if not n %}style="opacity:.55"{% endif %}>
       <td class="num">{{ r.priority }}</td>
       <td class="small">{{ r.field.value }}</td>
       <td class="small"><code>{{ r.pattern[:40] }}</code></td>
       <td class="small">{{ r.business_unit.code }}</td>
+      <td class="num">{% if n %}{{ n }}{% else %}<span class="muted"
+          title="Pravilo postoji, ali nijedan dokument nije razvrstalo">nikad</span>{% endif %}</td>
       <td class="num">{{ r.hits }}</td>
       <td class="num">{{ r.misses or '' }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted" style="padding:18px;text-align:center">Nema pravila.</td></tr>
+    <tr><td colspan="7" class="muted" style="padding:18px;text-align:center">Nema pravila.</td></tr>
     {% endfor %}
   </tbody>
 </table>
