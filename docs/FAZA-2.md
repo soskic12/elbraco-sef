@@ -1657,3 +1657,41 @@ Jedini neslaganje je dupliran artikal — `84655 Gorenje RIU 609 EA1` i
 Isti uređaj pod dve šifre nije samo kozmetika: stanje se deli na dva mesta, pa ni
 jedno ne pokazuje koliko komada stvarno ima. Vredi pogledati koliko je takvih
 parova u šifarniku — zaseban posao.
+
+## Barkod koji se ne poklapa (25.09.)
+
+Bane traži rutinu za slučaj kad isti artikal stigne sa drugim barkodom: jedan
+barkod po artiklu je pravilo, pa se lager mora prelepiti. Prvo koliko je toga.
+
+Od **15.860** stavki sa barkodom, uz zanemarene vodeće nule (`0616320532451` i
+`616320532451` su isti kod):
+
+| | |
+|---|---|
+| isti barkod | 15.375 |
+| kod nas interna šifra umesto EAN-a | 231 stavki, **31 artikal** |
+| na fakturi nije EAN | 154 |
+| **prava promena** | 100 stavki, **12 artikala** |
+
+**Interna šifra nije greška nego pab.** Svih 31 su pića — Coca-Cola, Next, Stella,
+Plantaže Vranac, Rubin Cabernet. Bane: „kod pab-a imaš proizvodnju, od coca cola i
+crnog vina proizvodiš Bambus i slično". Proizvod koji sam praviš nema fabrički
+barkod, pa artikal nosi internu šifru. Ta grupa ispada iz rutine.
+
+**Pravih promena je 12 godišnje**, i to su uglavnom Xiaomi telefoni, Karcher, TCL,
+Gree klima — dakle dobavljač pod istom svojom šifrom šalje drugu varijantu. Za to
+već postoji zaštita: kad se ista šifra dobavljača veže za drugi artikal, mapiranje
+se **gasi** umesto da se prepiše.
+
+### Predložena rutina (nije napravljena)
+
+Kad Dule poveže šifru, a barkod sa fakture se razlikuje (oba prava EAN-a):
+
+1. **nov barkod je ispravan** → zadatak „prelepiti lager“ svakom objektu koji ima
+   stanje tog artikla, sa starim i novim kodom; stoji otvoren dok objekat ne potvrdi
+2. **ostaje stari** → zadatak samo objektu kome je roba stigla, za nove komade
+3. **nije isti artikal** → ne povezuje se, otvara se nova šifra
+
+**Panel ne bi pisao u `ARTIKLI`.** Upis u ERP je do sada ograničen na kalkulacije,
+koje su proverene polje po polje; menjanje šifarnika je druga vrsta rizika. Barkod
+menja Dule u ERP-u, panel vodi prelepljivanje i trag.
