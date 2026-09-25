@@ -1695,3 +1695,36 @@ Kad Dule poveže šifru, a barkod sa fakture se razlikuje (oba prava EAN-a):
 **Panel ne bi pisao u `ARTIKLI`.** Upis u ERP je do sada ograničen na kalkulacije,
 koje su proverene polje po polje; menjanje šifarnika je druga vrsta rizika. Barkod
 menja Dule u ERP-u, panel vodi prelepljivanje i trag.
+
+## Prelazak na novi način rada — 28.09.2026. u 8 h
+
+Odluke (Bane, 25.09.): **svi odjednom**, app **upisuje kalkulacije od prvog dana**,
+a ono što je stiglo ranije završavaju ljudi u ERP-u kao i do sada.
+
+### Zašto granica mora da bude u kodu, ne u uputstvu
+
+Posle `nacrti --osvezi` na serveru je stajalo **46 spremnih** kalkulacija za fakture
+koje niko nije zaknjižio. Jedan klik i ERP bi dobio kalkulaciju za robu koju je
+poslovođa odavno primio i proknjižio na svoj način. Zato `NOVI_TOK_OD=2026-09-28`:
+dokument stigao pre tog dana nema ni potvrdu prijema ni upis, ni u prikazu ni u
+rukovaocu.
+
+### Šta je već pokriveno
+
+`nacrti --osvezi` je prepoznao **197 kalkulacija koje su ljudi napravili ručno**
+(„upisan“ je skočio sa 7 na 204) i označio ih kao urađene. Njih niko neće praviti
+ponovo. Brana pri upisu (`postojeca_kalkulacija`) i dalje stoji kao druga linija.
+
+### Redosled
+
+**Nedelja 27.09.** — paket, `nacrti --osvezi`, `provera-prelaska`, grant na
+`ELBS_2026`, upisati `NOVI_TOK_OD=2026-09-28`. Probni režim i produkcioni upis
+**ostaju isključeni** — panel stoji spreman, ništa se ne dešava.
+
+**Ponedeljak 28.09. u 8 h, dok je Bane tu** — obrisati `NOTIFY_OVERRIDE_TO`,
+uključiti `ERP_ALLOW_PRODUCTION_WRITE`, restart preko `restart.ps1`, pa
+`provera-prelaska` mora da kaže „Sve stoji“. Prvi upis zajedno, na jednoj uslužnoj
+fakturi (088) — nema stavki ni marže, najmanje toga može da zaškripi.
+
+**Isti dan** — Nina i Dušan arhiviraju zaostalo iz reda, osim onoga za šta roba tek
+treba da stigne.
