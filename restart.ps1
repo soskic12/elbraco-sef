@@ -26,12 +26,33 @@ if (Get-Service $Servis -ErrorAction SilentlyContinue) {
     throw "Nema ni servisa ni zadatka pod imenom $Servis."
 }
 
-$zaostali = Get-Process sefsync -ErrorAction SilentlyContinue
-if ($zaostali) {
-    Write-Host "Gasim zaostale procese ($($zaostali.Count))..."
-    $zaostali | Stop-Process -Force
+# Zaostali proces se ne trazi po imenu nego po portu: servis se pokrece
+# sistemskim Python-om, pa se zove "python", a ne "sefsync". Zbog toga je
+# 25.09. ostao ziv, novi se nije mogao vezati i zadatak je pao sa kodom 1.
+function Ugasi-Na-Portu($broj) {
+    $veze = Get-NetTCPConnection -LocalPort $broj -State Listen -ErrorAction SilentlyContinue
+    foreach ($veza in $veze) {
+        $proces = Get-Process -Id $veza.OwningProcess -ErrorAction SilentlyContinue
+        if (-not $proces) { continue }
+        $linija = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proces.Id)" `
+                   -ErrorAction SilentlyContinue).CommandLine
+        $nas = ($proces.Path -and $proces.Path.StartsWith($Odrediste, [StringComparison]::OrdinalIgnoreCase)) -or
+               ($linija -and $linija -like "*$Odrediste*")
+        if ($nas) {
+            Write-Host "Gasim zaostali proces $($proces.ProcessName) (PID $($proces.Id))..."
+            Stop-Process -Id $proces.Id -Force
+        } else {
+            Write-Warning "Port $broj drzi tudji proces: $($proces.ProcessName) (PID $($proces.Id)). Ne diram ga."
+        }
+    }
 }
-Start-Sleep 2
+
+Get-Process sefsync -ErrorAction SilentlyContinue | Stop-Process -Force
+foreach ($cekanje in 1..10) {
+    Ugasi-Na-Portu $Port
+    Start-Sleep 1
+    if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) { break }
+}
 
 Write-Host 'Palim...'
 if (Get-Service $Servis -ErrorAction SilentlyContinue) { & $nssm start $Servis | Out-Null }
