@@ -834,3 +834,57 @@ def test_vrsta_ekrana_po_jedinici():
     # jedinica bez erp_code pada na svoju sifru, ne puca
     bez = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
     assert _vrsta_ekrana(bez) == EKRAN_OBJEKAT
+
+
+def test_valuta_nikad_nije_nula(db):
+    """Kad faktura nema rok plaćanja, u VALUTA ide datum prometa.
+
+    Mereno: od 8.863 kalkulacija u ERP-u VALUTA je nula — nijednom. Knjižno
+    odobrenje rok po pravilu nema, pa je app pisala nulu; na 010 je ERP-ova
+    VALUTA jednaka datumu u 584 od 587 zapisa.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777030, document_number="KO-9/26", supplier_name="Dobavljač",
+            supplier_vat="100000000", supplier_reg_no="12345678",
+            amount=1200.0, vat_amount=200.0, sef_status=SefStatus.SEEN,
+            business_unit_id=pj.id, issue_date=dt.date(2026, 9, 20),
+            delivery_date=dt.date(2026, 9, 18), due_date=None,
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Usluga", quantity=1,
+                                      line_amount=1000.0, vat_percent=20.0))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+    promet = K.clarion_dan(dt.date(2026, 9, 18))
+    assert nacrt.zaglavlje["VALUTA"] == promet
+    assert nacrt.zaglavlje["VALUTA"] != 0

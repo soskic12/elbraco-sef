@@ -1049,6 +1049,7 @@ def sifre_povezi(
     line_no: int = Form(...),
     erp_item_code: str = Form(...),
     ne_pamti: str = Form(""),
+    zapamti: str = Form(""),
 ) -> RedirectResponse:
     from ..services.nacrti import povezi_sifru
 
@@ -1060,12 +1061,23 @@ def sifre_povezi(
             raise HTTPException(404, "Nema tog dokumenta.")
         if not _sme_na_dokument(session, user, doc):
             raise HTTPException(403, "Taj dokument nije tvoj.")
+        vrsta = doc.document_type
     nazad = "/sifre" if user.is_operator else "/moja-jedinica"
+
+    # Na knjiznom odobrenju sifra dobavljaca nije sifra artikla nego opsta
+    # oznaka: EWE salje "USL00027" na 109 odobrenja, Eurotehna "Porez 20%" na
+    # 107, Comtrade "R0001" na 90. Da se takva veza zapamti, svako sledece
+    # odobrenje tog dobavljaca bi tiho dobilo artikal od proslog puta. Zato se
+    # na odobrenjima pamti samo kad covek izricito kaze.
+    if vrsta is DocumentType.CREDIT_NOTE:
+        pamti = bool(zapamti)
+    else:
+        pamti = not ne_pamti
 
     try:
         povezi_sifru(
             document_id, line_no, erp_item_code,
-            korisnik=user.login, pamti=not ne_pamti,
+            korisnik=user.login, pamti=pamti,
         )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
         return _back(nazad, str(exc), False)

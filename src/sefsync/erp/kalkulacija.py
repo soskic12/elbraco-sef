@@ -539,7 +539,11 @@ def pripremi(
                     },
                 ]
 
-        rok = clarion_dan(doc.due_date) if doc.due_date else 0
+        # Rok placanja. Knjizno odobrenje ga po pravilu nema, pa je app pisala
+        # nulu - a takvog zapisa u ERP-u nema nijednog: od 8.863 kalkulacija
+        # VALUTA je nula nula puta. Na 010 je jednaka datumu u 584 od 587, na
+        # 021 i u maloprodaji je kasnije. Kad roka nema, stoji datum prometa.
+        rok = clarion_dan(doc.due_date) if doc.due_date else dan_prometa
         nacrt.zaglavlje = {
             "LASTUSER": 1,
             "MAGACIN": magacin,

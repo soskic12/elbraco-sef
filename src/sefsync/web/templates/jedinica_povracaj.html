@@ -74,6 +74,9 @@
           <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345"
                  {% if s.predlog %}value="{{ s.predlog.sifra }}"{% endif %}>
           <button type="submit">Poveži</button>
+          <label class="small muted" style="display:block"
+                 title="Oznaka sa odobrenja obično nije šifra artikla (npr. „Porez 20%“), pa se veza ne pamti sama">
+            <input type="checkbox" name="zapamti" value="1"> zapamti vezu za ovog dobavljača</label>
         </form>
         <form class="inline" method="post" action="/sifre/nije-artikal"
               onsubmit="return confirm('Ova stavka nije artikal i neće ući u kalkulaciju?')">
