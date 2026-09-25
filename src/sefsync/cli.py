@@ -907,6 +907,137 @@ def _ispisi_stavke(docs, broj: str) -> None:
         typer.echo("")
 
 
+@app.command("provera-prelaska")
+def cmd_provera_prelaska() -> None:
+    """Šta još stoji na putu prelasku na novi način rada.
+
+    Jedna komanda umesto spiska koji se pamti napamet. Ne menja ništa — samo
+    gleda podešavanja, dozvole u ERP-u, adrese jedinica i stanje nacrta.
+    """
+    _boot()
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+    from sqlalchemy import text as _text
+
+    from .erp.connection import get_erp_engine
+    from .models import BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta, UnitKind
+
+    podesavanja = get_settings()
+    nalazi: list[tuple[bool, str]] = []
+
+    def red(u_redu: bool, tekst: str) -> None:
+        nalazi.append((u_redu, tekst))
+
+    # --- podesavanja ---
+    red(
+        podesavanja.erp_upis_kalkulacije,
+        "ERP_UPIS_KALKULACIJE je uključen" if podesavanja.erp_upis_kalkulacije
+        else "ERP_UPIS_KALKULACIJE je isključen — dugme za upis odbija posao",
+    )
+    red(
+        podesavanja.novi_tok_od is not None,
+        f"NOVI_TOK_OD = {podesavanja.novi_tok_od}" if podesavanja.novi_tok_od
+        else "NOVI_TOK_OD nije zadat — stare fakture bi nudile upis kao i nove",
+    )
+    proba = podesavanja.notify_override_to.strip()
+    red(
+        not proba,
+        "Obaveštenja idu poslovnim jedinicama" if not proba
+        else f"PROBNI REŽIM: sve ide na {proba}, poslovođe ne dobijaju ništa",
+    )
+    red(
+        bool(podesavanja.public_base_url and "localhost" not in podesavanja.public_base_url),
+        f"PUBLIC_BASE_URL = {podesavanja.public_base_url}",
+    )
+    red(
+        bool(podesavanja.smtp_host or podesavanja.smtp_source_file),
+        "Pošta je podešena" if (podesavanja.smtp_host or podesavanja.smtp_source_file)
+        else "Pošta nije podešena — obaveštenja neće otići",
+    )
+    red(
+        podesavanja.erp_allow_production_write,
+        "ERP_ALLOW_PRODUCTION_WRITE je uključen — upis ide u pravu bazu"
+        if podesavanja.erp_allow_production_write
+        else "ERP_ALLOW_PRODUCTION_WRITE je isključen — upis ide u test bazu",
+    )
+
+    # --- dozvole u produkcionoj bazi ---
+    TABELE = ("ULKALKUL", "PRULKALK", "MKALKUL", "MPRULK", "PDVEVIDX")
+    try:
+        with get_erp_engine().connect() as conn:
+            ima = {
+                r[0]
+                for r in conn.execute(_text(
+                    "select o.name from sys.database_permissions dp "
+                    "join sys.database_principals p on p.principal_id = dp.grantee_principal_id "
+                    "join sys.objects o on o.object_id = dp.major_id "
+                    "where dp.permission_name = 'INSERT' and dp.state = 'G' "
+                    "  and p.name = USER_NAME()"
+                ))
+            }
+            baza = conn.execute(_text("select DB_NAME()")).scalar()
+        fali = [t for t in TABELE if t not in ima]
+        red(not fali, f"Dozvole za upis u {baza}: " + ("sve na broju" if not fali
+            else "fali INSERT na " + ", ".join(fali)))
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        red(False, f"Dozvole nisu proverene: {str(exc)[:90]}")
+
+    # --- jedinice bez adrese ---
+    with session_scope() as session:
+        bez_mejla = [
+            u.code
+            for u in session.scalars(
+                _select(BusinessUnit).where(
+                    BusinessUnit.active == True,  # noqa: E712
+                    BusinessUnit.kind == UnitKind.RETAIL,
+                )
+            )
+            if not (u.emails or "").strip()
+            and session.scalar(
+                _select(_func.count()).select_from(Document)
+                .where(Document.business_unit_id == u.id)
+            )
+        ]
+        red(not bez_mejla, "Sve maloprodajne jedinice sa dokumentima imaju mejl"
+            if not bez_mejla else "Bez mejla, a imaju dokumente: " + ", ".join(sorted(bez_mejla)))
+
+        stanja = {
+            s.value: session.scalar(
+                _select(_func.count()).select_from(NacrtKalkulacije)
+                .where(NacrtKalkulacije.stanje == s)
+            ) or 0
+            for s in StanjeNacrta
+        }
+        spremnih = stanja.get("spreman", 0)
+        po_starom = 0
+        if podesavanja.novi_tok_od:
+            po_starom = sum(
+                1
+                for n in session.scalars(
+                    _select(NacrtKalkulacije)
+                    .where(NacrtKalkulacije.stanje == StanjeNacrta.SPREMAN)
+                )
+                if n.document is not None and n.document.po_starom
+            )
+        red(
+            spremnih == po_starom or podesavanja.novi_tok_od is not None,
+            f"Nacrti: spremnih {spremnih} (od toga {po_starom} po starom), "
+            f"čeka šifru {stanja.get('ceka_sifru', 0)}, "
+            f"upisanih {stanja.get('upisan', 0)}, problema {stanja.get('problem', 0)}",
+        )
+
+    typer.echo("")
+    for u_redu, tekst in nalazi:
+        typer.secho(("  ok    " if u_redu else "  PAZI  ") + tekst,
+                    fg="green" if u_redu else "yellow")
+    prepreka = sum(1 for u_redu, _ in nalazi if not u_redu)
+    typer.echo("")
+    if prepreka:
+        typer.secho(f"{prepreka} stvar(i) traži odluku pre prelaska.", fg="yellow")
+    else:
+        typer.secho("Sve stoji.", fg="green")
+
+
 @app.command("meri-odobrenja")
 def cmd_meri_odobrenja(
     koliko: int = typer.Option(10, help="Koliko primera ispisati."),
