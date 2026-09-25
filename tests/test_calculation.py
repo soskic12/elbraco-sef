@@ -917,3 +917,33 @@ def test_sifra_objekta_088_vodi_na_upravu(db):
         # ostali i dalje idu na svoj objekat
         nina = User("ninar", "Vignević Nina", Role.POSLOVODJA, "004", "PODRSKA")
         assert _unit_for(session, nina).code == "MP004"
+
+
+def test_dokument_pre_prelaska_ide_po_starom(monkeypatch):
+    """Dokument koji je stigao pre dana prelaska ne nudi upis ni prijem.
+
+    Bane, 25.09.: „nek napravi ručno ali mora dobiti jasno uputstvo od kog
+    momenta je krenulo ovo novo". Na dan prelaska je u panelu stajalo 46
+    spremnih kalkulacija za fakture koje niko nije zaknjižio — jedan pogrešan
+    klik i ERP bi dobio kalkulaciju za robu koju je poslovođa odavno primio.
+    """
+    import datetime as dt
+
+    from sefsync.config import Settings
+    from sefsync.models import Document
+
+    stari = Document(sef_invoice_id=1, created_at=dt.datetime(2026, 9, 20, 10, 0))
+    novi = Document(sef_invoice_id=2, created_at=dt.datetime(2026, 10, 1, 8, 0))
+    na_sam_dan = Document(sef_invoice_id=3, created_at=dt.datetime(2026, 10, 1, 0, 5))
+
+    # bez zadatog dana nista nije po starom - zatecena instalacija radi kao i pre
+    monkeypatch.setattr("sefsync.config.get_settings", lambda: Settings(_env_file=None))
+    assert stari.po_starom is False
+
+    monkeypatch.setattr(
+        "sefsync.config.get_settings",
+        lambda: Settings(_env_file=None, novi_tok_od="2026-10-01"),
+    )
+    assert stari.po_starom is True
+    assert novi.po_starom is False
+    assert na_sam_dan.po_starom is False      # dan prelaska je vec novi tok

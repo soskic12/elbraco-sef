@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -104,6 +105,16 @@ class Settings(BaseSettings):
     # Da li potvrda prijema robe uopste pokrece upis kalkulacije. Podrazumevano
     # ne: dok se ne uvezba, kalkulacije prave poslovodje kao i do sada.
     erp_upis_kalkulacije: bool = False
+
+    # Dan od kog vazi novi nacin rada (YYYY-MM-DD). Dokument koji je u panel
+    # stigao pre tog dana ide po starom: kalkulaciju pravi covek u ERP-u, a
+    # panel za njega ne nudi ni potvrdu prijema ni upis.
+    #
+    # Bez ovoga bi prelazak bio samo recenica u uputstvu. Na dan prelaska je u
+    # panelu stajalo 46 spremnih kalkulacija za fakture koje niko jos nije
+    # zaknjizio - jedan pogresan klik i ERP bi dobio kalkulaciju za robu koju je
+    # poslovodja vec odavno primio i proknjizio na svoj nacin.
+    novi_tok_od: date | None = None
 
     # --- Izvor sifarnika poslovnih jedinica (postojeca tabela na serveru) ---
     # Ako nije zadat, koristi se erp_db_url. Upit mora da vrati kolone:

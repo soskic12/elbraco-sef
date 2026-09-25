@@ -333,6 +333,21 @@ class Document(Base):
     )
 
     @property
+    def po_starom(self) -> bool:
+        """Dokument koji je u panel stigao pre prelaska na novi nacin rada.
+
+        Za njega kalkulaciju pravi covek u ERP-u, kao i do sada, pa panel ne
+        nudi ni potvrdu prijema ni upis. Granica je dan iz `NOVI_TOK_OD`; bez
+        nje nista nije po starom.
+        """
+        from .config import get_settings
+
+        granica = get_settings().novi_tok_od
+        if granica is None:
+            return False
+        return self.created_at is not None and self.created_at.date() < granica
+
+    @property
     def nepregledan(self) -> bool:
         """Niko ga jos nije video - ono sto je na portalu bio status "Nova".
 

@@ -568,6 +568,8 @@ def upisi_kalkulaciju(doc_id: int, user: Korisnik) -> RedirectResponse:
             raise HTTPException(404, "Nema tog dokumenta.")
         if not _sme_na_dokument(session, user, doc):
             raise HTTPException(403, "Taj dokument nije tvoj.")
+        if doc.po_starom:
+            return _back(f"/dokument/{doc_id}", "Ova faktura je stigla pre prelaska na novi način rada — kalkulaciju za nju pravi poslovođa u ERP-u, kao i do sada.", False)
 
     podesavanja = _get()
     if not podesavanja.erp_upis_kalkulacije:
@@ -917,6 +919,12 @@ def confirm_receipt(
             moja = _unit_for(session, user)
             if moja is None or doc.business_unit_id != moja.id:
                 raise HTTPException(403, "Nije tvoj dokument.")
+        if doc.po_starom:
+            return _back(
+                f"/dokument/{doc_id}" if user.is_operator else "/moja-jedinica",
+                "Ova faktura je stigla pre prelaska na novi način rada — kalkulaciju za nju pravi poslovođa u ERP-u, kao i do sada.",
+                False,
+            )
     rezultat = Workflow().confirm_receipt(doc_id, actor=user.login, note=napomena)
     povratak = f"/dokument/{doc_id}" if user.is_operator else "/moja-jedinica"
     return _back(povratak, rezultat.message, rezultat.ok)

@@ -166,7 +166,7 @@
     {% endif %}
     <form class="inline" method="post" action="/dokument/{{ doc.id }}/osvezi">
       <button class="ghost" type="submit">Osveži sa SEF-a</button></form>
-    {% if upis_ukljucen and nacrt and nacrt.stanje.value == 'spreman' %}
+    {% if upis_ukljucen and nacrt and nacrt.stanje.value == 'spreman' and not doc.po_starom %}
       <form class="inline" method="post" action="/dokument/{{ doc.id }}/upisi-kalkulaciju"
             onsubmit="return confirm('Upisati kalkulaciju u ERP?')">
         <button type="submit"
@@ -174,6 +174,13 @@
           Upiši kalkulaciju u ERP</button></form>
     {% endif %}
   </div>
+</div>
+{% elif doc.po_starom %}
+<div class="card">
+  <div class="small" style="padding:6px 9px;border-left:3px solid #b45309;background:#fffbeb">
+    <strong>Stiglo pre prelaska na novi način rada.</strong>
+    Kalkulaciju za ovu fakturu pravi poslovođa u ERP-u, kao i do sada —
+    panel je zato ne nudi.</div>
 </div>
 {% elif not doc.received_at %}
 <div class="card">

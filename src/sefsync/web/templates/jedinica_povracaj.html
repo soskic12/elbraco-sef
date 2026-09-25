@@ -27,7 +27,10 @@
     <div style="text-align:right">
       <strong>{{ '%.2f'|format(doc.amount or 0) }}</strong>
       <span class="muted small">{{ doc.currency }}</span><br>
-      {% if n and n.stanje.value == 'upisan' %}
+      {% if doc.po_starom %}
+        <div class="small" style="margin:4px 0;padding:4px 7px;border-left:3px solid #b45309;
+     background:#fffbeb">Stiglo pre prelaska — kalkulaciju pravi poslovođa u ERP-u.</div>
+      {% elif n and n.stanje.value == 'upisan' %}
         <span class="tag ok">u ERP-u {{ n.erp_broj or '' }}</span>
         <div class="muted small">{{ n.upisao }}</div>
       {% elif n and n.stanje.value == 'spreman' %}
@@ -51,7 +54,7 @@
   </div>
   {% endif %}
 
-  {% if n and n.stanje.value == 'ceka_sifru' %}
+  {% if n and n.stanje.value == 'ceka_sifru' and not doc.po_starom %}
   <table class="small" style="width:100%;margin-top:8px">
     <tr><th style="width:26px">#</th><th>Stavka sa odobrenja</th><th style="width:300px">Naša šifra</th></tr>
     {% for s in n.nemapirane or [] %}

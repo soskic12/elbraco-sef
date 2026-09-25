@@ -87,6 +87,9 @@
           <span class="tag ok">prijem potvrdio {{ d.received_by }}</span>
           <div class="muted small">{{ d.received_at.strftime('%d.%m. %H:%M') }}
             {{ d.received_note or '' }}</div>
+        {% elif d.po_starom %}
+          <div class="small" style="padding:4px 7px;border-left:3px solid #b45309;background:#fffbeb">
+            Stiglo pre prelaska — kalkulaciju pravi poslovođa u ERP-u, kao i do sada.</div>
         {% else %}
           <form class="row" method="post" action="/dokument/{{ d.id }}/prijem">
             <input type="text" name="napomena" placeholder="napomena (opciono)" style="width:150px">
