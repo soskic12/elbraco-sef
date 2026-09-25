@@ -662,16 +662,24 @@ EKRAN_OBJEKAT = "objekat"
 def _vrsta_ekrana(unit) -> str:
     """Koji ekran dobija covek vezan za tu jedinicu.
 
-    Objekat prima robu, pa mu treba spisak za prijem i slikanje. Magacin
-    povracaja (010) i ulazni racuni (088) ne primaju nista - tamo dokument
-    stigne i tu se zavrsi, pa im treba drugo: sifre, upis i pregled.
+    Prati istu podelu kao kalkulacija: objekat i magacin robe rade sa robom,
+    a sve ostalo (uprava) su ulazni racuni bez robe, magacin 088.
+
+    Vazno: usluzne fakture se razvrstavaju na **OFFICE**, ne na MAG088 - 088 se
+    dobija tek pri pravljenju kalkulacije. Mereno 25.09.: OFFICE ima 1.953
+    dokumenta, MAG088 nijedan. Prva verzija je gledala samo sifru magacina, pa
+    bi Bogdanov ekran bio prazan.
     """
+    from ..models import UnitKind
+
     sifra = (unit.erp_code or unit.code or "").strip()
-    if sifra == MAGACIN_POVRACAJ:
-        return EKRAN_POVRACAJ
-    if sifra == MAGACIN_ULAZNI_RACUN:
-        return EKRAN_USLUGE
-    return EKRAN_OBJEKAT
+    if unit.kind in (UnitKind.RETAIL, UnitKind.WAREHOUSE):
+        if sifra == MAGACIN_POVRACAJ:
+            return EKRAN_POVRACAJ
+        if sifra == MAGACIN_ULAZNI_RACUN:
+            return EKRAN_USLUGE
+        return EKRAN_OBJEKAT
+    return EKRAN_USLUGE
 
 
 def _sme_na_dokument(session, user, doc) -> bool:

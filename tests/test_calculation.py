@@ -831,9 +831,10 @@ def test_vrsta_ekrana_po_jedinici():
     assert _vrsta_ekrana(usluge) == EKRAN_USLUGE
     assert _vrsta_ekrana(objekat) == EKRAN_OBJEKAT
 
-    # jedinica bez erp_code pada na svoju sifru, ne puca
-    bez = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
-    assert _vrsta_ekrana(bez) == EKRAN_OBJEKAT
+    # OFFICE je mesto gde uslužne fakture stvarno završe (1.953 dokumenta),
+    # dok MAG088 nema nijedan - 088 se dobija tek pri pravljenju kalkulacije.
+    uprava = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+    assert _vrsta_ekrana(uprava) == EKRAN_USLUGE
 
 
 def test_valuta_nikad_nije_nula(db):
