@@ -201,6 +201,18 @@ def _unit_for(session, user: User) -> BusinessUnit | None:
     if not user.unit_code:
         return None
     code = user.unit_code.strip()
+
+    # Sifra objekta 088 u sifarniku osoblja znaci "radi ulazne racune". Sam
+    # magacin 088 nema nijedan dokument - usluzne fakture se razvrstavaju na
+    # upravu, a 088 nastaje tek pri pravljenju kalkulacije. Zato se covek sa 088
+    # vodi na upravu, gde ti racuni stvarno stoje (1.953 dokumenta).
+    if code == MAGACIN_ULAZNI_RACUN:
+        uprava = session.scalar(
+            select(BusinessUnit).where(BusinessUnit.kind == UnitKind.HQ)
+        )
+        if uprava is not None:
+            return uprava
+
     unit = session.scalar(
         select(BusinessUnit).where(
             BusinessUnit.erp_code == code, BusinessUnit.kind == UnitKind.RETAIL

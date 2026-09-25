@@ -889,3 +889,31 @@ def test_valuta_nikad_nije_nula(db):
     promet = K.clarion_dan(dt.date(2026, 9, 18))
     assert nacrt.zaglavlje["VALUTA"] == promet
     assert nacrt.zaglavlje["VALUTA"] != 0
+
+
+def test_sifra_objekta_088_vodi_na_upravu(db):
+    """Ko u šifarniku osoblja ima objekat 088, radi ulazne račune — a oni stoje
+    na upravi.
+
+    Mereno 25.09.: OFFICE ima 1.953 dokumenta, MAG088 nijedan. Magacin 088
+    nastaje tek pri pravljenju kalkulacije, pa bi Bogdanov ekran bio prazan.
+    """
+    from sefsync.models import BusinessUnit, UnitKind
+    from sefsync.web.app import _unit_for
+    from sefsync.web.auth import Role, User
+
+    with db.session_scope() as session:
+        session.add_all([
+            BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ),
+            BusinessUnit(code="MAG088", name="BEZ EVIDENCIJE", kind=UnitKind.WAREHOUSE,
+                         erp_code="088"),
+            BusinessUnit(code="MP004", name="KULA", kind=UnitKind.RETAIL, erp_code="004"),
+        ])
+        session.flush()
+
+        bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+        assert _unit_for(session, bogdan).code == "OFFICE"
+
+        # ostali i dalje idu na svoj objekat
+        nina = User("ninar", "Vignević Nina", Role.POSLOVODJA, "004", "PODRSKA")
+        assert _unit_for(session, nina).code == "MP004"
