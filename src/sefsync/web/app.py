@@ -104,10 +104,26 @@ def current_user(request: Request) -> User:
     data = request.session.get("user")
     if not data:
         raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/prijava"})
+    uloga = Role(data["role"])
+    login = data["login"]
+
+    # Uloga je upisana u kolacic pri prijavi, pa covek skinut sa spiska
+    # operatera ostaje operater dok se ne odjavi. Spisak stoji u memoriji, pa
+    # provera ne kosta nista - a bez nje je Bogdan posle prebacivanja na 088
+    # i dalje video operaterski ekran.
+    if uloga is Role.OPERATER:
+        podesavanja = get_settings()
+        priznat = (
+            login.strip().lower() in podesavanja.operator_logins()
+            or login in podesavanja.web_credentials()
+        )
+        if not priznat:
+            uloga = Role.POSLOVODJA
+
     return User(
-        login=data["login"],
+        login=login,
         name=data["name"],
-        role=Role(data["role"]),
+        role=uloga,
         unit_code=data.get("unit_code"),
         function=data.get("function", ""),
     )

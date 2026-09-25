@@ -70,6 +70,14 @@
                    style="height:56px;border-radius:5px;border:1px solid var(--line)"></a>
           {% endfor %}
           <div class="small muted">{{ njene[0].poslao }}</div>
+          {% for sl in njene[:2] %}
+          <form method="post" action="/slika/{{ sl.id }}/obrisi" class="inline"
+                onsubmit="return confirm('Obrisati sliku?')">
+            <input type="hidden" name="povratak" value="/sifre">
+            <button class="ghost small" type="submit"
+                    title="Npr. probna slika ili slika pogrešnog artikla">obriši</button>
+          </form>
+          {% endfor %}
         {% else %}
           <span class="muted small">nema</span>
         {% endif %}
