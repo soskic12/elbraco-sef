@@ -551,6 +551,49 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
         )
 
 
+@app.post("/dokument/{doc_id}/sumnja")
+def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> RedirectResponse:
+    """Covek presudjuje predlog „možda je već u ERP-u”.
+
+    Predlog se nadje po istom dobavljacu, datumu i iznosu kad se broj racuna ne
+    poklapa - najcesce zato sto je covek pogresio u kucanju (Bogdan je uneo
+    `9999` gde faktura ima `999`). App ga nikad ne primenjuje sama: lazan
+    pogodak bi fakturu tiho sklonio sa ekrana i niko je ne bi zaknjizio.
+
+    Obe odluke ostavljaju trag - ko je i kada rekao jeste ili nije.
+    """
+    from ..models import utcnow
+    from ..services.nacrti import RUCNO_U_ERPU
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+        red = session.get(NacrtKalkulacije, doc_id)
+        if red is None or not red.sumnja:
+            return _back(f"/dokument/{doc_id}", "Za ovu fakturu nema predloga.", False)
+        oznaka = str(red.sumnja.get("oznaka") or "")
+        if odluka == "jeste":
+            red.stanje = StanjeNacrta.UPISAN
+            red.erp_broj = oznaka[:20]
+            red.erp_napomena = f"potvrdio {user.login}: {red.sumnja.get('razlog') or ''}"[:250]
+            red.upisao = RUCNO_U_ERPU
+            red.upisano_u = utcnow()
+            red.sumnja = None
+            red.sumnja_odbio = None
+            red.sumnja_odbijeno_u = None
+            poruka = f"Zabeleženo — faktura je već u ERP-u kao {oznaka}."
+        else:
+            # Predlog se pamti kao odbijen da se ne vraca pri svakom osvezavanju.
+            red.sumnja_odbio = user.login
+            red.sumnja_odbijeno_u = utcnow()
+            poruka = "Zabeleženo — predlog odbijen, faktura ostaje na ekranu."
+        session.flush()
+    return _back(f"/dokument/{doc_id}", poruka)
+
+
 @app.post("/dokument/{doc_id}/upisi-kalkulaciju")
 def upisi_kalkulaciju(doc_id: int, user: Korisnik) -> RedirectResponse:
     """Operater upisuje kalkulaciju bez potvrde prijema robe.
@@ -937,7 +980,7 @@ def confirm_receipt(
 
 @app.get("/tacnost", response_class=HTMLResponse)
 def accuracy_page(request: Request, user: Operater) -> HTMLResponse:
-    """Koliko razvrstavanje pogadja i koja pravila gresе."""
+    """Koliko razvrstavanje pogadja i koja pravila grese."""
     from ..routing.stats import sazetak
 
     with session_scope() as session:

@@ -692,3 +692,67 @@ def test_covek_se_vezuje_za_jedinicu_spiskom_prijava(client, db):
     dane = User("dane", "Sunajko Dane", Role.POSLOVODJA, "001", "POSLOVODJA")
     with db.session_scope() as session:
         assert app_module._unit_for(session, dane).code == "MP001"
+
+
+# --------------------------------------------------------------------------- #
+# predlog „možda je već u ERP-u" - odlučuje čovek, ne aplikacija
+# --------------------------------------------------------------------------- #
+
+
+def _sa_sumnjom(db, doc_id: int) -> None:
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.SPREMAN, magacin="088", tabela="ULKALKUL",
+            sumnja={"oznaka": "ULKALKUL 088/02874",
+                    "razlog": "isti dobavljač, isti datum, isti iznos; broj „26-30F-08705” "
+                              "— razlika u jednom znaku"},
+        ))
+
+
+def test_potvrdjen_predlog_sklanja_fakturu_i_ostavlja_trag(client, podaci, db):
+    """„Jeste" označava fakturu kao već unetu u ERP, sa tragom ko je rekao."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    _sa_sumnjom(db, podaci["doc"])
+    prijavi(client, OPERATER)
+    odgovor = client.post(f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "jeste"},
+                          follow_redirects=False)
+    assert odgovor.status_code in (302, 303)
+
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci["doc"])
+        assert red.stanje is StanjeNacrta.UPISAN
+        assert red.erp_broj == "ULKALKUL 088/02874"
+        assert len(red.erp_broj) <= 20          # kolona je varchar(20)
+        assert "bogdan" in (red.erp_napomena or "")
+        assert red.sumnja is None
+
+
+def test_odbijen_predlog_ostavlja_fakturu_na_ekranu(client, podaci, db):
+    """„Nije to" ne sme ništa da skloni - faktura ostaje da se zaknjiži."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    _sa_sumnjom(db, podaci["doc"])
+    prijavi(client, OPERATER)
+    client.post(f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "nije"},
+                follow_redirects=False)
+
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci["doc"])
+        assert red.stanje is StanjeNacrta.SPREMAN
+        assert red.erp_broj is None
+        assert red.sumnja_odbio == "bogdan"
+        assert red.sumnja_odbijeno_u is not None
+        # predlog se pamti da se ne vrati pri sledecem osvezavanju
+        assert red.sumnja["oznaka"] == "ULKALKUL 088/02874"
+
+
+def test_tudj_dokument_ne_prima_odluku_o_sumnji(client, podaci, db):
+    """Poslovođa drugog objekta ne odlučuje o tuđoj fakturi."""
+    _sa_sumnjom(db, podaci["doc"])
+    prijavi(client, TUDJ)
+    odgovor = client.post(f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "jeste"},
+                          follow_redirects=False)
+    assert odgovor.status_code == 403

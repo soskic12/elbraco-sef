@@ -1,0 +1,27 @@
+{# Predlog „možda je već u ERP-u". Nikad ne sklanja fakturu sam - odlučuje čovek.
+   Očekuje `n` (nacrt) i `doc`. #}
+{% if n and n.sumnja %}
+  {% if n.sumnja_odbio %}
+    <div class="muted small" style="margin:4px 0">
+      predlog {{ n.sumnja.oznaka }} odbio {{ n.sumnja_odbio }}
+      {{ n.sumnja_odbijeno_u.strftime('%d.%m. %H:%M') if n.sumnja_odbijeno_u else '' }}
+    </div>
+  {% else %}
+    <div class="small" style="margin:4px 0;padding:5px 8px;border-left:3px solid #b45309;
+                              background:#fffbeb">
+      <strong>Možda je već u ERP-u:</strong> {{ n.sumnja.oznaka }}<br>
+      <span class="muted">{{ n.sumnja.razlog }}</span>
+      <div style="margin-top:5px">
+        <form class="inline" method="post" action="/dokument/{{ doc.id }}/sumnja"
+              onsubmit="return confirm('Označiti {{ doc.document_number }} kao već unetu u ERP ({{ n.sumnja.oznaka }})?')">
+          <input type="hidden" name="odluka" value="jeste">
+          <button type="submit">Jeste, skloni</button>
+        </form>
+        <form class="inline" method="post" action="/dokument/{{ doc.id }}/sumnja">
+          <input type="hidden" name="odluka" value="nije">
+          <button type="submit" class="secondary">Nije to</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endif %}

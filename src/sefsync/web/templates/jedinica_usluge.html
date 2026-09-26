@@ -31,8 +31,9 @@
      background:#fffbeb">Stiglo pre prelaska — kalkulaciju pravi poslovođa u ERP-u.</div>
         {% elif n and n.stanje.value == 'upisan' %}
           <span class="tag ok">u ERP-u {{ n.erp_broj or '' }}</span>
-          <div class="muted small">{{ n.upisao }}</div>
+          <div class="muted small">{{ n.upisao }}{% if n.erp_napomena %} — {{ n.erp_napomena }}{% endif %}</div>
         {% elif n and n.stanje.value == 'spreman' %}
+          {% include "_sumnja.html" %}
           <form class="inline" method="post" action="/dokument/{{ doc.id }}/upisi-kalkulaciju"
                 onsubmit="return confirm('Upisati kalkulaciju za {{ doc.document_number }}?')">
             <button type="submit">Upiši kalkulaciju</button>

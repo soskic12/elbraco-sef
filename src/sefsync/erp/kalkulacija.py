@@ -653,6 +653,83 @@ def kao_sql(nacrt: Nacrt) -> str:
     return "\n".join(redovi)
 
 
+@dataclass(frozen=True)
+class Pogodak:
+    """Kalkulacija u ERP-u za koju mislimo da je ista faktura.
+
+    `oznaka` je kratka jer ide u `nacrt_kalkulacije.erp_broj`, koji je
+    `varchar(20)`; objasnjenje stoji odvojeno u `razlog`, inace bi na MS SQL-u
+    upis pukao na duzini.
+
+    `siguran` deli dve vrste nalaza. Siguran je onaj gde se broj racuna poklapa
+    (u celosti, ili je u ERP-u odsecen na 15 znakova) - njega app sme sama da
+    skine sa ekrana. Nesiguran je predlog po iznosu i datumu: njega odlucuje
+    covek, jer lazan pogodak tiho skloni fakturu koju onda niko ne zaknjizi.
+    """
+
+    oznaka: str
+    razlog: str = ""
+    siguran: bool = True
+
+    def __str__(self) -> str:
+        return f"{self.oznaka} ({self.razlog})" if self.razlog else self.oznaka
+
+
+def _rastojanje(a: str, b: str) -> int:
+    """Levenstajn - koliko znakova treba promeniti da jedan broj postane drugi."""
+    prethodni = list(range(len(b) + 1))
+    for i, za in enumerate(a, 1):
+        tekuci = [i]
+        for j, zb in enumerate(b, 1):
+            tekuci.append(
+                min(prethodni[j] + 1, tekuci[j - 1] + 1, prethodni[j - 1] + (za != zb))
+            )
+        prethodni = tekuci
+    return prethodni[-1]
+
+
+def _najduzi_zajednicki(a: str, b: str) -> int:
+    """Najduzi niz znakova koji stoji u oba broja."""
+    if not a or not b:
+        return 0
+    prosli = [0] * (len(b) + 1)
+    najduzi = 0
+    for za in a:
+        tekuci = [0] * (len(b) + 1)
+        for j, zb in enumerate(b, 1):
+            if za == zb:
+                tekuci[j] = prosli[j - 1] + 1
+                najduzi = max(najduzi, tekuci[j])
+        prosli = tekuci
+    return najduzi
+
+
+def ocena_broja(nas: str, u_erpu: str) -> str:
+    """Koliko su dva broja racuna slicna, recima kojima covek moze da veruje.
+
+    Mereno na 47 predloga sa ekrana: razlike skoro nikad nisu greske u kucanju
+    nego skraceni zapis istog broja - METRO salje `0/0(044)0002/143059/26`, a u
+    ERP-u stoji `143059/26`. Zato prvo ide provera sadrzanosti, pa tek onda
+    rastojanje. Ocena nista ne odlucuje, samo pomaze coveku da brze vidi.
+    """
+    from ..services.mapiranje import kljuc_racuna
+
+    a, b = kljuc_racuna(nas), kljuc_racuna(u_erpu)
+    if not a or not b:
+        return "broj se ne može uporediti"
+    if a == b:
+        return "isti broj"
+    if a in b or b in a:
+        return "isti broj, kraće zapisan"
+    razlika = _rastojanje(a, b)
+    if razlika <= 2:
+        return f"razlika u {'jednom znaku' if razlika == 1 else 'dva znaka'}"
+    zajednicko = _najduzi_zajednicki(a, b)
+    if zajednicko >= 5 and zajednicko >= min(len(a), len(b)) / 2:
+        return f"poklapa se {zajednicko} znakova"
+    return "broj se ne poklapa"
+
+
 # Vrednosti koje u sifarniku stoje kao popuna, pa ne identifikuju nikoga.
 PRAZNI_IDENTIFIKATORI = {"123456789", "000000000", "99999999", "11111111"}
 
@@ -699,7 +776,9 @@ def sestrinske_sifre(conn: Connection, dobavljac: str) -> set[str]:
     return sifre
 
 
-def postojeca_kalkulacija(conn: Connection, broj_racuna: str, dobavljac: str) -> str | None:
+def postojeca_kalkulacija(
+    conn: Connection, broj_racuna: str, dobavljac: str
+) -> Pogodak | None:
     """Da li za taj racun tog dobavljaca vec postoji kalkulacija u ERP-u.
 
     Poslovodje i dalje prave kalkulacije rukom, pa app mora da proveri pre upisa -
@@ -743,22 +822,84 @@ def postojeca_kalkulacija(conn: Connection, broj_racuna: str, dobavljac: str) ->
                 continue
             kljuc = kljuc_racuna(red.rn)
             oznaka = f"{tabela} {red.mag}/{red.br}"
-            if red.dob != dobavljac.strip():
-                oznaka += f" (dobavljač {red.dob})"
+            drugi = f"pod šifrom dobavljača {red.dob}" if red.dob != dobavljac.strip() else ""
             if kljuc == trazeni:
-                return oznaka
+                return Pogodak(oznaka, drugi)
             if (
                 len(red.rn) == DUZINA_U_ERPU
                 and len(kljuc) >= NAJKRACI_POCETAK
                 and trazeni.startswith(kljuc)
             ):
-                odseceni.append(oznaka)
+                razlog = f"broj odsečen na {DUZINA_U_ERPU} znakova: „{red.rn}”"
+                odseceni.append(Pogodak(oznaka, f"{razlog}, {drugi}" if drugi else razlog))
 
     # Vise kandidata znaci da se ne zna koji je - tada je cutanje ispravnije od
     # pogodjenog para, jer bi lazan pogodak sklonio fakturu sa ekrana.
     if len(odseceni) == 1:
-        return f"{odseceni[0]} (broj odsečen na {DUZINA_U_ERPU} znakova)"
+        return odseceni[0]
     return None
+
+
+def moguca_kalkulacija(
+    conn: Connection,
+    broj_racuna: str,
+    dobavljac: str,
+    iznos: float | None,
+    dan: int | None,
+    poznati_brojevi: set[str],
+) -> Pogodak | None:
+    """Predlog kad se broj racuna ne poklapa, ali sve ostalo se poklapa.
+
+    Bogdan je uneo `9999` gde faktura ima `999`, pa app njegovu kalkulaciju nije
+    prepoznala i faktura mu je ostala na ekranu. Predlog se trazi po istom
+    dobavljacu, istom datumu i istom iznosu.
+
+    Samo to pravilo ne valja: mereno na ELBS_2026, **482 puta** dve razlicite
+    fakture istog dobavljaca imaju isti datum i isti iznos, a ako se doda i
+    „broj se razlikuje u jednom znaku” sudara ima **1.717** (uzastopni povrati
+    `263X3000817` i `263X3000818`). Zato se gleda samo medju kalkulacijama koje
+    **nisu** sparene ni sa jednim SEF dokumentom - tada je od 1.409 grupa
+    dvosmisleno svega 13 (0,9 %) - i uzima se samo kad je kandidat jedan.
+
+    Vraca `siguran=False`: predlog ide coveku na potvrdu, app sama ne sklanja
+    nista sa ekrana. Lazan pogodak bi fakturu tiho izbrisao i niko je ne bi
+    zaknjizio, a to je gore od toga da mu stoji na ekranu.
+    """
+    from ..services.mapiranje import kljuc_racuna
+
+    trazeni = kljuc_racuna(broj_racuna)
+    if not trazeni or not dobavljac or iznos is None or not dan:
+        return None
+
+    sifre = sestrinske_sifre(conn, dobavljac)
+    imenovani = {f"d{i}": s for i, s in enumerate(sorted(sifre))}
+    uslov = ", ".join(f":{k}" for k in imenovani)
+    parametri = {**imenovani, "dan": int(dan), "iznos": float(iznos)}
+
+    kandidati: list[Pogodak] = []
+    for tabela in ("ULKALKUL", "MKALKUL"):
+        for red in conn.execute(
+            text(
+                f"SELECT RTRIM(BROJ) br, RTRIM(MAGACIN) mag, RTRIM(DOBAVLJAC) dob, "
+                f"RTRIM(ISNULL(BROJ_RN_DOB,'')) rn FROM dbo.{tabela} "
+                f"WHERE RTRIM(DOBAVLJAC) IN ({uslov}) AND DATUM = :dan "
+                f"AND ABS(ISNULL(IZNOS_ZA_NAP, 0) - :iznos) < 0.01"
+            ),
+            parametri,
+        ):
+            kljuc = kljuc_racuna(red.rn)
+            if not kljuc or kljuc in poznati_brojevi:
+                # Ta kalkulacija vec pripada nekoj drugoj fakturi sa SEF-a.
+                continue
+            razlog = (
+                f"isti dobavljač, isti datum, isti iznos; broj „{red.rn}” — "
+                f"{ocena_broja(broj_racuna, red.rn)}"
+            )
+            if red.dob != dobavljac.strip():
+                razlog += f"; pod šifrom dobavljača {red.dob}"
+            kandidati.append(Pogodak(f"{tabela} {red.mag}/{red.br}", razlog, siguran=False))
+
+    return kandidati[0] if len(kandidati) == 1 else None
 
 
 def upisi(nacrt: Nacrt, *, produkcija: bool = False) -> str:

@@ -83,9 +83,11 @@
         {% if nacrt.stanje.value == 'upisan' %}
           <span class="tag ok">u ERP-u {{ nacrt.erp_broj or '' }}</span>
           <div class="muted small">{{ nacrt.upisao }}{% if nacrt.upisano_u %},
-            {{ nacrt.upisano_u.strftime('%d.%m.%Y %H:%M') }}{% endif %}</div>
+            {{ nacrt.upisano_u.strftime('%d.%m.%Y %H:%M') }}{% endif %}{% if nacrt.erp_napomena %}
+            — {{ nacrt.erp_napomena }}{% endif %}</div>
         {% elif nacrt.stanje.value == 'spreman' %}
           <span class="tag">spremna{% if nacrt.magacin %} · {{ nacrt.tabela }} {{ nacrt.magacin }}{% endif %}</span>
+          {% with n = nacrt %}{% include "_sumnja.html" %}{% endwith %}
         {% elif nacrt.stanje.value == 'ceka_sifru' %}
           <span class="tag warn">čeka šifru ({{ nacrt.broj_nemapiranih }})</span>
         {% elif nacrt.stanje.value == 'ne_treba' %}

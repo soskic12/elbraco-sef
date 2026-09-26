@@ -826,10 +826,55 @@ def cmd_zaboravi_upis(
 
         red.stanje = StanjeNacrta.SPREMAN
         red.erp_broj = None
+        red.erp_napomena = None
         red.upisano_u = None
         red.upisao = None
+        # Ako je oznaka dosla iz potvrdjenog predloga, i on se brise - inace bi
+        # dokument ostao sa odlukom koja vise ne vazi.
+        red.sumnja = None
+        red.sumnja_odbio = None
+        red.sumnja_odbijeno_u = None
 
     typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
+
+
+@app.command("sumnje")
+def cmd_sumnje(
+    magacin: str = typer.Option("", "--magacin", help="Samo taj magacin (npr. 088)."),
+) -> None:
+    """Ispisuje fakture za koje app misli da su možda već u ERP-u.
+
+    Predlog se nadje po istom dobavljacu, datumu i iznosu kad se broj racuna ne
+    poklapa - obicno greska u kucanju. App ga nikad ne primenjuje sama; ovo je
+    spisak da covek prodje kroz njih odjednom, umesto jednu po jednu na ekranu.
+    """
+    from .models import Document, NacrtKalkulacije
+
+    with session_scope() as session:
+        upit = (
+            select(NacrtKalkulacije, Document)
+            .join(Document, Document.id == NacrtKalkulacije.document_id)
+            .where(NacrtKalkulacije.sumnja.is_not(None))
+            .order_by(NacrtKalkulacije.magacin, Document.document_number)
+        )
+        if magacin:
+            upit = upit.where(NacrtKalkulacije.magacin == magacin)
+        redovi = list(session.execute(upit))
+
+        if not redovi:
+            typer.echo("Nema nijednog predloga.")
+            raise typer.Exit(0)
+
+        neodluceno = sum(1 for red, _ in redovi if not red.sumnja_odbio)
+        typer.echo(f"Predloga: {len(redovi)}, od toga neodlučenih {neodluceno}")
+        typer.echo("")
+        for red, doc in redovi:
+            stanje = f"odbio {red.sumnja_odbio}" if red.sumnja_odbio else "čeka odluku"
+            typer.echo(
+                f"  #{doc.id:<6} {(doc.document_number or '')[:26]:<26} "
+                f"{(doc.supplier_name or '')[:26]:<26} {red.magacin or '?':<4} {stanje}"
+            )
+            typer.echo(f"         → {red.sumnja.get('oznaka')}  {red.sumnja.get('razlog')}")
 
 
 @app.command("stavke")

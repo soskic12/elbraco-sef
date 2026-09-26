@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections import Counter
 
 from sqlalchemy import and_, or_, select, text
@@ -133,15 +134,46 @@ def razlozi_cekanja(engine=None) -> dict:
 RUCNO_U_ERPU = "ručno u ERP-u"
 
 
-def _vec_u_erpu(nacrt, *, engine=None) -> str | None:
-    """Vraca oznaku kalkulacije ako za taj racun vec postoji u ERP-u.
+_POZNATI: tuple[float, set[str]] | None = None
+TRAJANJE_KESA = 120.0  # sekundi
+
+
+def _poznati_brojevi(*, osvezi_kes: bool = False) -> set[str]:
+    """Normalizovani brojevi svih faktura sa SEF-a.
+
+    Sluzi da se iz predloga po iznosu i datumu izbace kalkulacije koje vec
+    pripadaju nekoj drugoj fakturi. Bez toga predlog pogodi bankarsku naknadu
+    od 234 dinara koja se istog dana ponovi pod drugim brojem.
+
+    Kesira se nakratko: masovno osvezavanje zove `osvezi` po dokumentu, a bez
+    kesa bi svaki od njih ponovo procitao svih 7.727 brojeva.
+    """
+    global _POZNATI
+    from .mapiranje import kljuc_racuna
+
+    if not osvezi_kes and _POZNATI is not None:
+        kad, poznati = _POZNATI
+        if time.monotonic() - kad < TRAJANJE_KESA:
+            return poznati
+    with session_scope() as session:
+        brojevi = session.execute(select(Document.document_number)).scalars().all()
+    poznati = {k for k in (kljuc_racuna(b) for b in brojevi) if k}
+    _POZNATI = (time.monotonic(), poznati)
+    return poznati
+
+
+def _vec_u_erpu(nacrt, *, engine=None, i_predlog: bool = False):
+    """Kalkulacija u ERP-u koja odgovara ovoj fakturi, ako je ima.
+
+    Sa `i_predlog` vraca i nesiguran pogodak (`Pogodak.siguran == False`) - onaj
+    nadjen po iznosu i datumu kad se broj ne poklapa.
 
     Prelazak na novi nacin rada ide odjednom za sve, pa ce se desavati da
     poslovodja napravi kalkulaciju rukom kao do sada. Upis to hvata i odbija
     duplikat, ali tek kad neko klikne - do tada panel trazi prijem robe za
     fakturu koja je vec zaknjizena.
     """
-    from ..erp.kalkulacija import postojeca_kalkulacija
+    from ..erp.kalkulacija import moguca_kalkulacija, postojeca_kalkulacija
 
     broj = str(nacrt.zaglavlje.get("BROJ_RN_DOB") or "").strip()
     dobavljac = str(nacrt.zaglavlje.get("DOBAVLJAC") or "").strip()
@@ -149,7 +181,19 @@ def _vec_u_erpu(nacrt, *, engine=None) -> str | None:
         return None
     try:
         with (engine or get_erp_engine()).connect() as conn:
-            return postojeca_kalkulacija(conn, broj, dobavljac)
+            nadjeno = postojeca_kalkulacija(conn, broj, dobavljac)
+            if nadjeno is not None or not i_predlog:
+                return nadjeno
+            # Broj se ne poklapa ni u celosti ni odsecen - mozda je covek
+            # pogresio u kucanju. Isti upit, ista veza.
+            return moguca_kalkulacija(
+                conn,
+                broj,
+                dobavljac,
+                nacrt.zaglavlje.get("IZNOS_ZA_NAP"),
+                nacrt.zaglavlje.get("DATUM"),
+                _poznati_brojevi(),
+            )
     except SQLAlchemyError as exc:
         log.info("Provera postojece kalkulacije nije prosla: %s", exc)
         return None
@@ -185,14 +229,16 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
             return red
         stanje = _stanje(nacrt)
         if stanje is StanjeNacrta.SPREMAN:
-            rucno = _vec_u_erpu(nacrt, engine=engine)
-            if rucno:
+            rucno = _vec_u_erpu(nacrt, engine=engine, i_predlog=True)
+            if rucno is not None and rucno.siguran:
                 # Poslovodja je kalkulaciju napravio rukom. Panel to mora da
                 # prepozna, inace bi do kraja veka trazio prijem robe za nesto
                 # sto je vec zaknjizeno - a operater bi na dugme dobio gresku
                 # umesto objasnjenja.
                 red.stanje = StanjeNacrta.UPISAN
-                red.erp_broj = rucno
+                red.erp_broj = rucno.oznaka[:20]
+                red.erp_napomena = (rucno.razlog or None) and rucno.razlog[:250]
+                red.sumnja = None
                 red.upisao = RUCNO_U_ERPU
                 red.upisano_u = utcnow()
                 red.magacin = nacrt.magacin or None
@@ -201,6 +247,16 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
                 session.flush()
                 session.expunge(red)
                 return red
+            # Nesiguran pogodak ceka coveka, vidi `sumnja`.
+            predlog = rucno
+            odbijen = (red.sumnja or {}).get("oznaka") if red.sumnja_odbio else None
+            if predlog is not None and predlog.oznaka != odbijen:
+                red.sumnja = {"oznaka": predlog.oznaka, "razlog": predlog.razlog}
+                red.sumnja_odbio = None
+                red.sumnja_odbijeno_u = None
+            elif predlog is None and not red.sumnja_odbio:
+                red.sumnja = None
+
         red.stanje = stanje
         red.magacin = nacrt.magacin or None
         red.tabela = nacrt.tabela_zaglavlja or None

@@ -1003,7 +1003,10 @@ def test_postojeca_kalkulacija_hvata_odsecen_broj():
     )
     nadjeno = postojeca_kalkulacija(veza, "K110/2026-835249", "10107")
     assert nadjeno is not None
-    assert "088/00449" in nadjeno and "odsečen" in nadjeno
+    assert nadjeno.oznaka == "ULKALKUL 088/00449" and nadjeno.siguran
+    assert "odsečen" in nadjeno.razlog
+    # oznaka mora da stane u nacrt_kalkulacije.erp_broj, varchar(20)
+    assert len(nadjeno.oznaka) <= 20
 
     # kad ih je vise, ne zna se koji je - cutanje je ispravnije od pogotka,
     # jer bi lazan pogodak sklonio fakturu sa ekrana
@@ -1035,7 +1038,7 @@ def test_postojeca_kalkulacija_gleda_i_sestrinsku_sifru():
     )
     nadjeno = postojeca_kalkulacija(veza, "FA55430326", "15582")
     assert nadjeno is not None
-    assert "088/00512" in nadjeno and "04808" in nadjeno
+    assert nadjeno.oznaka == "ULKALKUL 088/00512" and "04808" in nadjeno.razlog
 
 
 def test_sestrinske_sifre_preskace_popunu():
@@ -1045,3 +1048,47 @@ def test_sestrinske_sifre_preskace_popunu():
     veza = _LaznaVeza(komitent=("123456789", "000000000"), grupa=["99999"])
     assert sestrinske_sifre(veza, "10107") == {"10107"}
     assert not any("SELECT RTRIM(ANALITIKA) a FROM dbo.NAZIVI" in p for p in veza.pitanja)
+
+
+def test_ocena_broja_razlikuje_skraceni_zapis_od_greske():
+    """Ocena je opis coveku, izmerena na stvarnim parovima sa ekrana."""
+    from sefsync.erp.kalkulacija import ocena_broja
+
+    # METRO salje broj sa prefiksom, u ERP-u stoji goli deo
+    assert ocena_broja("0/0(044)0002/143059/26", "143059/26") == "isti broj, kraće zapisan"
+    assert ocena_broja("VPRAC/26-000148/VPM1", "26-000148/vpm1") == "isti broj, kraće zapisan"
+    # Bogdanov slucaj: 999 uneto kao 9999
+    assert ocena_broja("IF-2026-1044-001", "IF-2026-1044-01") == "razlika u jednom znaku"
+    assert ocena_broja("26-30F-003776", "20-30F-003776") == "razlika u jednom znaku"
+    # bankarska naknada istog dana i istog iznosa - broj nema veze
+    assert ocena_broja("BK6164069/26", "bk6170838/26") == "broj se ne poklapa"
+    assert ocena_broja("FA-5543-03/26", "FA55430326") == "isti broj"
+
+
+def test_moguca_kalkulacija_ceka_coveka_i_preskace_sparene():
+    """Predlog po iznosu i datumu nije siguran i ne gleda tudje kalkulacije."""
+    from sefsync.erp.kalkulacija import moguca_kalkulacija
+
+    veza = _LaznaVeza(
+        komitent=("", ""),
+        kalkulacije=[("ULKALKUL", "005", "00075", "44011", "IF-2026-1044-01")],
+    )
+    predlog = moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", 62160.0, 82300, set())
+    assert predlog is not None
+    assert predlog.oznaka == "ULKALKUL 005/00075"
+    assert not predlog.siguran
+    assert "razlika u jednom znaku" in predlog.razlog
+
+    # ista kalkulacija vec pripada drugoj fakturi sa SEF-a
+    from sefsync.services.mapiranje import kljuc_racuna
+
+    poznati = {kljuc_racuna("IF-2026-1044-01")}
+    assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", 62160.0, 82300, poznati) is None
+
+    # dva kandidata znaci da se ne zna koji je
+    veza.kalkulacije.append(("MKALKUL", "010", "00131", "44011", "IF-2026-1044-02"))
+    assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", 62160.0, 82300, set()) is None
+
+    # bez iznosa ili datuma nema po cemu
+    assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", None, 82300, set()) is None
+    assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", 62160.0, None, set()) is None

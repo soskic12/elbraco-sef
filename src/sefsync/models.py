@@ -626,8 +626,17 @@ class NacrtKalkulacije(Base):
 
     # Upis u ERP (faza 2): broj kalkulacije i ko je pustio
     erp_broj: Mapped[str | None] = mapped_column(String(20), default=None)
+    # Zasto mislimo da je to ta kalkulacija - broj odsecen na 15 znakova, druga
+    # sifra istog dobavljaca... Stoji odvojeno jer `erp_broj` je varchar(20).
+    erp_napomena: Mapped[str | None] = mapped_column(String(250), default=None)
     upisano_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     upisao: Mapped[str | None] = mapped_column(String(100), default=None)
+
+    # Predlog po iznosu i datumu kad se broj racuna ne poklapa (ljudska greska u
+    # kucanju). Nikad ne sklanja fakturu sam - ceka da covek kaze jeste ili nije.
+    sumnja: Mapped[dict | None] = mapped_column(JSON, default=None)
+    sumnja_odbio: Mapped[str | None] = mapped_column(String(100), default=None)
+    sumnja_odbijeno_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
     document: Mapped[Document] = relationship()
 
