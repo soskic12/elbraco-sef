@@ -1780,3 +1780,23 @@ bankarska naknada od 234 dinara, isti iznos istog dana, druga faktura.
 
 Zato ovo **ne sme da skloni fakturu samo**. Lažan pogodak bi je tiho izbrisao sa
 ekrana i niko je ne bi zaknjižio — gore od Bogdanove smetnje.
+
+### Šta je urađeno
+
+`postojeca_kalkulacija` vraća `Pogodak` — kratku oznaku (ide u `erp_broj`,
+`varchar(20)`) odvojeno od objašnjenja (`erp_napomena`). Nalazi i odsečen broj i
+kalkulaciju pod sestrinskom šifrom.
+
+`moguca_kalkulacija` vraća predlog sa `siguran=False`. Uz njega ide ocena broja
+rečima — „isti broj, kraće zapisan“, „razlika u jednom znaku“, „poklapa se N
+znakova“, „broj se ne poklapa“ — jer se pokazalo da razlike skoro nikad nisu
+greške u kucanju nego skraćen zapis: METRO šalje `0/0(044)0002/143059/26`, u
+ERP-u stoji `143059/26`.
+
+Predlog se na ekranu vidi kao žuti okvir sa dva dugmeta, „Jeste, skloni“ i
+„Nije to“. Obe odluke ostavljaju trag (`sumnja_odbio`, `sumnja_odbijeno_u`),
+odbijen predlog se ne vraća pri sledećem osvežavanju. Komanda `sumnje` ispisuje
+sve odjednom.
+
+Provereno na 90 poslednjih Bogdanovih faktura kroz stvarni tok: **84 app sama
+prepozna**, 2 dobiju predlog, 4 ostaju za knjiženje.
