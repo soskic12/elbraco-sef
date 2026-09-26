@@ -1879,3 +1879,27 @@ stigne posle potvrde prijema ostavio kalkulaciju za poništenu fakturu.
 **Dugme „Štampaj“** na stranici dokumenta. Vraća SEF-ov zvanični prošireni
 prikaz (`purchase-invoice/pdf`), ne naš ekran — na papiru treba da stoji ono
 što je dobavljač poslao. Vidi ga samo onaj ko sme na taj dokument.
+
+### Manjak pri isporuci — urađeno (26.09.)
+
+Poslovođa ispod „Roba je primljena“ ima **„Stiglo manje nego što piše“**: spisak
+stavki sa fakture, polje „stiglo“ već popunjeno fakturisanom količinom, pa tri
+dugmeta za ono što je vozač rekao. Upisuju se samo redovi koji se razlikuju;
+količina veća od fakturisane se odbija — ovo je manjak, ne višak.
+
+| izbor | kalkulacija | ekran |
+|---|---|---|
+| dovoze sledećom turom | **upisuje se za pun iznos** | crvena linija „ne knjiži dok ostatak ne dođe“ + kartica „Čeka ostatak“ |
+| šalju ispravljenu fakturu | ne upisuje se | čeka se storno |
+| ne znam | ne upisuje se | ide operateru u karticu „Prijavljen manjak“ |
+
+Zatvara se na tri načina: poslovođa klikne „Stigao ostatak“, stigne knjižno
+odobrenje koje ispravlja tu fakturu (zatvara se samo, provereno po dobavljaču i
+normalizovanom broju), ili stigne storno. Sve tri ostavljaju trag u
+`prijava_manjka` i u `audit_log`.
+
+Bez podsetnika na mejl — Bane, 26.09.: „za sad je dovoljna crvena linija na
+ekranu“.
+
+Oba uputstva su ispravljena; poslovođama je do sada pisalo „ako nešto fali, ne
+klikaj, javi operateru“, što bi od prvog dana protivrečilo aplikaciji.

@@ -28,6 +28,8 @@ from ..models import (
     Document,
     MatchField,
     MatchOp,
+    OdlukaManjka,
+    PrijavaManjka,
     ProcessState,
     RoutingRule,
     RoutingSource,
@@ -158,7 +160,14 @@ class Workflow:
     # potvrda prijema (poslovodja)
     # ------------------------------------------------------------------ #
 
-    def confirm_receipt(self, doc_id: int, actor: str, note: str = "") -> ActionResult:
+    def confirm_receipt(
+        self,
+        doc_id: int,
+        actor: str,
+        note: str = "",
+        manjak: list[dict] | None = None,
+        odluka=None,
+    ) -> ActionResult:
         with session_scope() as session:
             doc = session.get(Document, doc_id)
             if doc is None:
@@ -173,6 +182,15 @@ class Workflow:
             session.add(
                 AuditLog(actor=actor, action="document.received", document_id=doc_id, detail=note)
             )
+            if manjak:
+                prijava = PrijavaManjka(
+                    document_id=doc_id, stavke=manjak, odluka=odluka, prijavio=actor
+                )
+                session.merge(prijava)
+                session.add(AuditLog(
+                    actor=actor, action="document.manjak", document_id=doc_id,
+                    detail=f"{odluka.value if odluka else '?'}: {prijava.sazetak}",
+                ))
 
         # operater koji je prosledio treba da zna da je roba stigla
         try:
@@ -184,6 +202,13 @@ class Workflow:
         # poslovodju, koji kalkulaciju i dalje pravi rukom. Neuspeh upisa ne
         # ponistava potvrdu prijema: roba jeste stigla, sta god ERP rekao.
         poruka = "Prijem je potvrđen."
+        if manjak:
+            poruka = "Manjak je prijavljen."
+            if odluka is not OdlukaManjka.KASNIJE:
+                # Faktura tek treba da nestane ili da se o njoj odluci - dok se
+                # to ne zna, u ERP-u nema sta da stoji.
+                return ActionResult(True, poruka + " Kalkulacija se ne upisuje dok se ne reši.", 1)
+            poruka += " Kalkulacija ide za pun iznos fakture — ne knjiži je dok ostatak ne dođe."
         if self.settings.erp_upis_kalkulacije:
             from .nacrti import upisi_u_erp
 

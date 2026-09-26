@@ -61,6 +61,8 @@ from ..models import (
     MatchOp,
     NacrtKalkulacije,
     Notification,
+    OdlukaManjka,
+    PrijavaManjka,
     ProcessState,
     RoutingRule,
     SefStatus,
@@ -264,6 +266,12 @@ def _queue_filter(query, prikaz: str):
         return query.where(
             aktivni, Document.forwarded_at.isnot(None), Document.received_at.is_(None)
         )
+    if prikaz == "manjak":
+        # Poslovodja je prijavio da je stiglo manje. Operater to mora da vidi
+        # jer on drzi prihvatanje i odbijanje na SEF-u, a rok tece.
+        return query.join(
+            PrijavaManjka, PrijavaManjka.document_id == Document.id
+        ).where(aktivni, PrijavaManjka.zatvoreno_u.is_(None))
     # "red": traži potez dok i SEF i prosleđivanje nisu gotovi
     return query.where(
         aktivni,
@@ -337,7 +345,9 @@ def queue(
             naziv: session.scalar(
                 select(func.count()).select_from(_queue_filter(select(Document), naziv).subquery())
             )
-            for naziv in ("red", "nepregledano", "nerazvrstano", "ceka_prijem", "arhiva")
+            for naziv in (
+                "red", "nepregledano", "nerazvrstano", "ceka_prijem", "manjak", "arhiva"
+            )
         }
         last_run = session.scalar(select(SyncRun).order_by(SyncRun.id.desc()))
         return templates.TemplateResponse(
@@ -547,6 +557,7 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "slike": slike,
                 "slikano": slikano,
                 "nacrt": nacrt,
+                "manjak": session.get(PrijavaManjka, doc.id),
                 "upis_ukljucen": get_settings().erp_upis_kalkulacije,
                 "units": units,
                 "notifications": notifications,
@@ -555,6 +566,100 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "user": user,
             },
         )
+
+
+@app.post("/dokument/{doc_id}/manjak")
+def prijavi_manjak(
+    doc_id: int,
+    user: Korisnik,
+    odluka: Annotated[str, Form()],
+    line_no: Annotated[list[int], Form()],
+    stiglo: Annotated[list[str], Form()],
+) -> RedirectResponse:
+    """Poslovođa je otvorio kamion i stiglo je manje nego što faktura kaže.
+
+    Količine stižu kao dve uparene liste (`line_no` i `stiglo`, po jedan par po
+    stavci fakture); upisuju se samo stavke gde se stiglo razlikuje od
+    fakturisanog. Šta app radi dalje zavisi od toga šta je dobavljač rekao —
+    vidi `PrijavaManjka`.
+    """
+    try:
+        izbor = OdlukaManjka(odluka)
+    except ValueError:
+        raise HTTPException(400, "Nepoznata odluka o manjku.") from None
+    if len(line_no) != len(stiglo):
+        raise HTTPException(400, "Količine ne odgovaraju stavkama.")
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Dokument ne postoji.")
+        if not user.is_operator:
+            moja = _unit_for(session, user)
+            if moja is None or doc.business_unit_id != moja.id:
+                raise HTTPException(403, "Nije tvoj dokument.")
+        povratak = f"/dokument/{doc_id}" if user.is_operator else "/moja-jedinica"
+        if doc.po_starom:
+            return _back(povratak, "Ova faktura je stigla pre prelaska na novi način rada.", False)
+
+        po_broju = {s.line_no: s for s in doc.lines}
+        manjak = []
+        for broj, unos in zip(line_no, stiglo):
+            stavka = po_broju.get(broj)
+            if stavka is None or unos.strip() == "":
+                continue
+            try:
+                koliko = float(unos.strip().replace(",", "."))
+            except ValueError:
+                return _back(povratak, f"„{unos}“ nije broj.", False)
+            fakturisano = float(stavka.quantity or 0)
+            if abs(koliko - fakturisano) < 1e-9:
+                continue
+            if koliko < 0 or koliko > fakturisano:
+                return _back(
+                    povratak,
+                    f"Stiglo mora biti između 0 i {fakturisano:g} (stavka {broj}).",
+                    False,
+                )
+            manjak.append({
+                "line_no": broj,
+                "naziv": stavka.name,
+                "fakturisano": fakturisano,
+                "stiglo": koliko,
+            })
+
+    if not manjak:
+        return _back(povratak, "Nisi upisao nijednu količinu koja se razlikuje.", False)
+
+    rezultat = Workflow().confirm_receipt(doc_id, actor=user.login, manjak=manjak, odluka=izbor)
+    return _back(povratak, rezultat.message, rezultat.ok)
+
+
+@app.post("/dokument/{doc_id}/manjak-zatvori")
+def zatvori_manjak(doc_id: int, user: Korisnik, kako: Annotated[str, Form()] = "") -> RedirectResponse:
+    """Ostatak je stigao — crvena linija pada i kalkulacija sme da se knjiži."""
+    from ..models import utcnow
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Dokument ne postoji.")
+        if not user.is_operator:
+            moja = _unit_for(session, user)
+            if moja is None or doc.business_unit_id != moja.id:
+                raise HTTPException(403, "Nije tvoj dokument.")
+        prijava = session.get(PrijavaManjka, doc_id)
+        povratak = f"/dokument/{doc_id}" if user.is_operator else "/moja-jedinica"
+        if prijava is None or not prijava.otvoren:
+            return _back(povratak, "Za ovu fakturu nema otvorenog manjka.", False)
+        prijava.zatvorio = user.login
+        prijava.zatvoreno_u = utcnow()
+        prijava.zatvoreno_kako = (kako or "stigao ostatak")[:60]
+        session.add(AuditLog(
+            actor=user.login, action="document.manjak.zatvoren", document_id=doc_id,
+            detail=prijava.zatvoreno_kako,
+        ))
+    return _back(povratak, "Manjak je zatvoren — kalkulacija sme da se knjiži.")
 
 
 @app.get("/dokument/{doc_id}/pdf")
@@ -943,10 +1048,32 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
         )
         if prikaz == "novo":
             query = query.where(Document.received_at.is_(None))
+        elif prikaz == "manjak":
+            # Manjak koji jos stoji otvoren - poslovodja ceka ostatak i ne knjizi.
+            query = query.join(
+                PrijavaManjka, PrijavaManjka.document_id == Document.id
+            ).where(PrijavaManjka.zatvoreno_u.is_(None))
         rows = (
             []
             if prikaz == "slikanje"
             else list(session.scalars(query.order_by(Document.forwarded_at.desc()).limit(200)))
+        )
+        manjci = {
+            m.document_id: m
+            for m in session.scalars(
+                select(PrijavaManjka).where(
+                    PrijavaManjka.document_id.in_([d.id for d in rows] or [0])
+                )
+            )
+        }
+        otvorenih_manjaka = session.scalar(
+            select(func.count())
+            .select_from(PrijavaManjka)
+            .join(Document, Document.id == PrijavaManjka.document_id)
+            .where(
+                Document.business_unit_id == unit.id,
+                PrijavaManjka.zatvoreno_u.is_(None),
+            )
         )
         # koliko stavki ceka sliku - stoji na kartici i kad nije otvorena
         koliko_za_slikanje = session.scalar(
@@ -984,6 +1111,8 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                 "prikaz": prikaz,
                 "za_slikanje": za_slikanje,
                 "koliko_za_slikanje": koliko_za_slikanje,
+                "manjci": manjci,
+                "otvorenih_manjaka": otvorenih_manjaka,
                 "user": user,
             },
         )

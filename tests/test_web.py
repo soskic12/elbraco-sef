@@ -809,3 +809,165 @@ def test_stampa_vraca_sefov_pdf(client, podaci, db, monkeypatch):
 def test_tudj_dokument_se_ne_stampa(client, podaci, db):
     prijavi(client, TUDJ)
     assert client.get(f"/dokument/{podaci['doc']}/pdf").status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# manjak pri isporuci: stiglo je manje nego što faktura kaže
+# --------------------------------------------------------------------------- #
+
+
+def _manjak_forma(odluka: str, stiglo: str = "1"):
+    """Poslovođa dira samo red gde ne valja; ostali idu neizmenjeni."""
+    return {"odluka": odluka, "line_no": ["1"], "stiglo": [stiglo]}
+
+
+def test_dovoze_sledecom_turom_upisuje_punu_fakturu(client, podaci, db, monkeypatch):
+    """Kalkulacija ide za pun iznos — za manju količinu se ne bi složila sa PDVEVIDX."""
+    from sefsync.models import Document as D, OdlukaManjka, PrijavaManjka
+
+    upisano = []
+    monkeypatch.setattr("sefsync.services.nacrti.upisi_u_erp",
+                        lambda doc_id, **k: (upisano.append(doc_id), (True, "Upisana."))[1])
+    monkeypatch.setattr(get_settings(), "erp_upis_kalkulacije", True, raising=False)
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow_test()
+
+    prijavi(client, POSLOVODJA)
+    odgovor = client.post(f"/dokument/{podaci['doc']}/manjak",
+                          data=_manjak_forma("kasnije"), follow_redirects=False)
+    assert odgovor.status_code in (302, 303)
+
+    with db.session_scope() as session:
+        m = session.get(PrijavaManjka, podaci["doc"])
+        assert m is not None and m.otvoren
+        assert m.odluka is OdlukaManjka.KASNIJE
+        assert m.stavke == [{"line_no": 1, "naziv": "Frižider",
+                             "fakturisano": 2.0, "stiglo": 1.0}]
+        assert m.prijavio == "predrag"
+        assert session.get(D, podaci["doc"]).received_at is not None
+    assert upisano == [podaci["doc"]]
+
+
+@pytest.mark.parametrize("odluka", ["storno", "operater"])
+def test_dok_se_ne_zna_sta_je_sa_fakturom_nema_upisa(client, podaci, db, monkeypatch, odluka):
+    """Faktura tek treba da nestane ili da se o njoj odluči — ERP čeka."""
+    from sefsync.models import Document as D, PrijavaManjka
+
+    upisano = []
+    monkeypatch.setattr("sefsync.services.nacrti.upisi_u_erp",
+                        lambda doc_id, **k: (upisano.append(doc_id), (True, "Upisana."))[1])
+    monkeypatch.setattr(get_settings(), "erp_upis_kalkulacije", True, raising=False)
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow_test()
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/manjak",
+                data=_manjak_forma(odluka), follow_redirects=False)
+
+    with db.session_scope() as session:
+        assert session.get(PrijavaManjka, podaci["doc"]) is not None
+    assert upisano == []
+
+
+def test_kolicina_veca_od_fakturisane_se_odbija(client, podaci, db):
+    """Ovo je manjak, ne višak — 3 od 2 nema smisla."""
+    from sefsync.models import Document as D, PrijavaManjka
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow_test()
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/manjak",
+                data=_manjak_forma("kasnije", stiglo="3"), follow_redirects=False)
+    with db.session_scope() as session:
+        assert session.get(PrijavaManjka, podaci["doc"]) is None
+
+
+def test_stigao_ostatak_skida_crvenu_liniju(client, podaci, db):
+    from sefsync.models import Document as D, OdlukaManjka, PrijavaManjka
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow_test()
+        session.add(PrijavaManjka(
+            document_id=podaci["doc"], odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2.0, "stiglo": 1.0}],
+        ))
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/manjak-zatvori",
+                data={"kako": "stigao ostatak"}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        m = session.get(PrijavaManjka, podaci["doc"])
+        assert not m.otvoren
+        assert m.zatvorio == "predrag"
+        assert m.zatvoreno_kako == "stigao ostatak"
+
+
+def test_tudja_jedinica_ne_prijavljuje_manjak(client, podaci, db):
+    prijavi(client, TUDJ)
+    odgovor = client.post(f"/dokument/{podaci['doc']}/manjak",
+                          data=_manjak_forma("kasnije"), follow_redirects=False)
+    assert odgovor.status_code == 403
+
+
+def utcnow_test():
+    from sefsync.models import utcnow
+
+    return utcnow()
+
+
+def test_knjizno_odobrenje_zatvara_manjak(podaci, db):
+    """Ostatak nikad nije stigao — odobrenje skida crvenu liniju samo."""
+    from sefsync.models import Document as D, DocumentType, OdlukaManjka, PrijavaManjka
+    from sefsync.services.odobrenja import zatvori_manjak_odobrenjem
+
+    with db.session_scope() as session:
+        faktura = session.get(D, podaci["doc"])
+        session.add(PrijavaManjka(
+            document_id=faktura.id, odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2.0, "stiglo": 1.0}],
+        ))
+        # dobavljac broj kuca kako mu dodje - poredi se normalizovano
+        odobrenje = D(
+            sef_invoice_id=500300, document_number="KO-77/26",
+            document_type=DocumentType.CREDIT_NOTE,
+            supplier_name="EWE COMP DOO", supplier_vat="100042618",
+            billing_reference="26 30F 087050", amount=-50000.0,
+        )
+        session.add(odobrenje)
+        session.flush()
+        odobrenje_id = odobrenje.id
+
+    assert zatvori_manjak_odobrenjem(odobrenje_id) == "26-30F-087050"
+
+    with db.session_scope() as session:
+        m = session.get(PrijavaManjka, podaci["doc"])
+        assert not m.otvoren
+        assert m.zatvoreno_kako == "stiglo knjižno odobrenje"
+        assert "KO-77/26" in m.zatvorio
+
+
+def test_odobrenje_drugog_dobavljaca_ne_zatvara_tudji_manjak(podaci, db):
+    from sefsync.models import Document as D, DocumentType, OdlukaManjka, PrijavaManjka
+    from sefsync.services.odobrenja import zatvori_manjak_odobrenjem
+
+    with db.session_scope() as session:
+        session.add(PrijavaManjka(
+            document_id=podaci["doc"], odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2.0, "stiglo": 1.0}],
+        ))
+        drugi = D(
+            sef_invoice_id=500400, document_number="KO-99/26",
+            document_type=DocumentType.CREDIT_NOTE,
+            supplier_name="NEKO DRUGI", supplier_vat="999999999",
+            billing_reference="26-30F-087050", amount=-50000.0,
+        )
+        session.add(drugi)
+        session.flush()
+        drugi_id = drugi.id
+
+    assert zatvori_manjak_odobrenjem(drugi_id) is None
+    with db.session_scope() as session:
+        assert session.get(PrijavaManjka, podaci["doc"]).otvoren

@@ -680,6 +680,69 @@ class Slika(Base):
     document: Mapped[Document] = relationship()
 
 
+class OdlukaManjka(str, enum.Enum):
+    """Sta je dobavljac rekao kad je stiglo manje nego sto faktura kaze."""
+
+    KASNIJE = "kasnije"      # dovoze sledecom turom
+    STORNO = "storno"        # salju ispravljenu fakturu
+    OPERATER = "operater"    # poslovodja ne zna, neka odluci operater
+
+
+class PrijavaManjka(Base):
+    """Poslovodja je otvorio kamion i stiglo je manje nego sto faktura kaze.
+
+    Polje `Document.received_note` za ovo ne valja: postoji od pocetka i u
+    7.727 dokumenata nije popunjeno **nijednom**. Slobodan tekst se ne
+    popunjava, a i da se popuni, ni upis kalkulacije ni kasnije knjizno
+    odobrenje ne mogu nista s njim - zato manjak ide po stavkama.
+
+    Sta app radi zavisi od `odluka`:
+
+    * `KASNIJE` - kalkulacija se upisuje za **punu fakturu**. Kalkulacija za
+      manju kolicinu ne bi se slagala ni sa `PDVEVIDX` ni sa saldom
+      dobavljaca, a ostatak ne bi imao uz sta da se knjizi. Upis ne pomera
+      zalihu (dira samo zaglavlje, stavke i `PDVEVIDX`, nikad `ARTPROD`), pa
+      kalkulacija sme da stoji neproknjizena koliko treba - crvena linija na
+      ekranu kaze poslovodji da ne knjizi dok ostatak ne dodje.
+    * `STORNO` i `OPERATER` - **ne upisuje se nista**, faktura tek treba da
+      nestane ili da se o njoj odluci.
+
+    Mereno 26.09.: odbijenih na SEF-u 7, storniranih 32, knjiznih odobrenja
+    967 - treci put je daleko najcesci.
+    """
+
+    __tablename__ = "prijava_manjka"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Po jedna stavka koja ne valja: line_no, naziv, fakturisano, stiglo.
+    stavke: Mapped[list] = mapped_column(JSON, default=list)
+    odluka: Mapped[OdlukaManjka] = mapped_column(Enum(OdlukaManjka))
+    prijavio: Mapped[str] = mapped_column(String(100))
+    prijavljeno_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    # Trag zatvaranja: ostatak stigao, knjizno odobrenje, ili storno.
+    zatvorio: Mapped[str | None] = mapped_column(String(100), default=None)
+    zatvoreno_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    zatvoreno_kako: Mapped[str | None] = mapped_column(String(60), default=None)
+
+    document: Mapped[Document] = relationship()
+
+    @property
+    def otvoren(self) -> bool:
+        return self.zatvoreno_u is None
+
+    @property
+    def sazetak(self) -> str:
+        """„stiglo 9 od 10“ - ono sto stoji u crvenoj liniji."""
+        delovi = [
+            f"{s.get('naziv', '')[:28]}: stiglo {s.get('stiglo')} od {s.get('fakturisano')}"
+            for s in (self.stavke or [])
+        ]
+        return "; ".join(delovi)
+
+
 class PopustZaPrenos(Base):
     """Naknadni popust koji je dobavljac odobrio za jedan uredjaj.
 

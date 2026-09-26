@@ -49,8 +49,18 @@ sa cenama, rabatom i maržom. Ti potvrdiš da je roba stigla.</p>
 <h3>2. Kad roba stigne — <span class="dugme">Roba je primljena</span></h3>
 <p>To je sve. Aplikacija u tom trenutku upiše kalkulaciju u ERP.</p>
 <div class="paznja">
-  <strong>Klikni tek kad roba stvarno stigne i kad si je prebrojao.</strong> Dugme
-  pokreće knjiženje. Ako nešto fali ili je oštećeno — ne klikaj, javi operateru.
+  <strong>Klikni tek kad roba stvarno stigne i kad si je prebrojao.</strong>
+  Ako je stiglo manje nego što faktura kaže, ne klikaj to dugme nego
+  <span class="dugme">Stiglo manje nego što piše</span> ispod njega: upiši koliko je
+  stvarno stiglo i izaberi šta ti je vozač rekao — <em>dovoze sledećom turom</em>,
+  <em>šalju ispravljenu fakturu</em>, ili <em>ne znam</em>. Kancelarija to odmah vidi.
+</div>
+<div class="paznja">
+  Kad si izabrao „dovoze sledećom turom“, faktura dobija <strong>crvenu liniju</strong> i
+  stoji ti u kartici „Čeka ostatak“. Kalkulacija jeste u ERP-u, ali je
+  <strong>ne knjiži dok ostatak ne dođe.</strong> Kad stigne, klikni
+  <span class="dugme">Stigao ostatak</span> — linija pada i tek tada knjižiš.
+  Ako umesto robe stigne knjižno odobrenje, linija pada sama.
 </div>
 
 <h3>3. Ako neki artikal nema našu šifru</h3>
@@ -90,7 +100,8 @@ završi kod nje, ne kod tebe.</p>
   <tr><th style="width:52mm">Šta se desilo</th><th>Šta radiš</th></tr>
   <tr><td>Faktura nije stigla u panel</td><td>Javi operateru — možda još nije ni na SEF-u</td></tr>
   <tr><td>Faktura je za drugi objekat</td><td>Javi operateru, on je prebacuje</td></tr>
-  <tr><td>Roba ne odgovara fakturi</td><td><strong>Ne klikaj „Roba je primljena“</strong>, javi operateru</td></tr>
+  <tr><td>Stiglo manje nego na fakturi</td><td>„Stiglo manje nego što piše“ — upiši količine</td></tr>
+  <tr><td>Roba je oštećena</td><td><strong>Ne klikaj „Roba je primljena“</strong>, javi operateru</td></tr>
   <tr><td>Nema dugmeta na fakturi</td><td>Stigla je pre prelaska — to je namerno, ide u ERP</td></tr>
   <tr><td>Ne mogu da se prijavim</td><td>Javi operateru — nalog se dodaje u panelu</td></tr>
 </table>

@@ -14,6 +14,10 @@
   <a href="/moja-jedinica?prikaz=sve" class="{% if prikaz == 'sve' %}izabran{% endif %}">Sve prosleđeno</a>
   <a href="/moja-jedinica?prikaz=slikanje" class="{% if prikaz == 'slikanje' %}izabran{% endif %}">
     Za slikanje <b>{{ koliko_za_slikanje }}</b></a>
+  {% if otvorenih_manjaka %}
+  <a href="/moja-jedinica?prikaz=manjak" class="{% if prikaz == 'manjak' %}izabran{% endif %}">
+    Čeka ostatak <b>{{ otvorenih_manjaka }}</b></a>
+  {% endif %}
 </div>
 
 {% if prikaz == 'slikanje' %}
@@ -83,10 +87,33 @@
       <td class="num" data-naslov="Stavki">{{ d.lines | length }}</td>
       <td class="small" data-naslov="Prosleđeno">{{ d.forwarded_at.strftime('%d.%m. %H:%M') if d.forwarded_at else '' }}</td>
       <td>
-        {% if d.received_at %}
+        {% set m = manjci.get(d.id) %}
+        {% if m and m.otvoren %}
+          {# Crvena linija stoji dok ostatak ne stigne - dotle se ne knjizi. #}
+          <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
+            <b>{{ m.sazetak }}</b><br>
+            <span class="muted">
+              {% if m.odluka.value == 'kasnije' %}Dobavljač dovozi ostatak — kalkulacija je u ERP-u,
+                <b>ne knjiži je dok ostatak ne dođe</b>.
+              {% elif m.odluka.value == 'storno' %}Dobavljač šalje ispravljenu fakturu — kalkulacija
+                se ne upisuje.
+              {% else %}Prijavljeno kancelariji, čeka se odluka — kalkulacija se ne upisuje.
+              {% endif %}
+              Prijavio {{ m.prijavio }} {{ m.prijavljeno_u.strftime('%d.%m. %H:%M') }}.
+            </span>
+            {% if m.odluka.value == 'kasnije' %}
+            <form class="inline" method="post" action="/dokument/{{ d.id }}/manjak-zatvori"
+                  style="margin-top:5px">
+              <input type="hidden" name="kako" value="stigao ostatak">
+              <button type="submit">Stigao ostatak</button>
+            </form>
+            {% endif %}
+          </div>
+        {% elif d.received_at %}
           <span class="tag ok">prijem potvrdio {{ d.received_by }}</span>
           <div class="muted small">{{ d.received_at.strftime('%d.%m. %H:%M') }}
             {{ d.received_note or '' }}</div>
+          {% if m %}<div class="muted small">manjak zatvorio {{ m.zatvorio }} — {{ m.zatvoreno_kako }}</div>{% endif %}
         {% elif d.po_starom %}
           <div class="small" style="padding:4px 7px;border-left:3px solid #b45309;background:#fffbeb">
             Stiglo pre prelaska — kalkulaciju pravi poslovođa u ERP-u, kao i do sada.</div>
@@ -95,6 +122,31 @@
             <input type="text" name="napomena" placeholder="napomena (opciono)" style="width:150px">
             <button type="submit">Roba je primljena</button>
           </form>
+          {% if d.lines %}
+          <details style="margin-top:6px">
+            <summary class="small" style="cursor:pointer">Stiglo manje nego što piše</summary>
+            <form method="post" action="/dokument/{{ d.id }}/manjak" style="margin-top:6px">
+              <table class="small" style="width:100%">
+                <tr><th style="text-align:left">Stavka</th>
+                    <th style="width:70px">Fakturisano</th><th style="width:70px">Stiglo</th></tr>
+                {% for s in d.lines %}
+                <tr>
+                  <td>{{ (s.name or '')[:40] }}
+                    <input type="hidden" name="line_no" value="{{ s.line_no }}"></td>
+                  <td class="num">{{ '%g'|format(s.quantity or 0) }}</td>
+                  <td><input type="text" name="stiglo" value="{{ '%g'|format(s.quantity or 0) }}"
+                             style="width:60px" inputmode="decimal"></td>
+                </tr>
+                {% endfor %}
+              </table>
+              <div class="small muted" style="margin:6px 0 4px">Šta je dobavljač rekao?</div>
+              <button type="submit" name="odluka" value="kasnije">Dovoze sledećom turom</button>
+              <button type="submit" name="odluka" value="storno">Šalju ispravljenu fakturu</button>
+              <button type="submit" name="odluka" value="operater" class="secondary">
+                Ne znam — neka odluči kancelarija</button>
+            </form>
+          </details>
+          {% endif %}
         {% endif %}
       </td>
     </tr>

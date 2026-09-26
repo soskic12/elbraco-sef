@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..config import Settings, get_settings
@@ -425,6 +426,21 @@ class IngestService:
         doc.error_message = None
         if doc.state in (ProcessState.NEW, ProcessState.ERROR):
             doc.state = ProcessState.FETCHED
+
+        # Knjizno odobrenje zatvara otvoren manjak na fakturi koju ispravlja:
+        # ostatak nikad nije stigao, pa nema sta vise da se ceka.
+        if doc.document_type is DocumentType.CREDIT_NOTE:
+            from .odobrenja import zatvori_manjak_odobrenjem
+
+            session.flush()
+            try:
+                zatvoren = zatvori_manjak_odobrenjem(doc.id)
+            except SQLAlchemyError:
+                log.exception("Zatvaranje manjka odobrenjem %s nije proslo", doc.id)
+            else:
+                if zatvoren:
+                    log.info("Odobrenje %s zatvorilo manjak na fakturi %s",
+                             doc.document_number, zatvoren)
 
     def _apply_ubl(self, session: Session, doc: Document, ubl: UblDocument) -> None:
         doc.document_number = doc.document_number or ubl.document_number

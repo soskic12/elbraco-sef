@@ -61,6 +61,23 @@ poslovođa dokument <strong>ne vidi</strong>.</p>
 <p>Prihvatanje fakture je pravni čin i radi se svesno, dugmetom
 <span class="dugme">Prihvati na SEF-u</span>. Aplikacija to ne radi sama.</p>
 
+<h3>4. Kad poslovođa prijavi manjak</h3>
+<p>Ako je u objekat stiglo manje nego što faktura kaže, poslovođa to upisuje po
+stavkama i bira šta mu je dobavljač rekao. Sve takve fakture stoje u kartici
+<strong>Prijavljen manjak</strong>, a na samoj fakturi piše šta je od čega stiglo.</p>
+<table>
+  <tr><th style="width:48mm">Poslovođa je izabrao</th><th>Šta ti radiš</th></tr>
+  <tr><td>Dovoze sledećom turom</td><td>Ništa. Kalkulacija je upisana za pun iznos,
+    poslovođa je ne knjiži dok ostatak ne dođe.</td></tr>
+  <tr><td>Šalju ispravljenu fakturu</td><td>Sačekaj storno sa SEF-a. Kalkulacija se ne
+    upisuje, a ispravljena faktura dolazi kao nova.</td></tr>
+  <tr><td>Ne znam</td><td><strong>Ti odlučuješ</strong> — odbij na SEF-u uz obrazloženje,
+    ili prihvati i čekaj. Kalkulacija se ne upisuje dok ne rešiš.</td></tr>
+</table>
+<p class="paznja">Fakturu koja je <strong>stornirana ili odbijena</strong> na SEF-u
+aplikacija više ne pušta u ERP, ni ako neko klikne. Ako je kalkulacija već bila
+upisana pre storna, obriši je u ERP-u i javi da se skine oznaka.</p>
+
 <h2 class="nova-strana">Šifre artikala — Dušan</h2>
 <p>Ekran <strong>Šifre</strong> pokazuje stavke kojima fali naša šifra, sa svim što
 treba da je otvoriš: naziv sa fakture, šifra dobavljača, barkod, količina, cena — i

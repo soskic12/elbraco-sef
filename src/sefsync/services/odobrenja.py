@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import Connection
 
 # "po racunu broj 851 VP-2026 od 16.03.2026." - broj ume da ima razmak u sebi,
@@ -268,3 +268,47 @@ def popust_za_uredjaj(
         "racun": broj,
         "baza": blizu["baza"],
     }
+
+
+def zatvori_manjak_odobrenjem(document_id: int) -> str | None:
+    """Knjizno odobrenje zatvara otvoren manjak na fakturi koju ispravlja.
+
+    Kad ostatak robe nikad ne stigne, dobavljac posalje knjizno odobrenje - put
+    kojim ionako prolazi 967 dokumenata godisnje. Tada nema sta vise da se ceka:
+    crvena linija pada sama, a poslovodja knjizi i kalkulaciju i odobrenje.
+
+    Faktura se trazi po `billing_reference`, pa po broju iz napomene ako veze
+    nema. Poredi se normalizovano, jer dobavljac broj kuca kako mu dodje.
+
+    Vraca broj zatvorene fakture, ili None ako nije bilo sta da se zatvori.
+    """
+    from ..db import session_scope
+    from ..models import Document, PrijavaManjka, utcnow
+    from .mapiranje import kljuc_racuna
+
+    with session_scope() as session:
+        odobrenje = session.get(Document, document_id)
+        if odobrenje is None:
+            return None
+        trazeni = kljuc_racuna(odobrenje.billing_reference) or kljuc_racuna(
+            broj_originalnog_racuna(odobrenje.note)
+        )
+        if not trazeni:
+            return None
+
+        otvoreni = session.scalars(
+            select(PrijavaManjka)
+            .join(Document, Document.id == PrijavaManjka.document_id)
+            .where(
+                PrijavaManjka.zatvoreno_u.is_(None),
+                Document.supplier_vat == odobrenje.supplier_vat,
+            )
+        ).all()
+        for prijava in otvoreni:
+            if kljuc_racuna(prijava.document.document_number) != trazeni:
+                continue
+            prijava.zatvorio = f"knjižno odobrenje {odobrenje.document_number or ''}".strip()[:100]
+            prijava.zatvoreno_u = utcnow()
+            prijava.zatvoreno_kako = "stiglo knjižno odobrenje"
+            return prijava.document.document_number
+    return None
