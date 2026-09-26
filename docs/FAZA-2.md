@@ -1800,3 +1800,50 @@ sve odjednom.
 
 Provereno na 90 poslednjih Bogdanovih faktura kroz stvarni tok: **84 app sama
 prepozna**, 2 dobiju predlog, 4 ostaju za knjiženje.
+
+## Manjak pri isporuci — analiza (26.09.)
+
+Operater prosledi fakturu, poslovođa otvori kamion i vidi da je stigao jedan
+aparat manje. Bane je opisao tri slučaja iz prakse. Koliko su česti:
+
+| | broj | udeo |
+|---|---:|---:|
+| odbijeno na SEF-u, čeka se nova faktura | 7 | 0,09 % |
+| dobavljač stornira i odmah šalje ispravljenu | 32 | 0,4 % |
+| prihvata se, ostatak stiže sledećom turom | — | ostalo |
+| knjižnih odobrenja (kad ostatak ne stigne) | 967 | 12,5 % |
+
+**Polje za napomenu uz prijem je upotrebljeno 0 puta u 7.727 dokumenata.**
+Slobodan tekst se ne popunjava, a i da se popuni, ni upis kalkulacije ni
+kasnije knjižno odobrenje ne mogu ništa s njim da urade. Zato manjak mora da se
+prijavljuje po stavkama, a ne rečenicom.
+
+### Zašto se kalkulacija ipak upisuje za pun iznos fakture
+
+Kalkulacija nosi PDV i obavezu prema dobavljaču. Kalkulacija za manju količinu
+ne slaže se ni sa `PDVEVIDX` ni sa saldom dobavljača, a kad ostatak stigne nema
+uz šta da se knjiži — nova faktura ne postoji. Cena toga je da zaliha jedan do
+dva dana pokazuje aparat kojeg nema. Alternativa kvari tri stvari odjednom.
+
+Kod slučajeva 1 i 2 faktura nestaje, pa se **ne upisuje ništa**.
+
+### Rupa nađena pri analizi
+
+Nijedna provera u putu do kalkulacije ne gleda `sef_status`. Danas je
+bezopasno — nijedan od 32 stornirana dokumenta nema potvrđen prijem — ali od
+28.09. app upisuje, pa bi storno posle potvrde prijema ostavio kalkulaciju za
+poništenu fakturu. Treba dve brane: upis odbija dokument u stanju `Storno` ili
+`Rejected`, a već upisana kalkulacija čija faktura naknadno bude stornirana
+diže se operateru na ekran. App ništa ne briše iz ERP-a sama.
+
+### Odštampan primerak e-fakture
+
+Bogdanu i drugima ponekad treba faktura na papiru. SEF-ov klijent već ima
+`purchase_pdf` (GET /api/publicApi/purchase-invoice/pdf, prošireni prikaz
+dokumenta), ali nigde nije izložen. Treba dugme „Štampaj“ na stranici
+dokumenta — štampa se SEF-ov PDF, ne naš prikaz.
+
+### Otvoreno pitanje
+
+Rok za prihvatanje na SEF-u se nigde ne prati. Ako dokument stoji dok dobavljač
+ne odluči, neko mora da gleda sat.
