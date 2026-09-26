@@ -1,52 +1,62 @@
 <!doctype html>
 <html lang="sr"><head><meta charset="utf-8">
 <title>Panel za e-fakture — uputstvo za poslovođe</title>
-<link rel="stylesheet" href="_stil.css"></head>
+<link rel="stylesheet" href="_stil.css">
+<style>
+  /* Uputstvo mora da stane na dve strane - poslovođa ga drži uz sebe, ne čita
+     iz fascikle. Zato uži ritam nego u operaterskom. */
+  @page { margin: 14mm 14mm; }
+  body { font-size: 10.5pt; line-height: 1.35; }
+  h1 { font-size: 17pt; }
+  h1 + .uvod { margin-bottom: 4mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; }
+  h3 { font-size: 11pt; margin: 3.5mm 0 1mm; }
+  p, li { margin: 0 0 1.5mm; }
+  ul { margin-bottom: 2mm; }
+  table { margin: 1.5mm 0 2.5mm; font-size: 9.5pt; }
+  th, td { padding: 1.5mm 2mm; }
+  .paznja, .vazno, .ok { padding: 2mm 3mm; margin: 2mm 0; }
+  footer { margin-top: 5mm; padding-top: 2mm; }
+</style>
+</head>
 <body>
 
 <h1>Panel za e-fakture — uputstvo za poslovođe</h1>
-<p class="uvod">Šta se menja u tvom poslu i šta treba da radiš svaki dan.
-Uputstvo je kratko namerno — posla ima manje nego do sada, ne više.</p>
+<p class="uvod">Ulazne fakture za tvoj objekat više ne stižu preko Vibera, mejla ili
+telefona — sve dolazi u <strong>panel</strong>, čim faktura stigne na SEF.
+<strong>Kalkulaciju više ne praviš ti</strong>, pravi je aplikacija iz same fakture,
+sa cenama, rabatom i maržom. Ti potvrdiš da je roba stigla.</p>
 
 <div class="vazno">
-  <strong>Novi način rada počinje u ponedeljak 28.09.2026. u 8 časova.</strong><br>
-  Fakture koje su stigle <strong>pre</strong> tog dana završavaš po starom — kalkulaciju
-  za njih praviš u ERP-u, kao i do sada. Panel ih pokazuje, ali za njih nema dugmeta;
-  stoji žuta oznaka „stiglo pre prelaska“.
+  <strong>Novi način rada počinje u ponedeljak 28.09.2026. u 8 časova.</strong>
+  Fakture stigle <strong>pre</strong> tog dana završavaš po starom — kalkulaciju za njih
+  praviš u ERP-u. Panel ih pokazuje, ali za njih nema dugmeta; stoji žuta oznaka
+  „stiglo pre prelaska“.
 </div>
-
-<h2>Šta se menja</h2>
-<p>Ulazne fakture za tvoj objekat više ne stižu preko Vibera, mejla ili telefona.
-Sve dolazi u <strong>panel</strong>, na jedno mesto, čim faktura stigne na SEF.</p>
-<p><strong>Kalkulaciju više ne praviš ti.</strong> Pravi je aplikacija, iz same fakture —
-sa cenama, rabatom i maržom. Ti samo potvrdiš da je roba stvarno stigla.</p>
 
 <h2>Prijava</h2>
 <table>
-  <tr><th style="width:32mm">Adresa</th><td><code>http://efakture.technolandkartica.net</code></td></tr>
-  <tr><th>Korisničko ime</th><td>tvoj ERP nalog — isti kao za program</td></tr>
-  <tr><th>Lozinka</th><td>ista kao za ERP</td></tr>
+  <tr><th style="width:30mm">Adresa</th><td><code>http://efakture.technolandkartica.net</code></td></tr>
+  <tr><th>Nalog i lozinka</th><td>tvoj ERP nalog, isti kao za program</td></tr>
 </table>
-<p>Radi i na telefonu. Ekran je podešen za telefon jer se roba prima u magacinu,
-ne za računarom.</p>
+<p>Radi i na telefonu — ekran je podešen za telefon, jer se roba prima u magacinu.</p>
 
 <h2>Šta radiš svaki dan</h2>
-<h3>1. Otvoriš „Moja jedinica“</h3>
-<p>Tu su fakture za tvoj objekat. Nove su na vrhu.</p>
 
-<h3>2. Kad roba stigne — klikneš <span class="dugme">Roba je primljena</span></h3>
+<h3>1. Otvoriš „Moja jedinica“</h3>
+<p>Tu su fakture za tvoj objekat, nove na vrhu.</p>
+
+<h3>2. Kad roba stigne — <span class="dugme">Roba je primljena</span></h3>
 <p>To je sve. Aplikacija u tom trenutku upiše kalkulaciju u ERP.</p>
 <div class="paznja">
-  <strong>Klikni tek kad roba stvarno stigne i kad si je prebrojao.</strong>
-  Dugme pokreće knjiženje. Ako nešto fali ili je oštećeno, nemoj klikati —
-  javi operateru pa ćemo rešiti reklamaciju.
+  <strong>Klikni tek kad roba stvarno stigne i kad si je prebrojao.</strong> Dugme
+  pokreće knjiženje. Ako nešto fali ili je oštećeno — ne klikaj, javi operateru.
 </div>
 
 <h3>3. Ako neki artikal nema našu šifru</h3>
 <p>Videćeš ga na spisku „šta treba slikati“. Slikaj <strong>deklaraciju ili ambalažu</strong>
-tako da se vide naziv, model i barkod, pa klikni <span class="dugme">Pošalji sliku</span>.</p>
-<p>Šifru otvara Dule, ne ti. Slika mu je dovoljna — ne moraš ništa da prepisuješ,
-ne moraš da šalješ u Viber grupu.</p>
+tako da se vide naziv, model i barkod, pa klikni <span class="dugme">Pošalji sliku</span>.
+Šifru otvara Dule — ne prepisuješ ništa i ne šalješ u Viber.</p>
 <div class="ok">
   Kad jedan objekat slika artikal, <strong>vide ga svi ostali</strong>. Ako ti stigne
   isti artikal, slika već postoji i ne slikaš ponovo.
@@ -58,40 +68,33 @@ ne moraš da šalješ u Viber grupu.</p>
   <li><strong>Ne otvaraš šifre artikala.</strong> Slikaš i ideš dalje.</li>
   <li><strong>Ne tražiš fakturu po Viberu i mejlu.</strong> Sve je u panelu.</li>
 </ul>
-
-<div class="vazno">
-  <strong>Ako ipak napraviš kalkulaciju ručno</strong> — zato što je bilo hitno ili iz
-  navike — ništa se strašno ne dešava. Aplikacija proveri pre upisa i neće napraviti
-  drugu za istu fakturu; javiće ti da već postoji. Ali javi operateru da zna.
-</div>
+<p>Ako ipak napraviš kalkulaciju ručno — iz navike ili zato što je hitno — ništa se
+strašno ne dešava: aplikacija proveri pre upisa i <strong>neće napraviti drugu</strong>
+za istu fakturu. Ali javi operateru da zna.</p>
 
 <h2>Stare fakture</h2>
-<p>Nema preseljavanja i nema prepravljanja unazad. Sve što je stiglo pre dana prelaska
-ide po starom do kraja:</p>
+<p>Nema preseljavanja unazad. Sve stiglo pre dana prelaska ide po starom do kraja:</p>
 <ul>
-  <li>roba je već primljena i kalkulacija napravljena → <strong>ništa ne radiš</strong></li>
+  <li>roba primljena i kalkulacija napravljena → <strong>ništa ne radiš</strong></li>
   <li>roba primljena, kalkulacija nije → <strong>napravi je u ERP-u</strong>, kao i do sada</li>
   <li>roba još nije stigla → sačekaj je, pa kalkulacija u ERP-u</li>
 </ul>
-<p>Panel takvu fakturu prepoznaje i <strong>neće</strong> ti ponuditi dugme. Ako je
-kalkulacija već u ERP-u, panel to i vidi i sam je označi kao urađenu.</p>
+<p>Ako je kalkulacija već u ERP-u, panel to vidi i sam je označi kao urađenu.</p>
 
 <h2>Reklamacije i povraćaj</h2>
-<p>Ako robu vraćaš dobavljaču, to i dalje ide preko Ilijane, kao do sada.
-Knjižno odobrenje kad stigne završi kod nje, ne kod tebe.</p>
+<p>Robu koju vraćaš dobavljaču i dalje vodi Ilijana. Knjižno odobrenje kad stigne
+završi kod nje, ne kod tebe.</p>
 
 <h2>Kad nešto ne valja</h2>
 <table>
-  <tr><th style="width:55mm">Šta se desilo</th><th>Šta radiš</th></tr>
-  <tr><td>Faktura nije stigla u panel</td><td>Javi operateru — možda još nije stigla ni na SEF</td></tr>
+  <tr><th style="width:52mm">Šta se desilo</th><th>Šta radiš</th></tr>
+  <tr><td>Faktura nije stigla u panel</td><td>Javi operateru — možda još nije ni na SEF-u</td></tr>
   <tr><td>Faktura je za drugi objekat</td><td>Javi operateru, on je prebacuje</td></tr>
   <tr><td>Roba ne odgovara fakturi</td><td><strong>Ne klikaj „Roba je primljena“</strong>, javi operateru</td></tr>
+  <tr><td>Nema dugmeta na fakturi</td><td>Stigla je pre prelaska — to je namerno, ide u ERP</td></tr>
   <tr><td>Ne mogu da se prijavim</td><td>Javi operateru — nalog se dodaje u panelu</td></tr>
 </table>
 
-<footer>
-  ELBRACO GROUP · panel za e-fakture · uputstvo za poslovođe<br>
-  Pitanja i problemi: operater u upravi.
-</footer>
+<footer>ELBRACO GROUP · panel za e-fakture · uputstvo za poslovođe · pitanja: operater u upravi</footer>
 
 </body></html>
