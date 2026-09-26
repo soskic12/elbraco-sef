@@ -1728,3 +1728,55 @@ fakturi (088) — nema stavki ni marže, najmanje toga može da zaškripi.
 
 **Isti dan** — Nina i Dušan arhiviraju zaostalo iz reda, osim onoga za šta roba tek
 treba da stigne.
+
+## Tri nalaza sa Bogdanovog ekrana (26.09.)
+
+Bogdan je prijavio da mu fakture koje je već zaknjižio i dalje stoje na ekranu.
+Mereno na **ELBS_2026** — čitanje, a to je i ekran i provera duplikata, ionako
+ide na produkciju; na ELBSX ide samo upis, koji je još zabranjen.
+
+### 1. Broj računa odsečen na 15 znakova
+
+Kolona `BROJ_RN_DOB` je `varchar(20)`, ali ERP-ova forma pušta **15 znakova**:
+`K110/2026-835249` stoji kao `k110/2026-83524`. U bazi je **567 zapisa tačno na
+toj granici, dužih nema nijedan**, i svih 567 parova (dobavljač, broj) je
+jedinstveno — **nula sudara**.
+
+Neograničeno poređenje „po početku“ bi napravilo **9 lažnih pogodaka**
+(`7016088538` je početak od `70160885380120`, dve različite fakture istog
+dobavljača). Zato uslov „ERP vrednost je tačno na 15 znakova“ mora da ostane, uz
+najmanje 10 znakova poklapanja i **tačno jednog kandidata**.
+
+Vraća **51 dokument** koji sada stoji na ekranu.
+
+### 2. Dobavljač otvoren dvaput u komitentima
+
+Šuleks: `04808 Šulex d.o.o` (bez matičnog broja, **4 kalkulacije**) i
+`15582 Sulex DOO za trgovinu i usluge` (MB 08734054, **0 kalkulacija**), oba sa
+PIB-om 100273149. App po matičnom broju bira 15582 i promaši sve četiri.
+
+Razmere: **1.339 PIB-ova deli 3.075 šifara**, 139 matičnih brojeva deli 295
+šifara. Šifarnik se ne dira — definicija tabele u ERP-u nije naša — nego
+`sestrinske_sifre` pri proveri gleda celu grupu. Popune (`123456789`, same nule)
+se preskaču.
+
+U uzorku od 400 dokumenata sa ekrana našlo **4 stvarna slučaja** (Radmilo
+Aleksić PR Sky, kalkulacije pod šifrom 46966), dakle oko 1 %.
+
+### 3. Ljudska greška u broju — ostaje na odluku
+
+Bogdan je uneo `9999` gde faktura ima `999`. Predlog je bio „isti iznos, isti
+datum“, ali kao samostalno pravilo ne valja: **482 puta** u istoriji dve
+različite fakture istog dobavljača imaju isti datum i isti iznos, a ako se doda
+i „broj se razlikuje u jednom znaku“ broj sudara **raste na 1.717** (uzastopni
+povrati `263X3000817` ~ `263X3000818`).
+
+Uže: traži se samo među kalkulacijama koje **nisu** sparene ni sa jednim SEF
+dokumentom. Tada je od **1.409 grupa dvosmisleno svega 13 (0,9 %)** i pravilo
+nalazi **54 dokumenta**. Među njima su prave greške u kucanju —
+`IF-2026-1044-001` → `IF-2026-1044-01`, `26-30F-003776` → `20-30F-003776`,
+`3086744173` → `9086744173` — ali i promašaj: `BK6164069/26` → `bk6170838/26`,
+bankarska naknada od 234 dinara, isti iznos istog dana, druga faktura.
+
+Zato ovo **ne sme da skloni fakturu samo**. Lažan pogodak bi je tiho izbrisao sa
+ekrana i niko je ne bi zaknjižio — gore od Bogdanove smetnje.

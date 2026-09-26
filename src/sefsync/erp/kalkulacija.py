@@ -653,6 +653,52 @@ def kao_sql(nacrt: Nacrt) -> str:
     return "\n".join(redovi)
 
 
+# Vrednosti koje u sifarniku stoje kao popuna, pa ne identifikuju nikoga.
+PRAZNI_IDENTIFIKATORI = {"123456789", "000000000", "99999999", "11111111"}
+
+
+def sestrinske_sifre(conn: Connection, dobavljac: str) -> set[str]:
+    """Sve analitike koje pripadaju istom pravnom licu kao data sifra.
+
+    Isti dobavljac ume da stoji dvaput u komitentima - Sulex je otvoren kao
+    `04808 Sulex d.o.o` (bez maticnog broja) i `15582 Sulex DOO za trgovinu i
+    usluge` (MB 08734054), oba sa PIB-om 100273149. App po maticnom broju
+    izabere 15582, a sve cetiri postojece kalkulacije stoje pod 04808, pa
+    provera duplikata koja gleda samo jednu sifru promasi.
+
+    Mereno na ELBS_2026: 1.339 PIB-ova deli 3.075 sifara, 139 maticnih brojeva
+    deli 295 sifara. Sifarnik se ne dira - definicija tabele u ERP-u nije nasa -
+    nego se pri proveri gleda cela grupa.
+    """
+    if not dobavljac or not dobavljac.strip():
+        return set()
+    svoja = dobavljac.strip()
+    red = conn.execute(
+        text(
+            "SELECT TOP 1 RTRIM(ISNULL(MATBROJ,'')) mb, RTRIM(ISNULL(ZIRORACUN,'')) pib "
+            "FROM dbo.NAZIVI WHERE RTRIM(ANALITIKA) = :a"
+        ),
+        {"a": svoja},
+    ).first()
+    sifre = {svoja}
+    if not red:
+        return sifre
+    for vrednost in (red.mb, red.pib):
+        v = (vrednost or "").strip()
+        if not v or not v.strip("0") or v in PRAZNI_IDENTIFIKATORI:
+            continue
+        for r in conn.execute(
+            text(
+                "SELECT RTRIM(ANALITIKA) a FROM dbo.NAZIVI "
+                "WHERE RTRIM(ISNULL(MATBROJ,'')) = :v OR RTRIM(ISNULL(ZIRORACUN,'')) = :v"
+            ),
+            {"v": v},
+        ):
+            if r.a:
+                sifre.add(r.a.strip())
+    return sifre
+
+
 def postojeca_kalkulacija(conn: Connection, broj_racuna: str, dobavljac: str) -> str | None:
     """Da li za taj racun tog dobavljaca vec postoji kalkulacija u ERP-u.
 
@@ -660,22 +706,58 @@ def postojeca_kalkulacija(conn: Connection, broj_racuna: str, dobavljac: str) ->
     dve kalkulacije za istu fakturu su gore nego nijedna. Poredi se po
     normalizovanom broju (`FA-5543-03/26` == `FA55430326`), jer covek crtice i
     kose crte kuca kako mu dodje.
+
+    Dva su nacina na koja se isti racun ne prepozna, oba nadjena kod Bogdana:
+
+    * ERP-ova forma pusta 15 znakova, pa duzi broj stoji odsecen. Zato se, kad
+      tacnog poklapanja nema, prihvata i zapis koji je tacno na toj granici i
+      predstavlja pocetak trazenog broja - ali samo ako je kandidat jedan.
+      Mereno na ELBS_2026: svih 567 zapisa na granici ima jedinstven par
+      (dobavljac, broj), a pravilo vraca 51 dokument koji sad stoji na ekranu.
+      Neograniceno poredjenje po pocetku bi napravilo 9 laznih pogodaka, zato
+      granica od 15 znakova mora da ostane uslov.
+    * dobavljac je u sifarniku otvoren dvaput, pa kalkulacija stoji pod drugom
+      analitikom - trazi se po celoj grupi, vidi `sestrinske_sifre`.
     """
-    from ..services.mapiranje import kljuc_racuna
+    from ..services.mapiranje import DUZINA_U_ERPU, NAJKRACI_POCETAK, kljuc_racuna
 
     trazeni = kljuc_racuna(broj_racuna)
     if not trazeni or not dobavljac:
         return None
+
+    sifre = sestrinske_sifre(conn, dobavljac)
+    imenovani = {f"d{i}": s for i, s in enumerate(sorted(sifre))}
+    uslov = ", ".join(f":{k}" for k in imenovani)
+
+    odseceni: list[str] = []
     for tabela in ("ULKALKUL", "MKALKUL"):
         for red in conn.execute(
             text(
-                f"SELECT RTRIM(BROJ) br, RTRIM(MAGACIN) mag, RTRIM(ISNULL(BROJ_RN_DOB,'')) rn "
-                f"FROM dbo.{tabela} WHERE RTRIM(DOBAVLJAC) = :dob"
+                f"SELECT RTRIM(BROJ) br, RTRIM(MAGACIN) mag, RTRIM(DOBAVLJAC) dob, "
+                f"RTRIM(ISNULL(BROJ_RN_DOB,'')) rn "
+                f"FROM dbo.{tabela} WHERE RTRIM(DOBAVLJAC) IN ({uslov})"
             ),
-            {"dob": dobavljac.strip()},
+            imenovani,
         ):
-            if red.rn and kljuc_racuna(red.rn) == trazeni:
-                return f"{tabela} {red.mag}/{red.br}"
+            if not red.rn:
+                continue
+            kljuc = kljuc_racuna(red.rn)
+            oznaka = f"{tabela} {red.mag}/{red.br}"
+            if red.dob != dobavljac.strip():
+                oznaka += f" (dobavljač {red.dob})"
+            if kljuc == trazeni:
+                return oznaka
+            if (
+                len(red.rn) == DUZINA_U_ERPU
+                and len(kljuc) >= NAJKRACI_POCETAK
+                and trazeni.startswith(kljuc)
+            ):
+                odseceni.append(oznaka)
+
+    # Vise kandidata znaci da se ne zna koji je - tada je cutanje ispravnije od
+    # pogodjenog para, jer bi lazan pogodak sklonio fakturu sa ekrana.
+    if len(odseceni) == 1:
+        return f"{odseceni[0]} (broj odsečen na {DUZINA_U_ERPU} znakova)"
     return None
 
 

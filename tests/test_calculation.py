@@ -947,3 +947,101 @@ def test_dokument_pre_prelaska_ide_po_starom(monkeypatch):
     assert stari.po_starom is True
     assert novi.po_starom is False
     assert na_sam_dan.po_starom is False      # dan prelaska je vec novi tok
+
+
+# --------------------------------------------------------------------------- #
+# provera duplikata: odsecen broj i dobavljac otvoren dvaput
+# --------------------------------------------------------------------------- #
+
+
+class _LaznaVeza:
+    """Minimalna zamena za Connection - vraca unapred pripremljene redove."""
+
+    def __init__(self, komitent=None, kalkulacije=(), grupa=()):
+        self.komitent = komitent          # (MATBROJ, ZIRORACUN) trazene sifre
+        self.kalkulacije = list(kalkulacije)  # (tabela, mag, broj, dobavljac, BROJ_RN_DOB)
+        self.grupa = list(grupa)          # analitike istog pravnog lica
+        self.pitanja = []
+
+    def execute(self, upit, parametri=None):
+        from types import SimpleNamespace
+
+        tekst = str(upit)
+        self.pitanja.append(tekst)
+        if "MATBROJ,'')) mb" in tekst:
+            if self.komitent is None:
+                return iter([])
+            mb, pib = self.komitent
+            return _Prvi(SimpleNamespace(mb=mb, pib=pib))
+        if "SELECT RTRIM(ANALITIKA) a FROM dbo.NAZIVI" in tekst:
+            return iter([SimpleNamespace(a=s) for s in self.grupa])
+        tabela = "ULKALKUL" if "dbo.ULKALKUL" in tekst else "MKALKUL"
+        trazene = set((parametri or {}).values())
+        return iter([
+            SimpleNamespace(br=broj, mag=mag, dob=dob, rn=rn)
+            for tab, mag, broj, dob, rn in self.kalkulacije
+            if tab == tabela and dob in trazene
+        ])
+
+
+class _Prvi(list):
+    def __init__(self, red):
+        super().__init__([red])
+
+    def first(self):
+        return self[0]
+
+
+def test_postojeca_kalkulacija_hvata_odsecen_broj():
+    """ERP-ova forma pusta 15 znakova, pa duzi broj stoji odsecen."""
+    from sefsync.erp.kalkulacija import postojeca_kalkulacija
+
+    veza = _LaznaVeza(
+        komitent=("08734054", "100273149"),
+        grupa=["10107"],
+        kalkulacije=[("ULKALKUL", "088", "00449", "10107", "k110/2026-83524")],
+    )
+    nadjeno = postojeca_kalkulacija(veza, "K110/2026-835249", "10107")
+    assert nadjeno is not None
+    assert "088/00449" in nadjeno and "odsečen" in nadjeno
+
+    # kad ih je vise, ne zna se koji je - cutanje je ispravnije od pogotka,
+    # jer bi lazan pogodak sklonio fakturu sa ekrana
+    veza.kalkulacije.append(("MKALKUL", "010", "00131", "10107", "k110/2026-83524"))
+    assert postojeca_kalkulacija(veza, "K110/2026-835249", "10107") is None
+
+
+def test_postojeca_kalkulacija_ne_gata_po_kratkom_pocetku():
+    """Broj koji nije na granici od 15 znakova nije odsecen, pa se ne poredi po pocetku."""
+    from sefsync.erp.kalkulacija import postojeca_kalkulacija
+
+    # 7016088538 je stvaran broj u ERP-u i pocetak je od 70160885380120 -
+    # to su dve razlicite fakture istog dobavljaca
+    veza = _LaznaVeza(
+        komitent=("", ""),
+        kalkulacije=[("ULKALKUL", "088", "00200", "12469", "7016088538")],
+    )
+    assert postojeca_kalkulacija(veza, "7016088538_0120", "12469") is None
+
+
+def test_postojeca_kalkulacija_gleda_i_sestrinsku_sifru():
+    """Sulex stoji dvaput u komitentima - kalkulacija je pod drugom analitikom."""
+    from sefsync.erp.kalkulacija import postojeca_kalkulacija
+
+    veza = _LaznaVeza(
+        komitent=("08734054", "100273149"),
+        grupa=["15582", "04808"],
+        kalkulacije=[("ULKALKUL", "088", "00512", "04808", "FA-5543-03/26")],
+    )
+    nadjeno = postojeca_kalkulacija(veza, "FA55430326", "15582")
+    assert nadjeno is not None
+    assert "088/00512" in nadjeno and "04808" in nadjeno
+
+
+def test_sestrinske_sifre_preskace_popunu():
+    """MATBROJ '123456789' i same nule ne identifikuju nikoga."""
+    from sefsync.erp.kalkulacija import sestrinske_sifre
+
+    veza = _LaznaVeza(komitent=("123456789", "000000000"), grupa=["99999"])
+    assert sestrinske_sifre(veza, "10107") == {"10107"}
+    assert not any("SELECT RTRIM(ANALITIKA) a FROM dbo.NAZIVI" in p for p in veza.pitanja)

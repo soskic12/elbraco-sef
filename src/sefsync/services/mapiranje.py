@@ -43,6 +43,11 @@ OD_DANA = 82184
 # smisla. Ispod toga se pogadja: krataki brojevi tipa "26-301" pripadaju svakome.
 NAJKRACI_POCETAK = 10
 
+# Kolona BROJ_RN_DOB je varchar(20), ali ERP-ova forma pusta samo 15 znakova, pa
+# se duzi broj zatekne odsecen: "K110/2026-835249" stoji kao "k110/2026-83524".
+# Mereno na ELBS_2026: 567 zapisa je tacno na toj granici, duzih nema nijedan.
+DUZINA_U_ERPU = 15
+
 
 def kljuc_racuna(broj: str | None) -> str:
     """Broj racuna u obliku u kom se moze porediti sa ERP-om.
