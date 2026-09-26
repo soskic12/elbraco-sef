@@ -64,9 +64,15 @@ SINTPOR_PO_STOPI = {20.0: "270", 10.0: "271", 0.0: "272"}
 # nista od toga se nije desilo: roba nije zaduzena, glavna knjiga ne zna za nju,
 # a poslovodja nema sta da klikne. Zato je vrednost zakucana i proverava se
 # pri upisu.
-PROKNJIZENO_NIJE = 0    # otvorena kalkulacija, ceka poslovodju
-PROKNJIZENO_JESTE = 1   # zaknjizeno u ERP-u - NIKAD iz aplikacije
-PROKNJIZENO_ZAKLJUCANO = 2  # administrator zakljucao stare kalkulacije
+PROKNJIZENO_NIJE = 0    # nije proknjizena - jedina vrednost koju app sme da upise
+PROKNJIZENO_JESTE = 1   # proknjizio poslovodja - NIKAD iz aplikacije
+# Proknjizena pa je administrator zakljucao da ne moze unazad da se menja, zbog
+# obracuna PDV-a. Dakle i ovo je zaknjizeno, ne samo "zakljucano" (Bane, 26.09.).
+PROKNJIZENO_ZAKLJUCANO = 2
+
+# Da nule nema u produkciji nije znak da je pogresna: ELBS_2026 ima samo 1 (211,
+# poslednjih dvadesetak dana) i 2 (8.630, cela godina), jer ljudi knjize odmah po
+# unosu. Kalkulacija koju app ostavi na nuli ceka poslovodju, kako i treba.
 
 # Koliko puta se pokusava sa sledecim brojem kad ga neko preotme.
 POKUSAJA_ZA_BROJ = 5

@@ -1847,3 +1847,24 @@ dokumenta — štampa se SEF-ov PDF, ne naš prikaz.
 
 Rok za prihvatanje na SEF-u se nigde ne prati. Ako dokument stoji dok dobavljač
 ne odluči, neko mora da gleda sat.
+
+### PROKNJIZENO — potvrđeno značenje (Bane, 26.09.)
+
+- **0** — kalkulacija nije proknjižena. Jedina vrednost koju aplikacija sme da upiše.
+- **1** — proknjižio poslovođa.
+- **2** — proknjižena pa je administrator zaključao da ne može unazad da se menja,
+  zbog obračuna PDV-a. Dakle i 2 je zaknjiženo, nije „samo zaključano“.
+
+Nule nema u ELBS_2026 (samo 211 jedinica iz poslednjih dvadesetak dana i 8.630
+dvojki kroz celu godinu) zato što ljudi knjiže odmah po unosu, a ne zato što je
+nula pogrešna. Naših 21 zapis sa nulom u ELBSX-u su ispravni i nema šta da se
+proverava na ERP-ovom ekranu pre prelaska.
+
+### Ispravka analize manjka
+
+Ranije je ovde pisalo da zaliha dan-dva pokazuje aparat kojeg nema. **To nije
+tačno.** Upis dira tačno tri tabele — zaglavlje, stavke i `PDVEVIDX` — a
+`ARTPROD` i `LagerSnapshotDaily` ne dira nikad. Zaliha se pomera tek
+knjiženjem, koje radi čovek. Puna kalkulacija upisana odmah zato ne košta ništa
+na lageru: poslovođa je prosto ne knjiži dok ostatak ne stigne, a oznaka
+„čeka se ostatak“ mu govori kad sme.
