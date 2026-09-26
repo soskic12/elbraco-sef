@@ -1911,8 +1911,13 @@ objekat, povrati (010), ulazni računi (088) — plus deo koji važi za sve
 (štampa, „šta aplikacija nikad ne radi sama“, granica prelaska).
 
 **Pravilo koje je Bane postavio 26.09.:** uz svaku izmenu u načinu rada ide i
-ažuriranje pomoći, u istom poslu. Tri mesta moraju da se slažu:
-`templates/pomoc.html`, `docs/uputstva/poslovodje.html` (dve strane) i
-`docs/uputstva/operateri.html`. Zastarela pomoć je gora nego nikakva, jer joj
+ažuriranje pomoći, u istom poslu. Zastarela pomoć je gora nego nikakva, jer joj
 čovek veruje — što se već desilo sa uputstvom poslovođama, koje je dan pred
 prelazak govorilo suprotno od aplikacije.
+
+**Odštampana uputstva su povučena** (Bane: „neću štampati, nema potrebe ako ga
+imaju u app sad“). Sve što je stajalo samo na papiru preneto je u `/pomoc`: šta
+poslovođa više ne radi, reklamacije, odakle dolaze dokumenti i oznaka
+„nepregledano“, šta aplikacija uradi sama u kalkulaciji, upozorenje da se isti
+dokument ne radi dvaput, i tabela „ako nešto zaškripi“. Fajlovi u
+`docs/uputstva/` nose baner da se više ne održavaju i ostaju samo kao trag.

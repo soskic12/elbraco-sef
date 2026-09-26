@@ -6,8 +6,9 @@
   kad nije siguran sta dalje. Mora da se menja zajedno sa svakom izmenom u
   nacinu rada, inace postane gore nego da ga nema (Bane, 26.09.).
 
-  Iste stvari stoje i u odstampanim uputstvima u docs/uputstva/ - kad se menja
-  ovde, menja se i tamo.
+  Ovo je JEDINO mesto koje se odrzava. Odstampana uputstva u docs/uputstva/ su
+  povucena - Bane, 26.09.: "nece stampati, nema potrebe ako ga imaju u app sad".
+  Sve sto je stajalo samo na papiru preneto je ovde.
 #}
 
 {% macro korak(naslov) %}
@@ -57,6 +58,21 @@
   tada knjižiš kalkulaciju u ERP-u.</p>
   <p class="muted small">Ako umesto robe stigne knjižno odobrenje, linija pada
   sama — dobavljač je priznao da neće doneti ostatak.</p>
+{% endcall %}
+
+{% call korak('Šta više ne radiš') %}
+  <ul class="small">
+    <li><b>Ne praviš kalkulaciju u ERP-u</b> — pravi je aplikacija, ti je samo knjižiš.</li>
+    <li><b>Ne otvaraš šifre artikala</b> — slikaš i ideš dalje.</li>
+    <li><b>Ne tražiš fakturu po Viberu i mejlu</b> — sve je u panelu.</li>
+  </ul>
+  <p class="muted small">Ako ipak napraviš kalkulaciju ručno, aplikacija to prepozna
+  i neće napraviti drugu za istu fakturu. Ali javi kancelariji da zna.</p>
+{% endcall %}
+
+{% call korak('Reklamacije i povraćaj') %}
+  <p>Robu koja se vraća dobavljaču ne rešavaš ti — javi Ilijani, ona vodi povrate
+  i knjižna odobrenja.</p>
 {% endcall %}
 
 {% call korak('Artikal koji nemamo u šifarniku') %}
@@ -128,6 +144,15 @@
 {# --------------------------------------------------------------- operater #}
 {% else %}
 
+{% call korak('Odakle dolaze dokumenti') %}
+  <p>Panel svakih 15 minuta pita SEF ima li nešto novo. Dokument koji stigne sam
+  se razvrsta na poslovnu jedinicu po pravilima — pogodi u oko <b>93 slučaja od
+  100</b>. Tvoj posao je onih ostalih sedam i potvrda da je ostalo dobro.</p>
+  <p class="muted small">Panel namerno ne otvara dokumente koji su na portalu još
+  „Nova“, da vam ne pomeri spisak. Zato ima svoju oznaku <b>nepregledano</b> —
+  nju gledaj, ne status na portalu.</p>
+{% endcall %}
+
 {% call korak('Red dokumenata') %}
   <ul class="small">
     <li><b>Traži potez</b> — nije prosleđeno ili nije odlučeno na SEF-u.</li>
@@ -160,6 +185,26 @@
   aplikacija više ne pušta u ERP, ni ako neko klikne.</p>
 {% endcall %}
 
+{% call korak('Šta aplikacija uradi sama u kalkulaciji') %}
+  <ul class="small">
+    <li>uzima <b>datum prometa</b> sa fakture, ne datum slanja;</li>
+    <li>razdvaja PDV po stopama — opšta i posebna idu u odvojena polja;</li>
+    <li>kad je deo računa <b>bez PDV-a</b> (npr. 349,00 kod EPS-a), upisuje ga
+      kao zaseban red poreske evidencije, tip 23;</li>
+    <li>ako račun ne nosi rok plaćanja, u valutu ide datum prometa.</li>
+  </ul>
+  <p class="muted small">Kalkulacija se upisuje kao <b>otvorena</b>. Knjiženje
+  ostaje u ERP-u i radi se kao i do sada.</p>
+{% endcall %}
+
+{% call korak('Isti dokument se ne radi dvaput') %}
+  <p>Ako je poslovođa kalkulaciju napravio ručno, aplikacija to prepozna i
+  označi dokument kao <b>u ERP-u (ručno)</b> — neće napraviti drugu. Ali ako
+  aplikacija upiše prva, pa neko napravi i ručno, <b>u ERP-u ostaju dve</b>.</p>
+  <p class="muted small">Zato: pre nego što bilo ko nešto unosi ručno, pogleda se
+  panel.</p>
+{% endcall %}
+
 {% call korak('Šifre artikala') %}
   <p>Ekran <b>Šifre</b> pokazuje stavke kojima fali naša šifra, sa slikom koju je
   poslao poslovođa. Kad povežeš šifru, veza važi za sve buduće fakture istog
@@ -175,6 +220,28 @@
   <p>Na stranici dokumenta, pored broja, stoji <span class="tag">Štampaj</span>.
   Otvara <b>zvanični PDF sa SEF-a</b> — ono što je dobavljač poslao, ne naš
   ekran.</p>
+{% endcall %}
+
+{% call korak('Ako nešto zaškripi') %}
+  <table class="small">
+    <tr><th style="width:44%">Šta se desilo</th><th>Šta radiš</th></tr>
+    {% if uloga == 'operater' %}
+    <tr><td>Dokument nije razvrstan</td><td>Dodeli jedinicu ručno; ako se ponavlja
+      kod istog dobavljača, javi da se napravi pravilo</td></tr>
+    <tr><td>Kalkulacija „čeka šifru“</td><td>Ekran <b>Šifre</b> — poveži šifru ili
+      označi da nije artikal</td></tr>
+    <tr><td>Kalkulacija „zaustavljena“</td><td>Piše zašto ispod oznake; najčešće
+      dobavljač nije otvoren u šifarniku</td></tr>
+    {% else %}
+    <tr><td>Faktura nije stigla u panel</td><td>Javi kancelariji — možda još nije
+      ni na SEF-u</td></tr>
+    <tr><td>Faktura je za drugi objekat</td><td>Javi kancelariji, oni je prebacuju</td></tr>
+    <tr><td>Roba je oštećena</td><td>Ne potvrđuj prijem, javi kancelariji</td></tr>
+    <tr><td>Nema dugmeta na fakturi</td><td>Stigla je pre prelaska — to je namerno,
+      ide u ERP</td></tr>
+    {% endif %}
+    <tr><td>Ne mogu da se prijavim</td><td>Javi kancelariji — nalog se dodaje u panelu</td></tr>
+  </table>
 {% endcall %}
 
 {% call korak('Šta aplikacija nikad ne radi sama') %}
