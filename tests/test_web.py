@@ -971,3 +971,73 @@ def test_odobrenje_drugog_dobavljaca_ne_zatvara_tudji_manjak(podaci, db):
     assert zatvori_manjak_odobrenjem(drugi_id) is None
     with db.session_scope() as session:
         assert session.get(PrijavaManjka, podaci["doc"]).otvoren
+
+
+# --------------------------------------------------------------------------- #
+# pomoć na ekranu
+# --------------------------------------------------------------------------- #
+
+
+def test_pomoc_operateru_pokriva_njegov_posao(client, db):
+    prijavi(client, OPERATER)
+    odgovor = client.get("/pomoc")
+    assert odgovor.status_code == 200
+    tekst = odgovor.text
+    assert "kancelarija" in tekst
+    assert "Prijavljen manjak" in tekst
+    assert "Dovoze sledećom turom" in tekst
+    # ne sme da mu se prikaze tudji deo
+    assert "Za slikanje" not in tekst
+
+
+def test_pomoc_poslovodji_objasnjava_manjak(client, podaci, db):
+    prijavi(client, POSLOVODJA)
+    odgovor = client.get("/pomoc")
+    assert odgovor.status_code == 200
+    tekst = odgovor.text
+    assert "Kad roba stigne" in tekst
+    assert "Stigao ostatak" in tekst
+    assert "Za slikanje" in tekst
+    # operaterski deo mu ne treba
+    assert "Prihvatanje i odbijanje na SEF-u" not in tekst
+
+
+def test_pomoc_stoji_na_svakom_ekranu(client, podaci, db):
+    """Veza ka pomoći je u zaglavlju, pa je ima gde god čovek bio."""
+    prijavi(client, OPERATER)
+    for putanja in ("/red", "/pj", "/pravila"):
+        assert 'href="/pomoc"' in client.get(putanja).text
+
+
+def test_pomoc_tazi_prijavu(client, db):
+    import sefsync.web.app as app_module
+
+    app_module.app.dependency_overrides.clear()
+    assert client.get("/pomoc", follow_redirects=False).status_code in (302, 303, 401, 403)
+
+
+def test_pomoc_ilijani_i_bogdanu_daje_njihov_deo(client, db):
+    """010 i uprava imaju svoje ekrane, pa i svoju pomoć."""
+    from sefsync.models import BusinessUnit as BU, UnitKind as UK
+
+    with db.session_scope() as session:
+        session.add_all([
+            BU(code="MAG010", name="POVRAĆAJ ROBE", kind=UK.WAREHOUSE, erp_code="010"),
+            BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ),
+        ])
+
+    # covek se vezuje za jedinicu sifrom objekta iz sifarnika osoblja
+    ilijana = User("ilijana", "Ilijana", Role.POSLOVODJA, "010", "POSLOVODJA")
+    prijavi(client, ilijana)
+    tekst = client.get("/pomoc").text
+    assert "povrati i odobrenja" in tekst
+    assert "Popusti za prenos" in tekst
+    assert "Kad roba stigne" not in tekst          # to je posao objekta
+
+    # 088 u sifarniku osoblja znaci "radi ulazne racune" i vodi na upravu
+    bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+    prijavi(client, bogdan)
+    tekst = client.get("/pomoc").text
+    assert "ulazni računi" in tekst
+    assert "Upiši kalkulaciju" in tekst
+    assert "Popusti za prenos" not in tekst        # to je Ilijanin posao

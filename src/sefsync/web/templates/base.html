@@ -122,6 +122,8 @@
       <a href="/moja-jedinica">Moja jedinica</a>
       {% if popusta %}<a href="/popusti">Popusti ({{ popusta }})</a>{% endif %}
     {% endif %}
+    {# Pomoc stoji na svakom ekranu - covek ne drzi odstampano uputstvo uz sebe. #}
+    {% if user %}<a href="/pomoc">Pomoć</a>{% endif %}
   </nav>
   <span class="spacer"></span>
   {% if user %}

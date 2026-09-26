@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Pomoć{% endblock %}
+
+{#
+  Pomoc na ekranu, po ulogama. Ovo je *aktuelno* uputstvo - ono sto covek vidi
+  kad nije siguran sta dalje. Mora da se menja zajedno sa svakom izmenom u
+  nacinu rada, inace postane gore nego da ga nema (Bane, 26.09.).
+
+  Iste stvari stoje i u odstampanim uputstvima u docs/uputstva/ - kad se menja
+  ovde, menja se i tamo.
+#}
+
+{% macro korak(naslov) %}
+<div class="card" style="margin-bottom:10px">
+  <h3 style="margin:0 0 6px">{{ naslov }}</h3>
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+{% block content %}
+<h1>Pomoć — {{ naslov_uloge }}</h1>
+<p class="muted small" style="margin-top:-6px">
+  Ovde piše šta se od tebe očekuje i šta aplikacija radi sama. Ako nešto nije
+  jasno, javi — uputstvo se popravlja, ne ti.
+</p>
+
+{# ---------------------------------------------------------------- objekat #}
+{% if uloga == 'poslovodja' %}
+
+{% call korak('Kad roba stigne') %}
+  <p>Prebroj je, pa klikni <span class="tag">Roba je primljena</span>. Tog časa
+  aplikacija upiše kalkulaciju u ERP — ti je posle samo <b>zaknjižiš</b>.</p>
+  <p class="muted small">Klikni tek kad je roba stvarno tu. Ako je oštećena, ne
+  klikaj — javi kancelariji.</p>
+{% endcall %}
+
+{% call korak('Ako je stiglo manje nego što faktura kaže') %}
+  <p>Ne klikaj „Roba je primljena“, nego <span class="tag">Stiglo manje nego što
+  piše</span> ispod njega. Upiši koliko je stvarno stiglo — diraš samo red koji
+  ne valja — pa izaberi šta ti je vozač rekao:</p>
+  <table class="small">
+    <tr><th style="width:40%">Izbor</th><th>Šta se dešava</th></tr>
+    <tr><td><b>Dovoze sledećom turom</b></td>
+        <td>Kalkulacija ide u ERP <b>za pun iznos fakture</b>. Faktura dobija
+        <b style="color:#b91c1c">crvenu liniju</b> i stoji u kartici
+        „Čeka ostatak“. <b>Ne knjiži je dok ostatak ne dođe.</b></td></tr>
+    <tr><td><b>Šalju ispravljenu fakturu</b></td>
+        <td>Kalkulacija se ne upisuje. Čeka se storno, pa nova faktura.</td></tr>
+    <tr><td><b>Ne znam</b></td>
+        <td>Kalkulacija se ne upisuje. Kancelarija odlučuje da li se faktura
+        odbija na SEF-u.</td></tr>
+  </table>
+{% endcall %}
+
+{% call korak('Kad ostatak stigne') %}
+  <p>Klikni <span class="tag">Stigao ostatak</span> — crvena linija pada i tek
+  tada knjižiš kalkulaciju u ERP-u.</p>
+  <p class="muted small">Ako umesto robe stigne knjižno odobrenje, linija pada
+  sama — dobavljač je priznao da neće doneti ostatak.</p>
+{% endcall %}
+
+{% call korak('Artikal koji nemamo u šifarniku') %}
+  <p>Vidiš ga u kartici <b>Za slikanje</b>. Slikaj deklaraciju ili ambalažu tako
+  da se vide naziv, model i barkod. Šifru otvara Dule — ti ne prepisuješ ništa i
+  ne šalješ u Viber.</p>
+  <p class="muted small">Kad jedan objekat slika artikal, vide ga svi ostali.</p>
+{% endcall %}
+
+{# ------------------------------------------------------------- 010 povrati #}
+{% elif uloga == 'povracaj' %}
+
+{% call korak('Šta stiže na ovaj ekran') %}
+  <p>Knjižna odobrenja za robu koja se vraća dobavljaču, magacin 010. Roba je
+  već otišla ili odlazi — ovde se to samo uknjiži.</p>
+{% endcall %}
+
+{% call korak('Kad odobrenje ne navodi artikal') %}
+  <p>Aplikacija sama traži uređaj — preko broja fakture iz napomene ili preko
+  saglasnosti na stavci — i nudi ti <b>predlog</b>. Predlog je predlog: proveri
+  pa potvrdi.</p>
+  <p class="muted small">Ako predloga nema, poveži šifru ručno. Veza se pamti za
+  sve buduće fakture istog dobavljača.</p>
+{% endcall %}
+
+{% call korak('Popusti za prenos') %}
+  <p>Kad dobavljač odobri samo <b>deo</b> vrednosti — jer je uređaj stigao
+  oštećen — roba ostaje kod nas i prodaje se jeftinije. Takvo odobrenje ide na
+  088, ali <b>ti ga vidiš</b> u kartici „Popusti“, jer taj popust prenosiš
+  objektu koji uređaj prodaje. Kad preneseš, zabeleži kome.</p>
+{% endcall %}
+
+{% call korak('„Možda je već u ERP-u“') %}
+  <p>Žuti okvir znači da aplikacija sumnja da je ta faktura već uneta ručno, ali
+  <b>nije sigurna</b> — broj se ne poklapa u potpunosti. Uz predlog piše koliko
+  su brojevi slični. Proveri u ERP-u pa klikni <b>Jeste, skloni</b> ili
+  <b>Nije to</b>. Ništa se ne sklanja bez tvoje odluke.</p>
+{% endcall %}
+
+{# ------------------------------------------------------------- 088 usluge #}
+{% elif uloga == 'usluge' %}
+
+{% call korak('Šta stiže na ovaj ekran') %}
+  <p>Ulazni računi bez robe — struja, zakup, komunalije, usluge. Niko ih ne prima
+  u magacinu, pa kalkulaciju upisuješ ti, dugmetom
+  <span class="tag">Upiši kalkulaciju</span>.</p>
+{% endcall %}
+
+{% call korak('„u ERP-u“ — kad fakture nestanu sa spiska') %}
+  <p>Ako je kalkulacija već napravljena ručno, aplikacija to prepozna i faktura
+  dobija zelenu oznaku. Prepoznaje je i kad je broj računa u ERP-u
+  <b>odsečen na 15 znakova</b> (forma ne pušta duže), i kad je kalkulacija
+  zavedena pod <b>drugom šifrom istog dobavljača</b> — dešava se, isti dobavljač
+  ume da stoji dvaput u komitentima.</p>
+{% endcall %}
+
+{% call korak('„Možda je već u ERP-u“ — žuti okvir') %}
+  <p>Kad se broj računa ne poklapa, a dobavljač, datum i iznos jesu, dobijaš
+  predlog. Uz njega piše koliko su brojevi slični — „isti broj, kraće zapisan“,
+  „razlika u jednom znaku“, „broj se ne poklapa“. Odlučuješ ti:</p>
+  <ul class="small">
+    <li><b>Jeste, skloni</b> — faktura se označava kao već uneta.</li>
+    <li><b>Nije to</b> — ostaje na spisku i predlog se više ne vraća.</li>
+  </ul>
+  <p class="muted small">Aplikacija nikad ne sklanja fakturu na osnovu predloga
+  sama — lažan pogodak bi je tiho izbrisao i niko je ne bi zaknjižio.</p>
+{% endcall %}
+
+{# --------------------------------------------------------------- operater #}
+{% else %}
+
+{% call korak('Red dokumenata') %}
+  <ul class="small">
+    <li><b>Traži potez</b> — nije prosleđeno ili nije odlučeno na SEF-u.</li>
+    <li><b>Nerazvrstano</b> — aplikacija nije znala čije je; dodeli ručno, pa
+      označi da se zapamti kao pravilo ako se ponavlja.</li>
+    <li><b>Čeka potvrdu prijema</b> — prosleđeno objektu, roba još nije potvrđena.</li>
+    <li><b>Prijavljen manjak</b> — poslovođa javio da je stiglo manje.</li>
+  </ul>
+{% endcall %}
+
+{% call korak('Prihvatanje i odbijanje na SEF-u') %}
+  <p>To je pravni čin i radi se svesno, dugmetom na dokumentu.
+  <b>Aplikacija to ne radi sama, nikad.</b></p>
+{% endcall %}
+
+{% call korak('Kad poslovođa prijavi manjak') %}
+  <table class="small">
+    <tr><th style="width:38%">Poslovođa je izabrao</th><th>Šta ti radiš</th></tr>
+    <tr><td>Dovoze sledećom turom</td>
+        <td>Ništa. Kalkulacija je upisana za pun iznos, poslovođa je ne knjiži
+        dok ostatak ne dođe.</td></tr>
+    <tr><td>Šalju ispravljenu fakturu</td>
+        <td>Sačekaj storno sa SEF-a. Kalkulacija se ne upisuje, ispravljena
+        faktura dolazi kao nova.</td></tr>
+    <tr><td>Ne znam</td>
+        <td><b>Ti odlučuješ</b> — odbij na SEF-u uz obrazloženje, ili prihvati i
+        čekaj. Kalkulacija se ne upisuje dok ne rešiš.</td></tr>
+  </table>
+  <p class="muted small">Fakturu koja je stornirana ili odbijena na SEF-u
+  aplikacija više ne pušta u ERP, ni ako neko klikne.</p>
+{% endcall %}
+
+{% call korak('Šifre artikala') %}
+  <p>Ekran <b>Šifre</b> pokazuje stavke kojima fali naša šifra, sa slikom koju je
+  poslao poslovođa. Kad povežeš šifru, veza važi za sve buduće fakture istog
+  dobavljača.</p>
+  <p class="muted small">Jedan artikal — jedan barkod. Ako dobavljač promeni
+  barkod, roba se prelepljuje; ne otvara se druga šifra.</p>
+{% endcall %}
+
+{% endif %}
+
+{# ------------------------------------------------------- važi za sve uloge #}
+{% call korak('Štampa fakture') %}
+  <p>Na stranici dokumenta, pored broja, stoji <span class="tag">Štampaj</span>.
+  Otvara <b>zvanični PDF sa SEF-a</b> — ono što je dobavljač poslao, ne naš
+  ekran.</p>
+{% endcall %}
+
+{% call korak('Šta aplikacija nikad ne radi sama') %}
+  <ul class="small">
+    <li>ne prihvata i ne odbija fakturu na SEF-u,</li>
+    <li>ne knjiži kalkulaciju — upiše je, knjiži čovek u ERP-u,</li>
+    <li>ne upisuje kalkulaciju dvaput za istu fakturu,</li>
+    <li>ne dira šifarnik artikala ni komitenata u ERP-u,</li>
+    <li>ne sklanja fakturu sa ekrana na osnovu nesigurnog predloga.</li>
+  </ul>
+{% endcall %}
+
+{% if datum_prelaska %}
+<div class="card small" style="border-left:3px solid #b45309;background:#fffbeb">
+  Fakture koje su stigle <b>pre {{ datum_prelaska.strftime('%d.%m.%Y') }}</b> idu
+  po starom — kalkulaciju za njih pravi čovek u ERP-u, i aplikacija ih namerno
+  ne dira.
+</div>
+{% endif %}
+
+{% endblock %}

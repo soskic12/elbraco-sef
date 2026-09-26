@@ -1903,3 +1903,16 @@ ekranu“.
 
 Oba uputstva su ispravljena; poslovođama je do sada pisalo „ako nešto fali, ne
 klikaj, javi operateru“, što bi od prvog dana protivrečilo aplikaciji.
+
+### Pomoć na ekranu (26.09.)
+
+`/pomoc`, veza stoji u zaglavlju svakog ekrana. Sadržaj po ulozi — kancelarija,
+objekat, povrati (010), ulazni računi (088) — plus deo koji važi za sve
+(štampa, „šta aplikacija nikad ne radi sama“, granica prelaska).
+
+**Pravilo koje je Bane postavio 26.09.:** uz svaku izmenu u načinu rada ide i
+ažuriranje pomoći, u istom poslu. Tri mesta moraju da se slažu:
+`templates/pomoc.html`, `docs/uputstva/poslovodje.html` (dve strane) i
+`docs/uputstva/operateri.html`. Zastarela pomoć je gora nego nikakva, jer joj
+čovek veruje — što se već desilo sa uputstvom poslovođama, koje je dan pred
+prelazak govorilo suprotno od aplikacije.

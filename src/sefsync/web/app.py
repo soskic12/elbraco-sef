@@ -959,6 +959,44 @@ def popust_preneto(
     return _back("/popusti", f"Zabeleženo — popust prenet u objekat {objekat.strip()}.")
 
 
+@app.get("/pomoc", response_class=HTMLResponse)
+def pomoc(request: Request, user: Korisnik) -> HTMLResponse:
+    """Pomoć na ekranu, po ulozi — aktuelno uputstvo za onoga ko gleda.
+
+    Postoji zato što niko ne drži odštampano uputstvo uz sebe. Ista podela kao
+    kod ekrana: uprava dobija usluge, magacin povrata svoje, objekat svoje.
+
+    Sadržaj mora da se menja zajedno sa svakom izmenom u načinu rada — zastarela
+    pomoć je gora nego nikakva (Bane, 26.09.).
+    """
+    naslovi = {
+        "operater": "kancelarija",
+        "poslovodja": "objekat",
+        "povracaj": "povrati i odobrenja",
+        "usluge": "ulazni računi",
+    }
+    with session_scope() as session:
+        if user.is_operator:
+            uloga = "operater"
+        else:
+            unit = _unit_for(session, user)
+            vrsta = _vrsta_ekrana(unit) if unit is not None else None
+            uloga = {EKRAN_POVRACAJ: "povracaj", EKRAN_USLUGE: "usluge"}.get(
+                vrsta, "poslovodja"
+            )
+        return templates.TemplateResponse(
+            request,
+            "pomoc.html",
+            {
+                "user": user,
+                "uloga": uloga,
+                "naslov_uloge": naslovi[uloga],
+                "datum_prelaska": get_settings().novi_tok_od,
+                "popusta": _broj_popusta(session) if uloga != "poslovodja" else 0,
+            },
+        )
+
+
 @app.get("/moja-jedinica", response_class=HTMLResponse)
 def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
     with session_scope() as session:
