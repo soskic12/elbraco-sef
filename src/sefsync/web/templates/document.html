@@ -9,6 +9,9 @@
 <h1>{{ doc.document_type | tip }} {{ doc.document_number or '' }}
   <span class="muted small">· SEF #{{ doc.sef_invoice_id }}</span>
   {% if doc.archived %}<span class="tag">arhivirano</span>{% endif %}
+  {# Stampa se SEF-ov zvanicni prikaz, ne nas ekran. #}
+  <a class="small" href="/dokument/{{ doc.id }}/pdf" target="_blank"
+     style="font-weight:400;margin-left:8px">Štampaj</a>
 </h1>
 
 {% if doc.error_message %}<div class="msg err">{{ doc.error_message }}</div>{% endif %}

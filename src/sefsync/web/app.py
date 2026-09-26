@@ -34,7 +34,13 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 
@@ -549,6 +555,41 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "user": user,
             },
         )
+
+
+@app.get("/dokument/{doc_id}/pdf")
+def dokument_pdf(doc_id: int, user: Korisnik) -> Response:
+    """Zvanicni PDF prikaz fakture sa SEF-a, za stampu.
+
+    Bogdanu i drugima ponekad treba faktura na papiru. Uzima se SEF-ov prosireni
+    prikaz (`purchase-invoice/pdf`), a ne nas ekran - na papiru treba da stoji
+    ono sto je dobavljac poslao, ne nasa obrada.
+    """
+    from ..sef.client import SefClient
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+        sef_id = doc.sef_invoice_id
+        ime = (doc.document_number or str(doc_id)).replace("/", "-")
+
+    try:
+        with SefClient() as klijent:
+            sadrzaj = klijent.purchase_pdf(sef_id)
+    except Exception as exc:  # noqa: BLE001 - SEF ume da bude nedostupan
+        log.warning("PDF za dokument %s nije preuzet: %s", doc_id, exc)
+        return _back(f"/dokument/{doc_id}", f"SEF nije dao PDF: {exc}", False)
+
+    if not sadrzaj:
+        return _back(f"/dokument/{doc_id}", "SEF je vratio prazan PDF.", False)
+    return Response(
+        content=sadrzaj,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{quote(ime)}.pdf"'},
+    )
 
 
 @app.post("/dokument/{doc_id}/sumnja")

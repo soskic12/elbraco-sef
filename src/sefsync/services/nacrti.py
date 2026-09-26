@@ -29,6 +29,7 @@ from ..models import (
     ItemMapping,  # noqa: F401 - koristi se u razlozi_cekanja
     NacrtKalkulacije,
     ProcessState,
+    SefStatus,
     StanjeNacrta,
     utcnow,
 )
@@ -417,6 +418,18 @@ def upisi_u_erp(
         red = session.get(NacrtKalkulacije, document_id)
         stanje = red.stanje if red else None
         vec_upisan = red.erp_broj if red else None
+        doc = session.get(Document, document_id)
+        status = doc.sef_status if doc is not None else None
+
+    # Faktura koja je povucena sa SEF-a nema sta da trazi u ERP-u. Do sada je
+    # ovo bilo bez posledica jer app nije upisivala - mereno 26.09., nijedan od
+    # 32 stornirana dokumenta nema potvrdjen prijem. Od 28.09. app upisuje, pa
+    # bi storno koji stigne posle potvrde prijema ostavio kalkulaciju za
+    # ponistenu fakturu.
+    if status is SefStatus.STORNO:
+        return False, "Faktura je stornirana na SEF-u — kalkulacija se ne upisuje."
+    if status is SefStatus.REJECTED:
+        return False, "Faktura je odbijena na SEF-u — kalkulacija se ne upisuje."
 
     if stanje is StanjeNacrta.UPISAN:
         return False, f"Kalkulacija je već upisana ({vec_upisan})."

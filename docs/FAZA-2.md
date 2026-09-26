@@ -1868,3 +1868,14 @@ tačno.** Upis dira tačno tri tabele — zaglavlje, stavke i `PDVEVIDX` — a
 knjiženjem, koje radi čovek. Puna kalkulacija upisana odmah zato ne košta ništa
 na lageru: poslovođa je prosto ne knjiži dok ostatak ne stigne, a oznaka
 „čeka se ostatak“ mu govori kad sme.
+
+### Urađeno pred prelazak
+
+**Brana za povučene fakture.** `upisi_u_erp` odbija dokument u stanju `Storno`
+ili `Rejected`. Do sada je ovo bilo bez posledica — nijedan od 32 stornirana
+dokumenta nema potvrđen prijem — ali od 28.09. app upisuje, pa bi storno koji
+stigne posle potvrde prijema ostavio kalkulaciju za poništenu fakturu.
+
+**Dugme „Štampaj“** na stranici dokumenta. Vraća SEF-ov zvanični prošireni
+prikaz (`purchase-invoice/pdf`), ne naš ekran — na papiru treba da stoji ono
+što je dobavljač poslao. Vidi ga samo onaj ko sme na taj dokument.

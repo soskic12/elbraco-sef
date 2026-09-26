@@ -756,3 +756,56 @@ def test_tudj_dokument_ne_prima_odluku_o_sumnji(client, podaci, db):
     odgovor = client.post(f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "jeste"},
                           follow_redirects=False)
     assert odgovor.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# storno i odbijanje zaustavljaju upis; štampa vraća SEF-ov PDF
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "status, deo_poruke",
+    [(SefStatus.STORNO, "stornirana"), (SefStatus.REJECTED, "odbijena")],
+)
+def test_povucena_faktura_ne_ide_u_erp(podaci, db, status, deo_poruke):
+    """Faktura povučena sa SEF-a nema šta da traži u ERP-u."""
+    from sefsync.models import Document as D
+    from sefsync.services.nacrti import upisi_u_erp
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).sef_status = status
+
+    upisana, poruka = upisi_u_erp(podaci["doc"], korisnik="nina")
+    assert not upisana
+    assert deo_poruke in poruka
+
+
+def test_stampa_vraca_sefov_pdf(client, podaci, db, monkeypatch):
+    """Na papiru stoji ono što je dobavljač poslao, ne naš prikaz."""
+    import sefsync.sef.client as sef_client
+
+    class LazniKlijent:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def purchase_pdf(self, invoice_id):
+            assert invoice_id == 500100
+            return b"%PDF-1.4 lazni"
+
+    monkeypatch.setattr(sef_client, "SefClient", LazniKlijent)
+    prijavi(client, OPERATER)
+    odgovor = client.get(f"/dokument/{podaci['doc']}/pdf")
+    assert odgovor.status_code == 200
+    assert odgovor.headers["content-type"] == "application/pdf"
+    assert odgovor.content.startswith(b"%PDF")
+
+
+def test_tudj_dokument_se_ne_stampa(client, podaci, db):
+    prijavi(client, TUDJ)
+    assert client.get(f"/dokument/{podaci['doc']}/pdf").status_code == 403
