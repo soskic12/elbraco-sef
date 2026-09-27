@@ -165,3 +165,18 @@ zastarelo.
 | Kalkulacija upisana greškom | `SEF zaboravi-upis <id> --stvarno`, pa obriši red u ERP-u. Ništa se nije pomerilo — upis ne dira zalihu |
 | Hoćeš sve da zaustaviš | `ERP_ALLOW_PRODUCTION_WRITE=false` i restart. Panel radi dalje, samo prestaje da piše u pravu bazu |
 | Neko je primio robu a fali komad | To više nije greška — „Stiglo manje nego što piše“, opisano u Pomoći |
+
+---
+
+## Posle prelaska, kad nema pritiska
+
+**Razdvojiti nalog ka ERP-u.** Panel se prijavljuje kao `elbraco_dev_ro` — isti
+nalog koji koristi i razvojna mašina, i po imenu „dev read-only“. Pred prelazak
+mu je dat INSERT na pet tabela u `ELBS_2026` (Bane, 27.09., svesna odluka: pet
+naredbi umesto diranja `web.config`-a uoči prelaska).
+
+Posle prelaska napraviti zaseban nalog samo za panel, npr. `sefsync_erp`, dati
+mu INSERT isključivo na `ULKALKUL`, `PRULKALK`, `MKALKUL`, `MPRULK`, `PDVEVIDX`,
+upisati ga u `web.config` na serveru i **oduzeti INSERT nalogu `elbraco_dev_ro`**.
+Time razvojno okruženje ostaje bez ikakvog prava upisa u produkciju, pa pravilo
+„u produkciju se piše samo dok je Bane tu“ ne zavisi samo od prekidača u `.env`.
