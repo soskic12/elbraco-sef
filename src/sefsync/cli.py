@@ -1020,10 +1020,11 @@ def cmd_provera_prelaska() -> None:
                     "  and p.name = USER_NAME()"
                 ))
             }
-            baza = conn.execute(_text("select DB_NAME()")).scalar()
+            baza, nalog = conn.execute(_text("select DB_NAME(), USER_NAME()")).first()
         fali = [t for t in TABELE if t not in ima]
-        red(not fali, f"Dozvole za upis u {baza}: " + ("sve na broju" if not fali
-            else "fali INSERT na " + ", ".join(fali)))
+        red(not fali, f"Dozvole za upis u {baza} (nalog {nalog}): "
+            + ("sve na broju" if not fali else "fali INSERT na " + ", ".join(fali)
+               + f" — GRANT INSERT ON dbo.<tabela> TO [{nalog}]"))
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku
         red(False, f"Dozvole nisu proverene: {str(exc)[:90]}")
 
@@ -1070,6 +1071,46 @@ def cmd_provera_prelaska() -> None:
             f"čeka šifru {stanja.get('ceka_sifru', 0)}, "
             f"upisanih {stanja.get('upisan', 0)}, problema {stanja.get('problem', 0)}",
         )
+
+        # --- sema panela: nove kolone i tabele posle dopune ---
+        from sqlalchemy import inspect as _inspect
+
+        from .db import get_engine as _get_engine
+        from .models import PrijavaManjka
+
+        inspektor = _inspect(_get_engine())
+        fali_sema = []
+        if not inspektor.has_table("prijava_manjka"):
+            fali_sema.append("tabela prijava_manjka")
+        kolone = {c["name"] for c in inspektor.get_columns("nacrt_kalkulacije")}
+        for kolona in ("sumnja", "sumnja_odbio", "sumnja_odbijeno_u", "erp_napomena"):
+            if kolona not in kolone:
+                fali_sema.append(f"nacrt_kalkulacije.{kolona}")
+        red(
+            not fali_sema,
+            "Šema panela je dopunjena" if not fali_sema
+            else "Šema nije dopunjena, fali: " + ", ".join(fali_sema)
+            + " — restartuj panel, dopuna ide pri pokretanju",
+        )
+
+        # --- predlozi i manjkovi ---
+        if not fali_sema:
+            ceka_odluku = session.scalar(
+                _select(_func.count()).select_from(NacrtKalkulacije).where(
+                    NacrtKalkulacije.sumnja.is_not(None),
+                    NacrtKalkulacije.sumnja_odbio.is_(None),
+                )
+            ) or 0
+            red(
+                True,
+                f"Predloga „možda je već u ERP-u“: {ceka_odluku} čeka odluku"
+                + (" — prođi ih komandom `sumnje`" if ceka_odluku else ""),
+            )
+            otvorenih = session.scalar(
+                _select(_func.count()).select_from(PrijavaManjka)
+                .where(PrijavaManjka.zatvoreno_u.is_(None))
+            ) or 0
+            red(True, f"Otvorenih prijava manjka: {otvorenih}")
 
     typer.echo("")
     for u_redu, tekst in nalazi:
