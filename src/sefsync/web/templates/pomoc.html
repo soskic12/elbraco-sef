@@ -254,11 +254,19 @@
   </ul>
 {% endcall %}
 
+{% call korak('Arhiva') %}
+  <p>Fakture koje su završene kancelarija <b>arhivira</b> i one nestaju sa ovog
+  spiska. Ništa se ne briše — nađeš ih preko veze <b>Arhiva</b> na svom ekranu.</p>
+{% endcall %}
+
 {% if datum_prelaska %}
 <div class="card small" style="border-left:3px solid #b45309;background:#fffbeb">
-  Fakture koje su stigle <b>pre {{ datum_prelaska.strftime('%d.%m.%Y') }}</b> idu
-  po starom — kalkulaciju za njih pravi čovek u ERP-u, i aplikacija ih namerno
-  ne dira.
+  <b>Fakture od pre {{ datum_prelaska.strftime('%d.%m.%Y') }}</b> idu po starom —
+  kalkulaciju za njih pravi čovek u ERP-u, i aplikacija ih namerno ne dira: nema
+  ni dugmeta ni brojača, samo žuta napomena u redu.
+  <br>
+  Sa ekrana nestaju tek kad ih kancelarija arhivira, a to se radi kad su
+  završene. Dok stoje — znači da ih još treba uraditi u ERP-u.
 </div>
 {% endif %}
 

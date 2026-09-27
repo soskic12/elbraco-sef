@@ -838,6 +838,84 @@ def cmd_zaboravi_upis(
     typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
 
 
+@app.command("arhiviraj-stare")
+def cmd_arhiviraj_stare(
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+    magacin: str = typer.Option("", "--magacin", help="Samo ta jedinica (npr. 088)."),
+) -> None:
+    """Sklanja sa ekrana stare fakture koje su vec zavrsene.
+
+    Posle prelaska ljudima na ekranu ostaju fakture od pre granice, sa
+    napomenom „uradi po starom“. Dok ih covek ne zavrsi, tu i treba da stoje.
+    Kad ih zavrsi, nema vise sta da se gleda, a niko nece rucno arhivirati
+    dvesta redova.
+
+    Arhivira se **samo** ono sto je i staro i vec gotovo: nacrt u stanju
+    `upisan` (kalkulacija je u ERP-u, nasa ili rucna) ili `ne_treba` (avans).
+    Sve ostalo se ne dira - dokument bez nacrta, „ceka sifru“, „problem“ i
+    „spreman“ ostaju, jer za njih posao jos postoji.
+
+    Arhiviranje nista ne brise: dokument se i dalje nadje pretragom i u kartici
+    „Arhiva“.
+    """
+    _boot()
+    from .models import BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta
+
+    GOTOVO = (StanjeNacrta.UPISAN, StanjeNacrta.NE_TREBA)
+    granica = get_settings().novi_tok_od
+    if granica is None:
+        typer.secho("NOVI_TOK_OD nije zadat — bez granice se ne zna šta je staro.", fg="red")
+        raise typer.Exit(1)
+
+    with session_scope() as session:
+        upit = (
+            select(Document, NacrtKalkulacije, BusinessUnit)
+            .join(NacrtKalkulacije, NacrtKalkulacije.document_id == Document.id)
+            .join(BusinessUnit, BusinessUnit.id == Document.business_unit_id, isouter=True)
+            .where(
+                Document.archived == False,  # noqa: E712
+                NacrtKalkulacije.stanje.in_(GOTOVO),
+            )
+        )
+        if magacin:
+            upit = upit.where(BusinessUnit.erp_code == magacin)
+
+        redovi = [
+            (doc, nacrt, jedinica)
+            for doc, nacrt, jedinica in session.execute(upit)
+            if doc.po_starom
+        ]
+        if not redovi:
+            typer.echo("Nema starih faktura koje su gotove — nema šta da se arhivira.")
+            raise typer.Exit(0)
+
+        po_jedinici: dict[str, int] = {}
+        for _, _, jedinica in redovi:
+            kljuc = f"{jedinica.erp_code or '?'} {jedinica.name[:26]}" if jedinica else "bez jedinice"
+            po_jedinici[kljuc] = po_jedinici.get(kljuc, 0) + 1
+
+        typer.echo(f"Stare a gotove fakture (granica {granica}): {len(redovi)}")
+        for kljuc in sorted(po_jedinici):
+            typer.echo(f"   {po_jedinici[kljuc]:>4}  {kljuc}")
+        typer.echo("")
+        for doc, nacrt, _ in redovi[:6]:
+            typer.echo(
+                f"   {(doc.document_number or '')[:24]:<24} "
+                f"{(doc.supplier_name or '')[:26]:<26} {nacrt.stanje.value}"
+            )
+
+        if not stvarno:
+            typer.echo("")
+            typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+            raise typer.Exit(0)
+
+        for doc, _, _ in redovi:
+            doc.archived = True
+
+    typer.echo("")
+    typer.secho(f"Arhivirano: {len(redovi)}. Ništa nije obrisano.", fg="green")
+
+
 @app.command("sumnje")
 def cmd_sumnje(
     magacin: str = typer.Option("", "--magacin", help="Samo taj magacin (npr. 088)."),

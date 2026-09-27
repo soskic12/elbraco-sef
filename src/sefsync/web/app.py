@@ -1034,7 +1034,7 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                     .options(selectinload(Document.business_unit))
                     .where(
                         Document.business_unit_id == unit.id,
-                        Document.archived == False,  # noqa: E712
+                        Document.archived == (prikaz == "arhiva"),
                     )
                     .order_by(Document.issue_date.desc(), Document.id.desc())
                     .limit(200)
@@ -1057,6 +1057,7 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                     "unit": unit,
                     "documents": redovi,
                     "nacrti": nacrti,
+                    "prikaz": prikaz,
                     "popusta": _broj_popusta(session) if vrsta == EKRAN_POVRACAJ else 0,
                     # Fakture od pre prelaska se ne broje: red na ekranu za njih
                     # ne nudi dugme nego pise "uradi po starom", pa bi brojac
@@ -1113,7 +1114,7 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
         query = select(Document).where(
             Document.business_unit_id == unit.id,
             Document.forwarded_at.isnot(None),
-            Document.archived == False,  # noqa: E712
+            Document.archived == (prikaz == "arhiva"),
         )
         if prikaz == "novo":
             query = _samo_novi(query.where(Document.received_at.is_(None)))

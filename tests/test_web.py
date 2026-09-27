@@ -1088,3 +1088,18 @@ def test_arhivirano_ne_stoji_poslovodji_na_ekranu(client, podaci, db):
         session.get(D, podaci["doc"]).archived = True
 
     assert broj not in client.get("/moja-jedinica?prikaz=sve").text
+
+
+def test_arhiva_je_dostupna_poslovodji(client, podaci, db):
+    """Ako sklanjamo fakture sa ekrana, mora da postoji gde da se pogledaju."""
+    from sefsync.models import Document as D, utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.archived = True
+        broj = doc.document_number
+
+    prijavi(client, POSLOVODJA)
+    assert broj not in client.get("/moja-jedinica?prikaz=sve").text
+    assert broj in client.get("/moja-jedinica?prikaz=arhiva").text

@@ -10,6 +10,14 @@
   <p class="small" style="margin-top:6px"><strong>{{ spremno }}</strong> spremno za upis</p>
 </div>
 
+<p class="small" style="margin:0 0 8px">
+  {% if prikaz == 'arhiva' %}
+    <b>Arhiva</b> — <a href="/moja-jedinica">nazad na tekuće</a>
+  {% else %}
+    <a href="/moja-jedinica?prikaz=arhiva">Pogledaj arhivu</a>
+  {% endif %}
+</p>
+
 <div class="card">
   <table class="small" style="width:100%">
     <tr>

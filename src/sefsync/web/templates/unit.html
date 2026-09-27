@@ -14,6 +14,7 @@
   <a href="/moja-jedinica?prikaz=sve" class="{% if prikaz == 'sve' %}izabran{% endif %}">Sve prosleđeno</a>
   <a href="/moja-jedinica?prikaz=slikanje" class="{% if prikaz == 'slikanje' %}izabran{% endif %}">
     Za slikanje <b>{{ koliko_za_slikanje }}</b></a>
+  <a href="/moja-jedinica?prikaz=arhiva" class="{% if prikaz == 'arhiva' %}izabran{% endif %}">Arhiva</a>
   {% if otvorenih_manjaka %}
   <a href="/moja-jedinica?prikaz=manjak" class="{% if prikaz == 'manjak' %}izabran{% endif %}">
     Čeka ostatak <b>{{ otvorenih_manjaka }}</b></a>

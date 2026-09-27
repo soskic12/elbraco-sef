@@ -15,6 +15,14 @@
   </p>
 </div>
 
+<p class="small" style="margin:0 0 8px">
+  {% if prikaz == 'arhiva' %}
+    <b>Arhiva</b> — <a href="/moja-jedinica">nazad na tekuće</a>
+  {% else %}
+    <a href="/moja-jedinica?prikaz=arhiva">Pogledaj arhivu</a>
+  {% endif %}
+</p>
+
 {% for doc in documents %}
 {% set n = nacrti.get(doc.id) %}
 <div class="card">
