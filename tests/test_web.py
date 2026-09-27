@@ -1041,3 +1041,50 @@ def test_pomoc_ilijani_i_bogdanu_daje_njihov_deo(client, db):
     assert "ulazni računi" in tekst
     assert "Upiši kalkulaciju" in tekst
     assert "Popusti za prenos" not in tekst        # to je Ilijanin posao
+
+
+# --------------------------------------------------------------------------- #
+# granica prelaska i arhiva ne smeju da obećavaju posao koji ne postoji
+# --------------------------------------------------------------------------- #
+
+
+def test_brojac_ne_racuna_fakture_od_pre_prelaska(client, podaci, db, monkeypatch):
+    """Bogdanu je pisalo „8 spremno za upis“, a svaki red je govorio „po starom“."""
+    import datetime as dt
+
+    from sefsync.models import Document as D, NacrtKalkulacije, StanjeNacrta, utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.created_at = dt.datetime(2026, 9, 20, 10, 0)     # pre prelaska
+        session.add(NacrtKalkulacije(document_id=doc.id, stanje=StanjeNacrta.SPREMAN))
+
+    monkeypatch.setattr(get_settings(), "novi_tok_od", dt.date(2026, 9, 28), raising=False)
+    prijavi(client, POSLOVODJA)
+    tekst = client.get("/moja-jedinica?prikaz=novo").text
+    assert "Za potvrdu <b>0</b>" in tekst
+
+    # bez granice se broji kao i ranije
+    monkeypatch.setattr(get_settings(), "novi_tok_od", None, raising=False)
+    assert "Za potvrdu <b>1</b>" in client.get("/moja-jedinica?prikaz=novo").text
+
+
+def test_arhivirano_ne_stoji_poslovodji_na_ekranu(client, podaci, db):
+    """Čišćenje koje rade Nina i Dušan mora da očisti i objekte."""
+    from sefsync.models import Document as D, utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.received_at = utcnow()
+        doc.received_by = "bane"          # probna potvrda iz testiranja
+        broj = doc.document_number
+
+    prijavi(client, POSLOVODJA)
+    assert broj in client.get("/moja-jedinica?prikaz=sve").text
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).archived = True
+
+    assert broj not in client.get("/moja-jedinica?prikaz=sve").text

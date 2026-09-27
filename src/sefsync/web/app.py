@@ -885,6 +885,22 @@ def _vrsta_ekrana(unit) -> str:
     return EKRAN_USLUGE
 
 
+def _samo_novi(query):
+    """Izbacuje dokumente od pre prelaska iz upita.
+
+    `Document.po_starom` je svojstvo u Pajtonu, pa se ne moze filtrirati u SQL-u
+    direktno - ali pocuvava se na istom `created_at`, pa se granica prevede u
+    uslov. Brojaci moraju da se slazu sa onim sto red stvarno nudi: pre ovoga je
+    Bogdanu pisalo "8 spremno za upis" a svaki red je govorio "uradi po starom".
+    """
+    from datetime import datetime, time as _time
+
+    granica = get_settings().novi_tok_od
+    if granica is None:
+        return query
+    return query.where(Document.created_at >= datetime.combine(granica, _time.min))
+
+
 def _sme_na_dokument(session, user, doc) -> bool:
     """Operater sme na svaki dokument, covek iz jedinice samo na svoje."""
     if user.is_operator:
@@ -1032,6 +1048,7 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                     )
                 )
             }
+            po_starom = {d.id for d in redovi if d.po_starom}
             return templates.TemplateResponse(
                 request,
                 "jedinica_povracaj.html" if vrsta == EKRAN_POVRACAJ else "jedinica_usluge.html",
@@ -1041,11 +1058,19 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                     "documents": redovi,
                     "nacrti": nacrti,
                     "popusta": _broj_popusta(session) if vrsta == EKRAN_POVRACAJ else 0,
+                    # Fakture od pre prelaska se ne broje: red na ekranu za njih
+                    # ne nudi dugme nego pise "uradi po starom", pa bi brojac
+                    # obecavao posao koji ne postoji (Bogdan, 27.09.: "kaze 8
+                    # spremno a svi su obelezeni po starom").
                     "ceka_sifru": sum(
-                        1 for n in nacrti.values() if n.stanje is StanjeNacrta.CEKA_SIFRU
+                        1 for n in nacrti.values()
+                        if n.stanje is StanjeNacrta.CEKA_SIFRU
+                        and n.document_id not in po_starom
                     ),
                     "spremno": sum(
-                        1 for n in nacrti.values() if n.stanje is StanjeNacrta.SPREMAN
+                        1 for n in nacrti.values()
+                        if n.stanje is StanjeNacrta.SPREMAN
+                        and n.document_id not in po_starom
                     ),
                 },
             )
@@ -1058,16 +1083,17 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
             from ..services.slike import za_artikal
 
             nacrti = session.scalars(
-                select(NacrtKalkulacije)
-                .options(selectinload(NacrtKalkulacije.document))
-                .join(Document, Document.id == NacrtKalkulacije.document_id)
-                .where(
-                    Document.business_unit_id == unit.id,
-                    Document.forwarded_at.isnot(None),
-                    Document.archived == False,  # noqa: E712
-                    NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
-                )
-                .order_by(NacrtKalkulacije.document_id.desc())
+                _samo_novi(
+                    select(NacrtKalkulacije)
+                    .options(selectinload(NacrtKalkulacije.document))
+                    .join(Document, Document.id == NacrtKalkulacije.document_id)
+                    .where(
+                        Document.business_unit_id == unit.id,
+                        Document.forwarded_at.isnot(None),
+                        Document.archived == False,  # noqa: E712
+                        NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+                    )
+                ).order_by(NacrtKalkulacije.document_id.desc())
             )
             for nacrt in nacrti:
                 for stavka in nacrt.nemapirane or []:
@@ -1081,11 +1107,16 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
                         {"nacrt": nacrt, "stavka": stavka, "slike": slike_te}
                     )
 
+        # Arhivirano ne stoji poslovodji na ekranu. Bez ovoga sutrasnje ciscenje
+        # koje rade Nina i Dusan ne bi ocistilo objekte, pa bi Dane i dalje gledao
+        # probne potvrde iz testiranja (nadjeno 27.09., vece pred prelazak).
         query = select(Document).where(
-            Document.business_unit_id == unit.id, Document.forwarded_at.isnot(None)
+            Document.business_unit_id == unit.id,
+            Document.forwarded_at.isnot(None),
+            Document.archived == False,  # noqa: E712
         )
         if prikaz == "novo":
-            query = query.where(Document.received_at.is_(None))
+            query = _samo_novi(query.where(Document.received_at.is_(None)))
         elif prikaz == "manjak":
             # Manjak koji jos stoji otvoren - poslovodja ceka ostatak i ne knjizi.
             query = query.join(
@@ -1115,23 +1146,28 @@ def my_unit(request: Request, user: Korisnik, prikaz: str = "novo"):
         )
         # koliko stavki ceka sliku - stoji na kartici i kad nije otvorena
         koliko_za_slikanje = session.scalar(
-            select(func.count())
-            .select_from(NacrtKalkulacije)
-            .join(Document, Document.id == NacrtKalkulacije.document_id)
-            .where(
-                Document.business_unit_id == unit.id,
-                Document.forwarded_at.isnot(None),
-                Document.archived == False,  # noqa: E712
-                NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+            _samo_novi(
+                select(func.count())
+                .select_from(NacrtKalkulacije)
+                .join(Document, Document.id == NacrtKalkulacije.document_id)
+                .where(
+                    Document.business_unit_id == unit.id,
+                    Document.forwarded_at.isnot(None),
+                    Document.archived == False,  # noqa: E712
+                    NacrtKalkulacije.stanje == StanjeNacrta.CEKA_SIFRU,
+                )
             )
         )
         ceka = session.scalar(
-            select(func.count())
-            .select_from(Document)
-            .where(
-                Document.business_unit_id == unit.id,
-                Document.forwarded_at.isnot(None),
-                Document.received_at.is_(None),
+            _samo_novi(
+                select(func.count())
+                .select_from(Document)
+                .where(
+                    Document.business_unit_id == unit.id,
+                    Document.forwarded_at.isnot(None),
+                    Document.received_at.is_(None),
+                    Document.archived == False,  # noqa: E712
+                )
             )
         )
         return templates.TemplateResponse(
