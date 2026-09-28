@@ -35,6 +35,7 @@
     <div style="text-align:right">
       <strong>{{ '%.2f'|format(doc.amount or 0) }}</strong>
       <span class="muted small">{{ doc.currency }}</span><br>
+      {% include "_sumnja.html" %}
       {% if doc.po_starom %}
         <div class="small" style="margin:4px 0;padding:4px 7px;border-left:3px solid #b45309;
      background:#fffbeb">Stiglo pre prelaska — kalkulaciju pravi poslovođa u ERP-u.</div>
@@ -42,7 +43,6 @@
         <span class="tag ok">u ERP-u {{ n.erp_broj or '' }}</span>
         <div class="muted small">{{ n.upisao }}{% if n.erp_napomena %} — {{ n.erp_napomena }}{% endif %}</div>
       {% elif n and n.stanje.value == 'spreman' %}
-        {% include "_sumnja.html" %}
         <form class="inline" method="post" action="/dokument/{{ doc.id }}/upisi-kalkulaciju"
               onsubmit="return confirm('Upisati kalkulaciju za {{ doc.document_number }}?')">
           <button type="submit">Upiši kalkulaciju</button>

@@ -1103,3 +1103,39 @@ def test_arhiva_je_dostupna_poslovodji(client, podaci, db):
     prijavi(client, POSLOVODJA)
     assert broj not in client.get("/moja-jedinica?prikaz=sve").text
     assert broj in client.get("/moja-jedinica?prikaz=arhiva").text
+
+
+def test_predlog_se_vidi_i_na_fakturi_od_pre_prelaska(client, db, monkeypatch):
+    """Baš te su najčešće već unete rukom — tu je predlog najpotrebniji."""
+    import datetime as dt
+
+    from sefsync.models import (
+        BusinessUnit as BU, Document as D, NacrtKalkulacije, SefStatus,
+        StanjeNacrta, UnitKind as UK,
+    )
+
+    with db.session_scope() as session:
+        uprava = BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ)
+        session.add(uprava)
+        session.flush()
+        doc = D(
+            sef_invoice_id=500900, document_number="OTP1882131",
+            supplier_name="OTP BANKA", supplier_vat="100000000",
+            amount=180.18, sef_status=SefStatus.NEW, business_unit_id=uprava.id,
+            created_at=dt.datetime(2026, 9, 20, 9, 0),      # pre prelaska
+        )
+        session.add(doc)
+        session.flush()
+        session.add(NacrtKalkulacije(
+            document_id=doc.id, stanje=StanjeNacrta.SPREMAN, magacin="088",
+            sumnja={"oznaka": "ULKALKUL 088/02874", "razlog": "razlika u jednom znaku"},
+        ))
+
+    monkeypatch.setattr(get_settings(), "novi_tok_od", dt.date(2026, 9, 28), raising=False)
+    bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+    prijavi(client, bogdan)
+    tekst = client.get("/moja-jedinica").text
+
+    assert "Stiglo pre prelaska" in tekst          # i dalje pise da ide po starom
+    assert "ULKALKUL 088/02874" in tekst           # ali predlog se vidi
+    assert "Jeste, skloni" in tekst
