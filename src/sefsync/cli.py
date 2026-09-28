@@ -859,6 +859,8 @@ def cmd_arhiviraj_stare(
     „Arhiva“.
     """
     _boot()
+    from sqlalchemy import select
+
     from .models import BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta
 
     GOTOVO = (StanjeNacrta.UPISAN, StanjeNacrta.NE_TREBA)
@@ -926,6 +928,8 @@ def cmd_sumnje(
     poklapa - obicno greska u kucanju. App ga nikad ne primenjuje sama; ovo je
     spisak da covek prodje kroz njih odjednom, umesto jednu po jednu na ekranu.
     """
+    from sqlalchemy import select
+
     from .models import Document, NacrtKalkulacije
 
     with session_scope() as session:
