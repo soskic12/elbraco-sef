@@ -200,15 +200,45 @@ def _unit_for(session, user: User) -> BusinessUnit | None:
     rade prodavnice.
     """
     prijava = (user.login or "").strip().lower()
+    code = (user.unit_code or "").strip()
     if prijava:
-        for jedinica in session.scalars(
-            select(BusinessUnit).where(BusinessUnit.logins.is_not(None))
-        ):
-            if prijava in jedinica.login_list():
-                return jedinica
-    if not user.unit_code:
+        # ORDER BY nije kozmetika: bez njega MS SQL sme da vrati redove drugim
+        # redosledom pri svakom pozivu, pa covek cija je prijava upisana uz vise
+        # jedinica dobije cas jednu cas drugu. Mereno 28.09. na produkciji:
+        # Bogdan je upisao kalkulaciju (088/03119), a preusmerenje na istu
+        # fakturu sekund kasnije vratilo 403 - ista provera, drugi ishod.
+        pogodjene = [
+            j
+            for j in session.scalars(
+                select(BusinessUnit)
+                .where(BusinessUnit.logins.is_not(None))
+                .order_by(BusinessUnit.id)
+            )
+            if prijava in j.login_list()
+        ]
+        if len(pogodjene) > 1:
+            # Isti redosled kao u putu bez dvosmislenosti: sifra 088 znaci
+            # "radi ulazne racune" i vodi na upravu, i to pre poklapanja po
+            # sifri magacina - inace bi Bogdan zavrsio na MAG088, magacinu bez
+            # ijednog dokumenta, zbog cega mu je ekran jednom vec bio prazan.
+            izbor = None
+            if code == MAGACIN_ULAZNI_RACUN:
+                izbor = next((j for j in pogodjene if j.kind is UnitKind.HQ), None)
+            if izbor is None:
+                izbor = next((j for j in pogodjene if (j.erp_code or "").strip() == code), None)
+            izbor = izbor or pogodjene[0]
+            log.warning(
+                "Prijava %s je upisana uz više jedinica (%s) — uzimam %s. "
+                "Očisti spisak prijava, inače ishod zavisi od redosleda.",
+                prijava,
+                ", ".join(j.code for j in pogodjene),
+                izbor.code,
+            )
+            return izbor
+        if pogodjene:
+            return pogodjene[0]
+    if not code:
         return None
-    code = user.unit_code.strip()
 
     # Sifra objekta 088 u sifarniku osoblja znaci "radi ulazne racune". Sam
     # magacin 088 nema nijedan dokument - usluzne fakture se razvrstavaju na

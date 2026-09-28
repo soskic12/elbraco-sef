@@ -1139,3 +1139,50 @@ def test_predlog_se_vidi_i_na_fakturi_od_pre_prelaska(client, db, monkeypatch):
     assert "Stiglo pre prelaska" in tekst          # i dalje pise da ide po starom
     assert "ULKALKUL 088/02874" in tekst           # ali predlog se vidi
     assert "Jeste, skloni" in tekst
+
+
+# --------------------------------------------------------------------------- #
+# ista prijava uz više jedinica — ishod ne sme da zavisi od redosleda
+# --------------------------------------------------------------------------- #
+
+
+def test_prijava_uz_vise_jedinica_daje_uvek_istu(client, db, caplog):
+    """Bogdan je upisao kalkulaciju, pa je ista provera sekund kasnije vratila 403.
+
+    Uzrok je bio upit bez ORDER BY: MS SQL sme da vrati redove drugim redosledom
+    pri svakom pozivu, pa je isti čovek dobijao čas jednu čas drugu jedinicu.
+    """
+    import sefsync.web.app as app_module
+    from sefsync.models import BusinessUnit as BU, UnitKind as UK
+
+    with db.session_scope() as session:
+        session.add_all([
+            BU(code="MAG088", name="BEZ EVIDENCIJE", kind=UK.WAREHOUSE,
+               erp_code="088", logins="bogdan"),
+            BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ, logins="bogdan"),
+        ])
+
+    bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+    with db.session_scope() as session:
+        izbori = {app_module._unit_for(session, bogdan).code for _ in range(5)}
+    # uvek isti izbor, i to uprava - MAG088 nema nijedan dokument
+    assert izbori == {"OFFICE"}, "izbor mora da bude isti pri svakom pozivu"
+
+    # dvosmislenost se prijavljuje, da se šifarnik očisti
+    assert any("upisana uz više jedinica" in z.message for z in caplog.records)
+
+
+def test_bez_dvosmislenosti_088_vodi_na_upravu(client, db):
+    """Šifra 088 u šifarniku osoblja znači „radi ulazne račune“ — to je uprava."""
+    import sefsync.web.app as app_module
+    from sefsync.models import BusinessUnit as BU, UnitKind as UK
+
+    with db.session_scope() as session:
+        session.add_all([
+            BU(code="MAG088", name="BEZ EVIDENCIJE", kind=UK.WAREHOUSE, erp_code="088"),
+            BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ),
+        ])
+
+    bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+    with db.session_scope() as session:
+        assert app_module._unit_for(session, bogdan).code == "OFFICE"

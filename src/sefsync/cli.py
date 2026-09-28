@@ -1154,6 +1154,21 @@ def cmd_provera_prelaska() -> None:
             f"upisanih {stanja.get('upisan', 0)}, problema {stanja.get('problem', 0)}",
         )
 
+        # --- ista prijava uz vise jedinica ---
+        dvosmislene: dict[str, list[str]] = {}
+        for j in session.scalars(
+            _select(BusinessUnit).where(BusinessUnit.logins.is_not(None))
+        ):
+            for prijava in j.login_list():
+                dvosmislene.setdefault(prijava, []).append(j.code)
+        sporne = {p: v for p, v in dvosmislene.items() if len(v) > 1}
+        red(
+            not sporne,
+            "Nijedna prijava nije upisana uz više jedinica" if not sporne
+            else "Prijava uz više jedinica: "
+            + "; ".join(f"{p} → {', '.join(v)}" for p, v in sorted(sporne.items())),
+        )
+
         # --- sema panela: nove kolone i tabele posle dopune ---
         from sqlalchemy import inspect as _inspect
 
