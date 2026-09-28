@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     # Dev: sqlite. Prod: mssql+pyodbc://user:pass@host/SefSync?driver=ODBC+Driver+18+for+SQL+Server
     db_url: str = f"sqlite:///{(PROJECT_ROOT / 'data' / 'sefsync.db').as_posix()}"
     db_echo: bool = False
+    # Bazen veza ka bazi panela. Podrazumevanih 5+10 je palo prvog radnog dana:
+    # "QueuePool limit of size 5 overflow 10 reached" pa 502 kroz IIS, cim je
+    # vise ljudi uslo odjednom (28.09.). Stranica jedinice drzi vezu dok se
+    # sablon iscrtava, pa je potrosnja po zahtevu duza nego sto izgleda.
+    db_pool_size: int = 20
+    db_max_overflow: int = 30
+    # Kratko cekanje je bolje od dugog: zahtev koji nema vezu neka padne odmah,
+    # umesto da 30 sekundi drzi radnika i sacuva 502 umesto greske.
+    db_pool_timeout: int = 10
+    db_pool_recycle: int = 1800
 
     # --- ERP baza (faza 2, read-only u fazi 1) ---
     erp_db_url: str | None = None

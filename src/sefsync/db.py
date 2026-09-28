@@ -28,6 +28,10 @@ def get_engine() -> Engine:
             kwargs["connect_args"] = {"check_same_thread": False}
         else:
             kwargs["pool_pre_ping"] = True
+            kwargs["pool_size"] = s.db_pool_size
+            kwargs["max_overflow"] = s.db_max_overflow
+            kwargs["pool_timeout"] = s.db_pool_timeout
+            kwargs["pool_recycle"] = s.db_pool_recycle
         _engine = create_engine(s.db_url, **kwargs)
     return _engine
 

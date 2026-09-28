@@ -1186,3 +1186,43 @@ def test_bez_dvosmislenosti_088_vodi_na_upravu(client, db):
     bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
     with db.session_scope() as session:
         assert app_module._unit_for(session, bogdan).code == "OFFICE"
+
+
+# --------------------------------------------------------------------------- #
+# usluge i povrati nemaju prosleđivanje — ne smeju da traže forwarded_at
+# --------------------------------------------------------------------------- #
+
+
+def test_bogdan_otvara_svoju_fakturu_bez_prosledjivanja(client, db):
+    """Stranica dokumenta je tražila forwarded_at, a 088 se nikad ne prosleđuje."""
+    from sefsync.models import (
+        BusinessUnit as BU, Document as D, SefStatus, UnitKind as UK,
+    )
+
+    with db.session_scope() as session:
+        uprava = BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ)
+        session.add(uprava)
+        session.flush()
+        doc = D(sef_invoice_id=501000, document_number="BK7626794/26",
+                supplier_name="BANCA INTESA", amount=117.0,
+                sef_status=SefStatus.NEW, business_unit_id=uprava.id)
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    bogdan = User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE")
+    prijavi(client, bogdan)
+    assert client.get(f"/dokument/{doc_id}").status_code == 200
+
+
+def test_objekat_i_dalje_ceka_prosledjivanje(client, podaci, db):
+    """U prodavnici dokument stiže tek kad ga operater prosledi."""
+    from sefsync.models import Document as D, utcnow
+
+    prijavi(client, POSLOVODJA)
+    assert client.get(f"/dokument/{podaci['doc']}").status_code == 403
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow()
+
+    assert client.get(f"/dokument/{podaci['doc']}").status_code == 200

@@ -534,10 +534,8 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
         doc = session.get(Document, doc_id)
         if doc is None:
             raise HTTPException(404, "Dokument ne postoji.")
-        if not user.is_operator:
-            moja = _unit_for(session, user)
-            if moja is None or doc.business_unit_id != moja.id or doc.forwarded_at is None:
-                raise HTTPException(403, "Ovaj dokument nije prosleđen tvojoj jedinici.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Ovaj dokument nije prosleđen tvojoj jedinici.")
         units = list(
             session.scalars(
                 select(BusinessUnit).where(BusinessUnit.active == True).order_by(BusinessUnit.code)
@@ -932,11 +930,24 @@ def _samo_novi(query):
 
 
 def _sme_na_dokument(session, user, doc) -> bool:
-    """Operater sme na svaki dokument, covek iz jedinice samo na svoje."""
+    """Operater sme na svaki dokument, covek iz jedinice samo na svoje.
+
+    U objektima dokument stize tek kad ga operater prosledi, pa se trazi i
+    `forwarded_at`. Kod usluga (088) i povrata (010) prosledjivanja nema -
+    dokument stigne i tu se zavrsi. Zato taj uslov vazi samo za objekte.
+
+    Mereno 28.09. na produkciji: stranica dokumenta je trazila `forwarded_at`, a
+    dugme za upis nije. Bogdan je kalkulaciju upisao (088/03119), pa dobio 403
+    na istu fakturu - i tako na svaku svoju, jer nijedna nije prosledjena.
+    """
     if user.is_operator:
         return True
     jedinica = _unit_for(session, user)
-    return jedinica is not None and doc.business_unit_id == jedinica.id
+    if jedinica is None or doc.business_unit_id != jedinica.id:
+        return False
+    if _vrsta_ekrana(jedinica) == EKRAN_OBJEKAT:
+        return doc.forwarded_at is not None
+    return True
 
 
 def _broj_popusta(session) -> int:
