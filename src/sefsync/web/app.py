@@ -1662,5 +1662,31 @@ def api_documents(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    """Stanje panela i bazena veza.
+
+    Bazen ka ERP-u se napunio prvog radnog dana i IIS je vracao 502, a iz loga
+    se nije videlo da li veze cure ili ih je premalo. Ovde se to vidi bez
+    uzimanja ijedne veze: `checkedout` je koliko ih je trenutno u upotrebi.
+    Ako taj broj raste i ne vraca se na nulu dok niko ne radi - veze cure.
+    """
+    from ..db import get_engine
+    from ..erp.connection import get_erp_engine
+
+    def stanje(engine) -> dict:
+        bazen = engine.pool
+        try:
+            return {
+                "u_upotrebi": bazen.checkedout(),
+                "slobodno": bazen.checkedin(),
+                "preko_mere": bazen.overflow(),
+            }
+        except AttributeError:
+            return {}
+
+    podaci: dict = {"status": "ok", "panel": stanje(get_engine())}
+    try:
+        podaci["erp"] = stanje(get_erp_engine())
+    except Exception as exc:  # noqa: BLE001 - zdravlje se ne rusi zbog ERP-a
+        podaci["erp"] = {"greska": str(exc)[:80]}
+    return podaci

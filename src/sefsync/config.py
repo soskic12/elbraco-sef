@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     # umesto da 30 sekundi drzi radnika i sacuva 502 umesto greske.
     db_pool_timeout: int = 10
     db_pool_recycle: int = 1800
+    # Isto vazi i za vezu ka ERP-u, koja je do 29.09. isla sa podrazumevanih
+    # 5+10 - i pala je prvog radnog dana ("QueuePool limit of size 5 overflow
+    # 10 reached"), pa je IIS vracao 502. Provera duplikata pretrazuje sve
+    # kalkulacije dobavljaca, pa veza stoji zauzeta sekundama.
+    erp_pool_size: int = 20
+    erp_max_overflow: int = 30
+    erp_pool_timeout: int = 10
+    erp_pool_recycle: int = 1800
 
     # --- ERP baza (faza 2, read-only u fazi 1) ---
     erp_db_url: str | None = None

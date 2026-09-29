@@ -180,20 +180,25 @@ def _vec_u_erpu(nacrt, *, engine=None, i_predlog: bool = False):
     dobavljac = str(nacrt.zaglavlje.get("DOBAVLJAC") or "").strip()
     if not broj or not dobavljac:
         return None
+    # Brojevi se citaju PRE otvaranja veze ka ERP-u: to je upit nad bazom panela
+    # koji vraca 8.000 redova, a drzati ERP vezu dok traje znaci trositi je bez
+    # potrebe. Bazen ka ERP-u je pao prvog radnog dana, pa se svaka zauzeta
+    # sekunda racuna.
+    poznati = _poznati_brojevi() if i_predlog else set()
     try:
         with (engine or get_erp_engine()).connect() as conn:
             nadjeno = postojeca_kalkulacija(conn, broj, dobavljac)
             if nadjeno is not None or not i_predlog:
                 return nadjeno
             # Broj se ne poklapa ni u celosti ni odsecen - mozda je covek
-            # pogresio u kucanju. Isti upit, ista veza.
+            # pogresio u kucanju.
             return moguca_kalkulacija(
                 conn,
                 broj,
                 dobavljac,
                 nacrt.zaglavlje.get("IZNOS_ZA_NAP"),
                 nacrt.zaglavlje.get("DATUM"),
-                _poznati_brojevi(),
+                poznati,
             )
     except SQLAlchemyError as exc:
         log.info("Provera postojece kalkulacije nije prosla: %s", exc)

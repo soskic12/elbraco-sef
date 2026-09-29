@@ -24,6 +24,27 @@ class ErpNotConfigured(RuntimeError):
     pass
 
 
+def _bazen() -> dict:
+    """Podesavanja bazena veza ka ERP-u.
+
+    Do 29.09. je isao sa podrazumevanih 5+10 i pao je prvog radnog dana:
+    "QueuePool limit of size 5 overflow 10 reached", pa 502 kroz IIS. Nijedna
+    veza se ne otvara bez `with`, dakle ne cure - ali provera duplikata
+    pretrazuje sve kalkulacije dobavljaca, pa jedna veza stoji zauzeta
+    sekundama. Kad se poklopi nekoliko poslovodja i petnaestominutni ciklus,
+    petnaest veza nestane.
+    """
+    s = get_settings()
+    return {
+        "pool_pre_ping": True,
+        "future": True,
+        "pool_size": s.erp_pool_size,
+        "max_overflow": s.erp_max_overflow,
+        "pool_timeout": s.erp_pool_timeout,
+        "pool_recycle": s.erp_pool_recycle,
+    }
+
+
 def resolve_erp_url() -> str | None:
     """Veza ka ERP bazi: prvo izricito podesena, pa user-secrets skladiste."""
     settings = get_settings()
@@ -50,7 +71,7 @@ def get_erp_engine() -> Engine:
                 "Veza ka ERP bazi nije podešena. Postavi ERP_DB_URL, ili ERP_SECRETS_FILE "
                 "(putanja do secrets.json projekta koji već drži kredencijale)."
             )
-        _engine = create_engine(url, pool_pre_ping=True, future=True)
+        _engine = create_engine(url, **_bazen())
     return _engine
 
 
@@ -89,7 +110,7 @@ def get_erp_test_engine() -> Engine:
             raise ErpNotConfigured(
                 "Test ERP baza nije podešena. Postavi ERP_TEST_DB_URL ili ERP_TEST_DB_NAME."
             )
-        _test_engine = create_engine(url, pool_pre_ping=True, future=True)
+        _test_engine = create_engine(url, **_bazen())
     return _test_engine
 
 
