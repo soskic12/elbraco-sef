@@ -622,8 +622,29 @@ def test_rucna_dodela_pj_odmah_prosledjuje(podaci, db):
     assert notifier.pozvano == [podaci["nerazvrstan"]]
 
 
-def test_vec_prosledjen_dokument_se_ne_salje_ponovo(podaci, db):
-    """Ispravka PJ na vec prosledjenom ne sme da okine jos jedan mejl sama od sebe."""
+def test_ponovna_dodela_iste_jedinice_ne_salje_mejl(podaci, db):
+    """Kad operater samo hoće da zapamti pravilo, poslovođa ne treba da dobije mejl."""
+    from sefsync.models import utcnow
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.forwarded_by = "nina"
+
+    notifier = LazniNotifier()
+    Workflow(notifier=notifier).assign_unit(
+        podaci["doc"], podaci["unit"], actor="nina", remember=False
+    )
+
+    assert notifier.pozvano == []
+
+
+def test_prebacivanje_obavestava_novu_jedinicu(podaci, db):
+    """Mereno 29.09.: 49 dokumenata prebačeno posle prosleđivanja, niko obavešten.
+
+    Nova jedinica o dokumentu ne zna ništa dok joj se ne javi.
+    """
     from sefsync.models import utcnow
     from sefsync.services.workflow import Workflow
 
@@ -637,7 +658,7 @@ def test_vec_prosledjen_dokument_se_ne_salje_ponovo(podaci, db):
         podaci["doc"], podaci["druga"], actor="nina", remember=False
     )
 
-    assert notifier.pozvano == []
+    assert notifier.pozvano == [podaci["doc"]]
 
 
 def test_poslovodja_ima_spisak_sta_treba_slikati(client, podaci, db, monkeypatch):
@@ -1377,3 +1398,125 @@ def test_svaka_uloga_zna_da_njen_klik_prihvata_na_sefu(client, db):
         tekst = client.get("/pomoc").text
         assert "prihvata" in tekst.lower(), f"{covek.login} ne vidi ništa o prihvatanju"
         assert "nepovratno" in tekst.lower() or "ne radi sama" in tekst.lower()
+
+
+# --------------------------------------------------------------------------- #
+# prebacivanje dokumenta posle prosleđivanja / upisa / prijema
+# --------------------------------------------------------------------------- #
+
+
+def test_prebacivanje_posle_upisa_ostavlja_upozorenje(podaci, db):
+    """App ne dira ERP, ali ne sme ni da ćuti da kalkulacija stoji u tuđem magacinu."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=podaci["doc"], stanje=StanjeNacrta.UPISAN,
+            erp_broj="002/00471", magacin="002",
+        ))
+
+    Workflow(notifier=LazniNotifier()).assign_unit(
+        podaci["doc"], podaci["druga"], actor="nina", remember=False
+    )
+
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci["doc"])
+        assert red.upozorenje
+        assert "002/00471" in red.upozorenje
+        assert "MP001" in red.upozorenje      # sada pripada drugoj jedinici
+
+
+def test_prebacivanje_ponistava_tudju_potvrdu_prijema(podaci, db):
+    """Nova jedinica mora sama da potvrdi da je roba kod nje."""
+    from sefsync.models import AuditLog, Document as D, utcnow
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.received_at = utcnow()
+        doc.received_by = "predrag"
+
+    Workflow(notifier=LazniNotifier()).assign_unit(
+        podaci["doc"], podaci["druga"], actor="nina", remember=False
+    )
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        assert doc.received_at is None
+        assert doc.received_by is None
+        akcije = [a.action for a in session.query(AuditLog).all()]
+        assert "document.prijem.ponisten" in akcije
+
+
+def test_prebacivanje_bez_upisa_ne_dize_uzbunu(podaci, db):
+    """Dok kalkulacije nema, prebacivanje je sasvim obična ispravka."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=podaci["doc"], stanje=StanjeNacrta.SPREMAN, magacin="002",
+        ))
+
+    Workflow(notifier=LazniNotifier()).assign_unit(
+        podaci["doc"], podaci["druga"], actor="nina", remember=False
+    )
+
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, podaci["doc"]).upozorenje is None
+
+
+def test_poslovodja_vraca_tudji_dokument_kancelariji(client, podaci, db):
+    """Do sada je jedino rešenje bilo javiti telefonom — bez ikakvog traga."""
+    from sefsync.models import AuditLog, Document as D, ProcessState, utcnow
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow()
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/nije-moje",
+                data={"napomena": "ovo je za Ilijanu"}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        assert doc.business_unit_id is None
+        assert doc.forwarded_at is None
+        assert doc.state is ProcessState.UNASSIGNED
+        assert "ovo je za Ilijanu" in doc.routing_note
+        assert "MP002" in doc.routing_note          # odakle je vraćen
+        assert "document.vracen" in [a.action for a in session.query(AuditLog).all()]
+
+
+def test_ne_vraca_se_ono_sto_je_vec_primljeno(client, podaci, db):
+    """Tu je već nešto urađeno — to rešava kancelarija, ne dugme."""
+    from sefsync.models import Document as D, utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(D, podaci["doc"])
+        doc.forwarded_at = utcnow()
+        doc.received_at = utcnow()
+        doc.received_by = "predrag"
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/nije-moje", data={}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        assert session.get(D, podaci["doc"]).business_unit_id is not None
+
+
+def test_ne_vraca_se_ono_sto_je_vec_u_erpu(client, podaci, db):
+    from sefsync.models import Document as D, NacrtKalkulacije, StanjeNacrta, utcnow
+
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow()
+        session.add(NacrtKalkulacije(
+            document_id=podaci["doc"], stanje=StanjeNacrta.UPISAN, erp_broj="002/00471",
+        ))
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/nije-moje", data={}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        assert session.get(D, podaci["doc"]).business_unit_id is not None

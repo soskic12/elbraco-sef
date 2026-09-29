@@ -111,7 +111,7 @@
       {% if nacrt %}
       <dt>Kalkulacija</dt>
       <dd style="font-weight:400">
-        {% with n = nacrt %}{% include "_sumnja.html" %}{% endwith %}
+        {% with n = nacrt %}{% include "_upozorenje.html" %}{% include "_sumnja.html" %}{% endwith %}
         {% if nacrt.stanje.value == 'upisan' %}
           <span class="tag ok">u ERP-u {{ nacrt.erp_broj or '' }}</span>
           <div class="muted small">{{ nacrt.upisao }}{% if nacrt.upisano_u %},

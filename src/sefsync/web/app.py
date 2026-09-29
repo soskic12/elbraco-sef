@@ -606,6 +606,59 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
         )
 
 
+@app.post("/dokument/{doc_id}/nije-moje")
+def vrati_dokument(
+    doc_id: int, user: Korisnik, napomena: Annotated[str, Form()] = ""
+) -> RedirectResponse:
+    """Čovek iz jedinice vraća dokument kancelariji: nije za njega.
+
+    Do sada procedure nije bilo. Bogdan ne može da prebaci na Ilijanu - tuđe
+    jedinice su mu zabranjene, i tako treba - a dugmeta nije bilo, pa je jedino
+    rešenje bilo javiti telefonom. To nigde nije ostavljalo trag.
+
+    Dokument se vraća u „Nerazvrstano“ sa napomenom odakle je došao; operater
+    odlučuje čiji je. Ako je prijem već potvrđen ili je kalkulacija upisana,
+    vraćanje se odbija - tu je već nešto urađeno, pa to rešava kancelarija.
+    """
+    from ..models import RoutingSource, utcnow
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Dokument ne postoji.")
+        if user.is_operator:
+            return _back(f"/dokument/{doc_id}", "Ti si operater — dodeli je odmah.", False)
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+
+        povratak = "/moja-jedinica"
+        if doc.received_at is not None:
+            return _back(povratak, "Prijem je već potvrđen — javi kancelariji.", False)
+        red = session.get(NacrtKalkulacije, doc_id)
+        if red is not None and red.stanje is StanjeNacrta.UPISAN:
+            return _back(povratak, "Kalkulacija je već u ERP-u — javi kancelariji.", False)
+
+        moja = _unit_for(session, user)
+        odakle = moja.code if moja is not None else "?"
+        doc.business_unit_id = None
+        doc.forwarded_at = None
+        doc.forwarded_by = None
+        doc.routing_source = RoutingSource.NONE
+        doc.routing_rule_id = None
+        doc.routing_corrected = True
+        doc.routing_confirmed_at = None
+        doc.routing_confirmed_by = None
+        doc.state = ProcessState.UNASSIGNED
+        doc.routing_note = (
+            f"vratio {user.login} sa {odakle}: {napomena.strip() or 'nije za našu jedinicu'}"
+        )[:500]
+        session.add(AuditLog(
+            actor=user.login, action="document.vracen", document_id=doc_id,
+            detail=doc.routing_note,
+        ))
+    return _back(povratak, "Vraćeno kancelariji — oni odlučuju čija je.")
+
+
 @app.post("/dokument/{doc_id}/manjak")
 def prijavi_manjak(
     doc_id: int,

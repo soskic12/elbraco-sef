@@ -35,6 +35,8 @@
     <div style="text-align:right">
       <strong>{{ '%.2f'|format(doc.amount or 0) }}</strong>
       <span class="muted small">{{ doc.currency }}</span><br>
+      {% include "_upozorenje.html" %}
+      {% include "_nije_moje.html" %}
       {% include "_sumnja.html" %}
       {% if doc.po_starom %}
         <div class="small" style="margin:4px 0;padding:4px 7px;border-left:3px solid #b45309;

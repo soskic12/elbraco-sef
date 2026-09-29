@@ -89,6 +89,9 @@
       <td class="small" data-naslov="Prosleđeno">{{ d.forwarded_at.strftime('%d.%m. %H:%M') if d.forwarded_at else '' }}</td>
       <td>
         {% set m = manjci.get(d.id) %}
+        {% with n = nacrti.get(d.id) if nacrti is defined else None %}
+          {% include "_upozorenje.html" %}
+        {% endwith %}
         {% if m and m.otvoren %}
           {# Crvena linija stoji dok ostatak ne stigne - dotle se ne knjizi. #}
           <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
@@ -123,6 +126,7 @@
             <input type="text" name="napomena" placeholder="napomena (opciono)" style="width:150px">
             <button type="submit">Roba je primljena</button>
           </form>
+          {% with doc = d %}{% include "_nije_moje.html" %}{% endwith %}
           {% if d.lines %}
           <details style="margin-top:6px">
             <summary class="small" style="cursor:pointer">Stiglo manje nego što piše</summary>

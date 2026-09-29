@@ -237,6 +237,25 @@
   panel.</p>
 {% endcall %}
 
+{% call korak('Kad prebaciš dokument na drugu jedinicu') %}
+  <ul class="small">
+    <li>nova jedinica <b>dobija mejl</b> — ranije nije dobijala ništa;</li>
+    <li>ako je stara već potvrdila prijem, potvrda se <b>poništava</b>, da nova
+      sama kaže da je roba kod nje;</li>
+    <li>ako je kalkulacija već upisana, ona ostaje u <b>starom magacinu</b> —
+      aplikacija je ne dira, nego na dokumentu ispiše crveno upozorenje sa
+      brojem kalkulacije. <b>Ispravka u ERP-u je na tebi.</b></li>
+  </ul>
+  <p class="muted small">Ponovna dodela iste jedinice ne šalje mejl — slobodno
+  je koristi kad samo hoćeš da zapamtiš pravilo.</p>
+{% endcall %}
+
+{% call korak('Kad ti poslovođa vrati dokument') %}
+  <p>Ako neko klikne „Nije za moju jedinicu“, dokument ti se vraća u karticu
+  <b>Nerazvrstano</b>, sa napomenom ko ga je vratio i odakle. Dodeli ga pravoj
+  jedinici kao i svaki drugi.</p>
+{% endcall %}
+
 {% call korak('Šifre artikala') %}
   <p>Ekran <b>Šifre</b> pokazuje stavke kojima fali naša šifra, sa slikom koju je
   poslao poslovođa. Kad povežeš šifru, veza važi za sve buduće fakture istog
@@ -248,6 +267,26 @@
 {% endif %}
 
 {# ------------------------------------------------------- važi za sve uloge #}
+{% if uloga != 'operater' %}
+{% call korak('Faktura koja nije za tebe') %}
+  <p>Ispod fakture stoji <span class="tag">Nije za moju jedinicu</span>. Upiši
+  čija je, ako znaš, i klikni <b>Vrati kancelariji</b> — dokument im se vraća sa
+  tvojom napomenom i oni odlučuju.</p>
+  <p class="muted small">Ne radi ako si već potvrdio prijem ili ako je
+  kalkulacija u ERP-u — tada je nešto već urađeno, pa javi kancelariji.</p>
+{% endcall %}
+
+{% call korak('Ako ti faktura nestane ili se pojavi niotkuda') %}
+  <p>Kancelarija ume da prebaci dokument na drugu jedinicu kad vidi da je
+  pogrešno razvrstan. Kad ti nešto <b>stigne</b> tako, dobićeš mejl kao i za
+  svaku drugu fakturu. Kad ti nešto <b>nestane</b>, znači da je prebačeno
+  drugima — nađeš ga pretragom ako ti treba.</p>
+  <p class="muted small">Ako je neko već potvrdio prijem pa je dokument
+  prebačen, potvrda se poništava — novi poslovođa mora sam da potvrdi da je
+  roba kod njega.</p>
+{% endcall %}
+{% endif %}
+
 {% call korak('Štampa fakture') %}
   <p>Na stranici dokumenta, pored broja, stoji <span class="tag">Štampaj</span>.
   Otvara <b>zvanični PDF sa SEF-a</b> — ono što je dobavljač poslao, ne naš

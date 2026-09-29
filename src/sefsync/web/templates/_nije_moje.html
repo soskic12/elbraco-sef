@@ -1,0 +1,9 @@
+{# Vracanje dokumenta kancelariji. Ocekuje `doc`. #}
+<details style="margin-top:6px">
+  <summary class="small muted" style="cursor:pointer">Nije za moju jedinicu</summary>
+  <form class="row" method="post" action="/dokument/{{ doc.id }}/nije-moje"
+        style="margin-top:5px">
+    <input type="text" name="napomena" placeholder="čija je, ako znaš" style="width:170px">
+    <button type="submit" class="secondary">Vrati kancelariji</button>
+  </form>
+</details>

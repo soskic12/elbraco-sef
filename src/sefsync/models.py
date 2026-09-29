@@ -638,6 +638,11 @@ class NacrtKalkulacije(Base):
     sumnja_odbio: Mapped[str | None] = mapped_column(String(100), default=None)
     sumnja_odbijeno_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
+    # Nesto sto je covek morao da uradi u ERP-u jer app ne sme sama. Za sada
+    # jedan slucaj: dokument je prebacen na drugu jedinicu POSLE upisa, pa
+    # kalkulacija stoji u pogresnom magacinu. App je ne dira - samo javi.
+    upozorenje: Mapped[str | None] = mapped_column(String(250), default=None)
+
     document: Mapped[Document] = relationship()
 
     @property

@@ -28,11 +28,13 @@ from ..models import (
     Document,
     MatchField,
     MatchOp,
+    NacrtKalkulacije,
     OdlukaManjka,
     PrijavaManjka,
     ProcessState,
     RoutingRule,
     RoutingSource,
+    StanjeNacrta,
     utcnow,
 )
 from ..textutil import shorten
@@ -263,6 +265,40 @@ class Workflow:
                             )
                         )
 
+            promenjena = prethodna is not None and prethodna != business_unit_id
+            if promenjena:
+                stara = session.get(BusinessUnit, prethodna)
+                oznaka = stara.code if stara is not None else str(prethodna)
+
+                # Kalkulacija je upisana dok je dokument bio na staroj jedinici,
+                # dakle u njenom magacinu. App je ne dira - knjizenje i ispravke
+                # u ERP-u rade ljudi - ali cutati o tome znaci ostaviti pogresnu
+                # kalkulaciju da neko na nju naidje za mesec dana.
+                red = session.get(NacrtKalkulacije, doc_id)
+                if red is not None and red.stanje is StanjeNacrta.UPISAN:
+                    red.upozorenje = (
+                        f"Kalkulacija {red.erp_broj or ''} je upisana u magacinu "
+                        f"{red.magacin or '?'} dok je dokument bio na {oznaka}; "
+                        f"sada pripada {unit.code} — proveri u ERP-u."
+                    )[:250]
+                    session.add(AuditLog(
+                        actor=actor, action="routing.posle.upisa", document_id=doc_id,
+                        detail=red.upozorenje,
+                    ))
+
+                # Prijem je potvrdila pogresna jedinica. Nova mora sama da
+                # potvrdi da je roba kod nje - inace bi joj dokument stigao sa
+                # oznakom "primljeno", a roba nigde.
+                if doc.received_at is not None:
+                    session.add(AuditLog(
+                        actor=actor, action="document.prijem.ponisten", document_id=doc_id,
+                        detail=f"prijem potvrdio {doc.received_by or '?'} na {oznaka}, "
+                               f"dokument prebačen na {unit.code}",
+                    ))
+                    doc.received_at = None
+                    doc.received_by = None
+                    doc.received_note = None
+
             doc.business_unit_id = business_unit_id
             doc.routing_source = RoutingSource.MANUAL
             doc.routing_rule_id = None
@@ -293,7 +329,12 @@ class Workflow:
         # nisu imala smisla otkad se zna koliko razvrstavanje pogadja - a dok se
         # ne prosledi, poslovodja dokument uopste ne vidi (pa ne moze ni da slika
         # ambalazu za novu sifru).
-        if not vec_prosledjen:
+        # Prosledjuje se i kad je dokument vec bio prosledjen, ali samo ako je
+        # jedinica STVARNO promenjena: nova o dokumentu nista ne zna. Mereno
+        # 29.09.: 49 dokumenata je ispravljeno posle prosledjivanja, a nijedan
+        # novi poslovodja nije obavesten. Ponovna dodela iste jedinice - kad
+        # operater samo hoce da zapamti pravilo - ne salje nista.
+        if not vec_prosledjen or promenjena:
             ishod = self.forward([doc_id], actor=actor)
             poruka += " " + ("Prosleđeno." if ishod.done else ishod.summary())
         return ActionResult(True, poruka, 1)

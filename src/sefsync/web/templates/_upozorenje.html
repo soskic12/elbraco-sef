@@ -1,0 +1,8 @@
+{# Kalkulacija je ostala u pogresnom magacinu posle prebacivanja dokumenta.
+   App je ne dira - knjizenje i ispravke u ERP-u rade ljudi - ali mora da se vidi. #}
+{% if n and n.upozorenje %}
+  <div class="small" style="margin:4px 0;padding:5px 8px;border-left:3px solid #b91c1c;
+                            background:#fef2f2">
+    <b>Proveri u ERP-u:</b> {{ n.upozorenje }}
+  </div>
+{% endif %}
