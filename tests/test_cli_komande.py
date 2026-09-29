@@ -272,3 +272,40 @@ def test_pravila_prioritet_daje_prednost_tacnom_pogotku(db):
         assert po_pibu.priority == 30
         assert adresno.priority == 50
         assert po_pibu.priority < adresno.priority, "PIB mora da se proveri pre adrese"
+
+
+def test_objasni_pokazuje_koje_pravilo_odlucuje(db):
+    """Iz spiska pravila se ne vidi ko se otima oko dokumenta — ovde se vidi."""
+    from sefsync.models import (
+        BusinessUnit, Document, MatchField, MatchOp, RoutingRule, UnitKind,
+    )
+
+    with db.session_scope() as session:
+        office = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        mp = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+        session.add_all([office, mp])
+        session.flush()
+        session.add(RoutingRule(
+            priority=40, field=MatchField.ANY_TEXT, op=MatchOp.CONTAINS,
+            pattern="rabat", business_unit_id=office.id,
+        ))
+        session.add(RoutingRule(
+            priority=50, field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+            pattern="Srpskih vladara 46", business_unit_id=mp.id,
+        ))
+        doc = Document(
+            sef_invoice_id=900, document_number="F-1",
+            supplier_name="NEKO", supplier_vat="100000000",
+            delivery_address="Srpskih vladara 46, 25260, Apatin",
+            note="odobravamo rabat",
+        )
+        session.add(doc)
+        session.flush()
+        broj = doc.id
+
+    ishod = _pokreni("objasni", str(broj))
+    assert "ODLUČUJE" in ishod.stdout
+    # opšte tekstualno pravilo na 40 pretiče adresu na 50
+    prvi = ishod.stdout.index("prioritet 40")
+    drugi = ishod.stdout.index("prioritet 50")
+    assert prvi < drugi
