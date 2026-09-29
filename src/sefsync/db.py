@@ -15,6 +15,15 @@ from .models import Base
 
 log = logging.getLogger(__name__)
 
+# Ko trenutno drzi vezu ka bazi panela: id veze -> (kad je uzeta, gde).
+#
+# Bazen se dvaput napunio u produkciji i ljudi nisu mogli da se prijave, a iz
+# koda se nije videlo ko ga drzi: nijedna sesija se ne otvara bez `with`. Zato
+# se pri svakom uzimanju veze zabelezi mesto u nasem kodu, pa `/health/veze`
+# moze da kaze sta stoji i koliko dugo. Cena je jedan prolaz kroz stek po
+# uzimanju veze - zanemarljivo prema tome da panel pada.
+_uzete: dict[int, tuple[float, str]] = {}
+
 _engine: Engine | None = None
 _SessionFactory: sessionmaker[Session] | None = None
 
@@ -33,7 +42,48 @@ def get_engine() -> Engine:
             kwargs["pool_timeout"] = s.db_pool_timeout
             kwargs["pool_recycle"] = s.db_pool_recycle
         _engine = create_engine(s.db_url, **kwargs)
+        _prati_veze(_engine)
     return _engine
+
+
+def _kratko(putanja: str) -> str:
+    """Samo deo putanje unutar paketa, da red stane u jedan ispis."""
+    rep = putanja.rsplit("sefsync", 1)[-1]
+    return rep.replace("\\", "/").lstrip("/")
+
+
+def _prati_veze(engine: Engine) -> None:
+    """Belezi odakle je veza uzeta, da se zna ko je ne vraca."""
+    import time
+    import traceback
+
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "checkout")
+    def _uzeta(dbapi_con, zapis, proxy):  # noqa: ANN001, ARG001
+        mesta = [
+            f"{_kratko(r.filename)}:{r.lineno} {r.name}"
+            for r in traceback.extract_stack()[:-1]
+            if "sefsync" in r.filename and not r.filename.endswith("db.py")
+        ]
+        _uzete[id(zapis)] = (time.monotonic(), " < ".join(reversed(mesta[-4:])) or "?")
+
+    @event.listens_for(engine, "checkin")
+    def _vracena(dbapi_con, zapis):  # noqa: ANN001, ARG001
+        _uzete.pop(id(zapis), None)
+
+
+def ko_drzi_veze(najstarijih: int = 10) -> list[dict]:
+    """Veze koje su trenutno uzete, najduze zauzete prve."""
+    import time
+
+    sada = time.monotonic()
+    redovi = [
+        {"sekundi": round(sada - kad, 1), "gde": gde}
+        for kad, gde in _uzete.values()
+    ]
+    redovi.sort(key=lambda r: -r["sekundi"])
+    return redovi[:najstarijih]
 
 
 def get_session_factory() -> sessionmaker[Session]:

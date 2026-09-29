@@ -1318,3 +1318,18 @@ def test_bez_podesavanja_se_ne_prihvata_nista(podaci, db, monkeypatch):
     monkeypatch.setattr(get_settings(), "prihvati_posle_upisa", False, raising=False)
     assert prihvati_ako_je_kompletna(podaci["doc"], "bogdan") == ""
     assert _LazniPrihvat.prihvaceni == []
+
+
+def test_health_kaze_ko_drzi_vezu(client, db):
+    """Bazen se dvaput napunio u produkciji, a iz koda se nije videlo ko ga drži."""
+    from sefsync.db import ko_drzi_veze, session_scope
+    from sefsync.models import Document
+
+    with session_scope() as session:
+        session.query(Document).count()
+        drze = ko_drzi_veze()
+        assert drze, "dok je sesija otvorena, veza mora da se vidi"
+        assert "sekundi" in drze[0] and "gde" in drze[0]
+
+    # zatvorena sesija vraća vezu — inače merač ne bi vredeo ništa
+    assert ko_drzi_veze() == []

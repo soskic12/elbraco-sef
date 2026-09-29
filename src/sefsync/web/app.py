@@ -1693,7 +1693,14 @@ def health() -> dict:
         except AttributeError:
             return {}
 
+    from ..db import ko_drzi_veze
+
     podaci: dict = {"status": "ok", "panel": stanje(get_engine())}
+    # Ko drzi veze koje se ne vracaju. Ne uzima se nijedna nova veza - ovo mora
+    # da radi bas kad je bazen pun i kad ljudi ne mogu da se prijave.
+    drze = ko_drzi_veze()
+    if drze:
+        podaci["drze_vezu"] = drze
     try:
         podaci["erp"] = stanje(get_erp_engine())
     except Exception as exc:  # noqa: BLE001 - zdravlje se ne rusi zbog ERP-a
