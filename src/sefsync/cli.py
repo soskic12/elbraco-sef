@@ -928,6 +928,97 @@ def cmd_arhiviraj_stare(
     typer.secho(f"Arhivirano: {len(redovi)}. Ništa nije obrisano.", fg="green")
 
 
+@app.command("analiza-razvrstavanja")
+def cmd_analiza_razvrstavanja(
+    prag: int = typer.Option(20, "--prag", help="Koliko pogodaka pravilo mora imati."),
+) -> None:
+    """Koliko je razvrstavanje pouzdano i sta bi automatsko prosledjivanje obuhvatilo.
+
+    Odgovara na pitanje kad se sme ukljuciti automatsko prosledjivanje: ne po
+    osecaju, nego po tome koliko je puta operater morao da ispravi predlog.
+
+    Meri se samo ono gde je aplikacija nesto TVRDILA pa je covek to video.
+    Rucna dodela dokumenta koji app nije umela da razvrsta ne ulazi u ocenu -
+    tu nije ni imala odgovor.
+    """
+    _boot()
+    from collections import Counter
+
+    from sqlalchemy import func, select
+
+    from .models import Document, RoutingRule, RoutingSource
+
+    with session_scope() as session:
+        def broj(*uslovi) -> int:
+            return session.scalar(
+                select(func.count()).select_from(Document).where(*uslovi)
+            ) or 0
+
+        typer.echo("Po izvoru razvrstavanja:")
+        for izvor in RoutingSource:
+            n = broj(Document.routing_source == izvor)
+            if n:
+                typer.echo(f"   {izvor.value:<18} {n}")
+
+        tacno = broj(
+            Document.routing_confirmed_at.isnot(None),
+            Document.routing_corrected == False,  # noqa: E712
+            Document.routing_source != RoutingSource.MANUAL,
+        )
+        ispravljeno = broj(Document.routing_corrected == True)  # noqa: E712
+        pregledano = tacno + ispravljeno
+        typer.echo("")
+        if not pregledano:
+            typer.secho(
+                "Nijedan predlog još nije prošao kroz ljudske ruke — nema šta da se oceni.",
+                fg="yellow",
+            )
+        else:
+            typer.echo(f"Predloga koje je čovek video: {pregledano}")
+            typer.echo(f"   ostalo kako je app predložila: {tacno} ({tacno / pregledano:.1%})")
+            typer.echo(f"   operater ispravio:             {ispravljeno} "
+                       f"({ispravljeno / pregledano:.1%})")
+
+        pravila = [p for p in session.scalars(select(RoutingRule))
+                   if (p.hits or 0) or (p.misses or 0)]
+        gresila = [p for p in pravila if p.misses]
+        typer.echo("")
+        typer.echo(f"Pravila u upotrebi: {len(pravila)}, od toga sa promašajem: {len(gresila)}")
+        for p in sorted(gresila, key=lambda x: -(x.misses or 0))[:10]:
+            ukupno = (p.hits or 0) + (p.misses or 0)
+            typer.secho(
+                f"   #{p.id:<4} {p.field.value:<20} pogodaka {p.hits or 0:<5} "
+                f"promašaja {p.misses or 0:<4} tačnost {(p.hits or 0) / ukupno:.0%}",
+                fg="yellow",
+            )
+
+        po_pravilu: Counter = Counter()
+        for _, rid in session.execute(
+            select(Document.id, Document.routing_rule_id)
+            .where(Document.routing_rule_id.isnot(None))
+        ):
+            po_pravilu[rid] += 1
+        ukupno_dok = sum(po_pravilu.values()) or 1
+
+        typer.echo("")
+        typer.echo("Šta bi automatsko prosleđivanje obuhvatilo:")
+        for p_ in (5, 10, 20, 50):
+            pouzdana = {p.id for p in pravila if not p.misses and (p.hits or 0) >= p_}
+            obuhvat = sum(n for rid, n in po_pravilu.items() if rid in pouzdana)
+            oznaka = " <- predlog" if p_ == prag else ""
+            typer.echo(
+                f"   bar {p_:>2} pogodaka bez ijednog promašaja: {len(pouzdana):>3} pravila, "
+                f"{obuhvat:>5} dokumenata ({obuhvat / ukupno_dok:.0%}){oznaka}"
+            )
+
+        typer.echo("")
+        typer.echo("Predomišljanje operatera:")
+        typer.echo("   ispravljeno posle prosleđivanja:   "
+                   f"{broj(Document.routing_corrected == True, Document.forwarded_at.isnot(None))}")  # noqa: E712
+        typer.echo("   ispravljeno posle potvrde prijema: "
+                   f"{broj(Document.routing_corrected == True, Document.received_at.isnot(None))}")  # noqa: E712
+
+
 @app.command("sumnje")
 def cmd_sumnje(
     magacin: str = typer.Option("", "--magacin", help="Samo taj magacin (npr. 088)."),

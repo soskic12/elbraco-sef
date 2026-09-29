@@ -117,3 +117,31 @@ def test_nacrti_spisak_radi_i_bez_magacina(db):
     assert "FA-1/26" in ishod.stdout
     # razlog mora da se vidi - sam broj ne govori ništa
     assert "nije otvoren u šifarniku" in ishod.stdout
+
+
+def test_analiza_razvrstavanja_kaze_kad_nema_sta_da_se_oceni(db):
+    """Bez ijedne ljudske potvrde ocena ne postoji — i to mora da se kaže."""
+    ishod = _pokreni("analiza-razvrstavanja")
+    assert "nema šta da se oceni" in ishod.stdout
+
+
+def test_analiza_razvrstavanja_racuna_tacnost(db):
+    from sefsync.models import Document, RoutingSource, utcnow
+
+    with db.session_scope() as session:
+        for i in range(3):
+            session.add(Document(
+                sef_invoice_id=100 + i, document_number=f"F{i}",
+                routing_source=RoutingSource.RULE, routing_confirmed_at=utcnow(),
+                routing_corrected=False,
+            ))
+        session.add(Document(
+            sef_invoice_id=200, document_number="F-lose",
+            routing_source=RoutingSource.MANUAL, routing_confirmed_at=utcnow(),
+            routing_corrected=True,
+        ))
+
+    ishod = _pokreni("analiza-razvrstavanja")
+    assert "Predloga koje je čovek video: 4" in ishod.stdout
+    assert "75.0%" in ishod.stdout      # 3 od 4 ostalo kako je app predložila
+    assert "25.0%" in ishod.stdout      # 1 ispravka
