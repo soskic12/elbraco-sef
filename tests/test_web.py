@@ -106,7 +106,11 @@ def test_ekran_za_prijavu_je_dostupan(client):
 
 
 def test_health_ne_trazi_prijavu(client):
-    assert client.get("/health").json() == {"status": "ok"}
+    odgovor = client.get("/health").json()
+    assert odgovor["status"] == "ok"
+    # Stanje bazena je tu da se vidi da li veze cure - bez uzimanja ijedne.
+    assert "u_upotrebi" in odgovor["panel"]
+    assert "erp" in odgovor
 
 
 # --------------------------------------------------------------------------- #
