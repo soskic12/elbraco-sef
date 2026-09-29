@@ -310,5 +310,15 @@ def zatvori_manjak_odobrenjem(document_id: int) -> str | None:
             prijava.zatvorio = f"knjižno odobrenje {odobrenje.document_number or ''}".strip()[:100]
             prijava.zatvoreno_u = utcnow()
             prijava.zatvoreno_kako = "stiglo knjižno odobrenje"
-            return prijava.document.document_number
-    return None
+            zatvoren_id = prijava.document_id
+            broj_fakture = prijava.document.document_number
+            break
+        else:
+            return None
+
+    # Faktura je sad kompletna: dobavljac je priznao da ostatak nece stici.
+    # Ako je kalkulacija vec u ERP-u, ovo je trenutak za prihvatanje.
+    from .nacrti import prihvati_ako_je_kompletna
+
+    prihvati_ako_je_kompletna(zatvoren_id, "knjižno odobrenje")
+    return broj_fakture

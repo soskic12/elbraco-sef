@@ -1087,6 +1087,13 @@ def cmd_provera_prelaska() -> None:
         f"prihvata fakture na SEF-u",
     )
 
+    red(
+        True,
+        "Kompletna faktura se prihvata na SEF-u odmah po upisu kalkulacije"
+        if podesavanja.prihvati_posle_upisa
+        else "Prihvatanje ne ide uz upis (PRIHVATI_POSLE_UPISA=false)",
+    )
+
     proba = podesavanja.notify_override_to.strip()
     red(
         not proba,

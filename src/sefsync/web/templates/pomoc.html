@@ -164,8 +164,14 @@
 {% endcall %}
 
 {% call korak('Prihvatanje i odbijanje na SEF-u') %}
-  <p>To je pravni čin i radi se svesno, dugmetom na dokumentu.
-  <b>Aplikacija to ne radi sama, nikad.</b></p>
+  <p>Kad se kalkulacija uspešno upiše u ERP, a fakturi <b>ništa ne fali</b>,
+  aplikacija je tada i prihvata na SEF-u. Prihvatanje je nepovratno — posle
+  njega ostaje samo knjižno odobrenje.</p>
+  <p class="muted small"><b>Ne prihvata se</b> faktura sa prijavljenim manjkom
+  koji još nije rešen. Takva čeka: kad ostatak stigne ili kad dođe knjižno
+  odobrenje, prihvata se tada. Ako je poslovođa rekao „šalju ispravljenu
+  fakturu“ ili „ne znam“, kalkulacija se ni ne upisuje — odlučuješ ti.</p>
+  <p class="muted small"><b>Odbijanje</b> uvek radi čovek, dugmetom na dokumentu.</p>
 {% endcall %}
 
 {% call korak('Kad poslovođa prijavi manjak') %}
@@ -246,7 +252,8 @@
 
 {% call korak('Šta aplikacija nikad ne radi sama') %}
   <ul class="small">
-    <li>ne prihvata i ne odbija fakturu na SEF-u,</li>
+    <li>ne odbija fakturu na SEF-u — odbijanje uvek bira čovek,</li>
+    <li>ne prihvata fakturu kojoj nešto fali ili se o njoj još odlučuje,</li>
     <li>ne knjiži kalkulaciju — upiše je, knjiži čovek u ERP-u,</li>
     <li>ne upisuje kalkulaciju dvaput za istu fakturu,</li>
     <li>ne dira šifarnik artikala ni komitenata u ERP-u,</li>

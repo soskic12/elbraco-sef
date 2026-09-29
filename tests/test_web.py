@@ -1230,3 +1230,91 @@ def test_objekat_i_dalje_ceka_prosledjivanje(client, podaci, db):
         session.get(D, podaci["doc"]).forwarded_at = utcnow()
 
     assert client.get(f"/dokument/{podaci['doc']}").status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# prihvatanje na SEF-u posle upisa — samo kompletne fakture
+# --------------------------------------------------------------------------- #
+
+
+class _LazniPrihvat:
+    """Belezi koga bi prihvatio, bez odlaska na SEF."""
+
+    prihvaceni: list = []
+
+    def __init__(self, *a, **k):
+        pass
+
+    def accept(self, doc_id, actor="system", comment=""):
+        from sefsync.services.acceptance import AcceptResult
+
+        type(self).prihvaceni.append((doc_id, actor))
+        return AcceptResult(True, "Prihvaćeno.")
+
+
+def _pripremi_prihvat(monkeypatch):
+    import sefsync.services.acceptance as acc
+
+    _LazniPrihvat.prihvaceni = []
+    monkeypatch.setattr(acc, "AcceptanceService", _LazniPrihvat)
+    monkeypatch.setattr(get_settings(), "prihvati_posle_upisa", True, raising=False)
+
+
+def test_kompletna_faktura_se_prihvata_posle_upisa(podaci, db, monkeypatch):
+    from sefsync.services.nacrti import prihvati_ako_je_kompletna
+
+    _pripremi_prihvat(monkeypatch)
+    poruka = prihvati_ako_je_kompletna(podaci["doc"], "bogdan")
+    assert "Prihvaćena je i na SEF-u" in poruka
+    assert _LazniPrihvat.prihvaceni == [(podaci["doc"], "bogdan")]
+
+
+def test_faktura_sa_otvorenim_manjkom_se_ne_prihvata(podaci, db, monkeypatch):
+    """Dok se ne zna hoće li ostatak stići, mora da ostane moguće odbijanje."""
+    from sefsync.models import OdlukaManjka, PrijavaManjka
+    from sefsync.services.nacrti import prihvati_ako_je_kompletna
+
+    _pripremi_prihvat(monkeypatch)
+    with db.session_scope() as session:
+        session.add(PrijavaManjka(
+            document_id=podaci["doc"], odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2.0, "stiglo": 1.0}],
+        ))
+
+    poruka = prihvati_ako_je_kompletna(podaci["doc"], "predrag")
+    assert "nije prihvaćena" in poruka
+    assert _LazniPrihvat.prihvaceni == []
+
+
+def test_zatvaranje_manjka_prihvata_fakturu(client, podaci, db, monkeypatch):
+    """Nekompletna koja postane kompletna — tada se prihvata."""
+    from sefsync.models import (
+        Document as D, NacrtKalkulacije, OdlukaManjka, PrijavaManjka, StanjeNacrta, utcnow,
+    )
+    from sefsync.services.nacrti import prihvati_ako_je_kompletna  # noqa: F401
+
+    _pripremi_prihvat(monkeypatch)
+    with db.session_scope() as session:
+        session.get(D, podaci["doc"]).forwarded_at = utcnow()
+        session.add(PrijavaManjka(
+            document_id=podaci["doc"], odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2.0, "stiglo": 1.0}],
+        ))
+        session.add(NacrtKalkulacije(
+            document_id=podaci["doc"], stanje=StanjeNacrta.UPISAN, erp_broj="021/00286",
+        ))
+
+    prijavi(client, POSLOVODJA)
+    client.post(f"/dokument/{podaci['doc']}/manjak-zatvori",
+                data={"kako": "stigao ostatak"}, follow_redirects=False)
+
+    assert _LazniPrihvat.prihvaceni == [(podaci["doc"], "predrag")]
+
+
+def test_bez_podesavanja_se_ne_prihvata_nista(podaci, db, monkeypatch):
+    from sefsync.services.nacrti import prihvati_ako_je_kompletna
+
+    _pripremi_prihvat(monkeypatch)
+    monkeypatch.setattr(get_settings(), "prihvati_posle_upisa", False, raising=False)
+    assert prihvati_ako_je_kompletna(podaci["doc"], "bogdan") == ""
+    assert _LazniPrihvat.prihvaceni == []

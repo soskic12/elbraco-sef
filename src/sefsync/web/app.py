@@ -667,6 +667,7 @@ def prijavi_manjak(
 def zatvori_manjak(doc_id: int, user: Korisnik, kako: Annotated[str, Form()] = "") -> RedirectResponse:
     """Ostatak je stigao — crvena linija pada i kalkulacija sme da se knjiži."""
     from ..models import utcnow
+    from ..services.nacrti import prihvati_ako_je_kompletna
 
     with session_scope() as session:
         doc = session.get(Document, doc_id)
@@ -687,7 +688,15 @@ def zatvori_manjak(doc_id: int, user: Korisnik, kako: Annotated[str, Form()] = "
             actor=user.login, action="document.manjak.zatvoren", document_id=doc_id,
             detail=prijava.zatvoreno_kako,
         ))
-    return _back(povratak, "Manjak je zatvoren — kalkulacija sme da se knjiži.")
+        upisana = (red := session.get(NacrtKalkulacije, doc_id)) is not None and (
+            red.stanje is StanjeNacrta.UPISAN
+        )
+
+    # Faktura je sad kompletna. Ako je kalkulacija vec u ERP-u, ovo je trenutak
+    # kad sme da se prihvati - dok je manjak stajao otvoren, cuvali smo
+    # mogucnost odbijanja.
+    dodatak = prihvati_ako_je_kompletna(doc_id, user.login) if upisana else ""
+    return _back(povratak, "Manjak je zatvoren — kalkulacija sme da se knjiži." + dodatak)
 
 
 @app.get("/dokument/{doc_id}/pdf")

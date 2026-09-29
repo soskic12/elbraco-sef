@@ -171,6 +171,15 @@ class Settings(BaseSettings):
     # Automatsko prihvatanje tek nakon N sati od prijema (ostavlja prostor za reklamaciju)
     auto_accept_delay_hours: int = 0
     auto_accept_max_amount: float | None = None
+    # Prihvatanje posle uspesnog upisa kalkulacije, samo za KOMPLETNE fakture -
+    # one kojima nista ne fali. Bane, 29.09.: "automatski prihvati svaku koja je
+    # kompletna, kojoj ne fali roba i slicno; ove nekompletne kad postanu
+    # kompletne ili se vrate operateru na odlucivanje".
+    #
+    # Faktura sa otvorenom prijavom manjka se NE prihvata: dok se ne zna hoce li
+    # ostatak stici, mora da ostane moguce odbijanje. Kad se manjak zatvori
+    # (stigao ostatak ili knjizno odobrenje), prihvatanje se pokusava tada.
+    prihvati_posle_upisa: bool = False
 
     # --- Email notifikacije ---
     smtp_host: str = ""

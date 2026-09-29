@@ -464,7 +464,65 @@ def upisi_u_erp(
     # imenom baze, ostaje u dnevniku.
     broj = f"{nacrt.magacin}/{nacrt.zaglavlje.get('BROJ', '')}"
     _zabelezi_upis(document_id, broj, korisnik, opis=opis)
-    return True, f"Kalkulacija je upisana u ERP ({opis})."
+    poruka = f"Kalkulacija je upisana u ERP ({opis})."
+    return True, poruka + prihvati_ako_je_kompletna(document_id, korisnik)
+
+
+def kompletna(session, doc) -> tuple[bool, str]:
+    """Da li je fakturi sve na broju, pa sme da se prihvati na SEF-u.
+
+    Nekompletna je ona kojoj nesto fali ili se o njoj jos odlucuje. Prihvatanje
+    je nepovratno - kad se prihvati, odbijanje vise nije moguce, ostaje samo
+    knjizno odobrenje. Zato faktura sa otvorenom prijavom manjka ceka: mozda
+    ostatak nikad ne stigne.
+    """
+    from ..models import PrijavaManjka, SefStatus
+
+    if doc.sef_status in (SefStatus.APPROVED, SefStatus.REJECTED, SefStatus.STORNO):
+        return False, f"već je {doc.sef_status.value} na SEF-u"
+    manjak = session.get(PrijavaManjka, doc.id)
+    if manjak is not None and manjak.otvoren:
+        return False, "prijavljen je manjak koji još nije rešen"
+    return True, ""
+
+
+def prihvati_ako_je_kompletna(document_id: int, korisnik: str) -> str:
+    """Prihvata fakturu na SEF-u posle upisa, ako joj nista ne fali.
+
+    Bane, 29.09.: „automatski prihvati svaku koja je kompletna, kojoj ne fali
+    roba i slicno; ove nekompletne kad postanu kompletne ili se vrate operateru
+    na odlucivanje”.
+
+    Vraca dodatak za poruku coveku, ili prazno kad nema sta da se kaze.
+    Neuspeh prihvatanja ne ponistava upis - kalkulacija jeste u ERP-u.
+    """
+    from ..config import get_settings
+
+    if not get_settings().prihvati_posle_upisa:
+        return ""
+
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            return ""
+        sme, zasto = kompletna(session, doc)
+    if not sme:
+        if "manjak" in zasto:
+            return f" Na SEF-u nije prihvaćena — {zasto}."
+        return ""
+
+    from .acceptance import AcceptanceService
+
+    try:
+        ishod = AcceptanceService().accept(
+            document_id, actor=korisnik, comment="Prihvaćeno uz upis kalkulacije"
+        )
+    except Exception as exc:  # noqa: BLE001 - SEF ume da bude nedostupan
+        log.exception("Prihvatanje dokumenta %s posle upisa nije proslo", document_id)
+        return f" Na SEF-u NIJE prihvaćena ({exc}) — uradi to ručno."
+    if ishod.ok:
+        return " Prihvaćena je i na SEF-u."
+    return f" Na SEF-u nije prihvaćena: {ishod.message}"
 
 
 def _zabelezi_upis(document_id: int, broj: str, korisnik: str, *, opis: str = "") -> None:
