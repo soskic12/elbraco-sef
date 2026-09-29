@@ -1079,6 +1079,84 @@ def cmd_pravilo(
     typer.secho(f"Pravilo #{broj} je {'ugašeno' if ugasi else 'vraćeno'}.", fg="green")
 
 
+@app.command("pravila-prioritet")
+def cmd_pravila_prioritet(
+    prioritet: int = typer.Argument(..., help="Novi prioritet (manji broj ide prvi)."),
+    polje: str = typer.Option(..., "--polje", help="npr. supplier_vat"),
+    operacija: str = typer.Option("", "--op", help="npr. equals"),
+    jedinica: str = typer.Option("", "--jedinica", help="Sifra jedinice, npr. OFFICE"),
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+) -> None:
+    """Menja prioritet grupi pravila.
+
+    Motor ide redom po prioritetu i uzima PRVO pravilo koje pogodi, pa je
+    prioritet jedini nacin da se kaze sta je vaznije. Mereno 29.09.: racuni za
+    struju i zakup stizu na adresu apatinske prodavnice, pa je adresno pravilo
+    (prioritet 50) preticalo tacno pravilo po PIB-u (prioritet 60) i odvodilo
+    ih u prodavnicu. Tacan pogodak po dobavljacu mora da ide pre opste adrese.
+    """
+    _boot()
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from .models import BusinessUnit, MatchField, MatchOp, RoutingRule
+
+    try:
+        trazeno_polje = MatchField(polje)
+    except ValueError:
+        typer.secho(f"Nepoznato polje „{polje}“.", fg="red")
+        raise typer.Exit(1) from None
+    trazena_op = None
+    if operacija:
+        try:
+            trazena_op = MatchOp(operacija)
+        except ValueError:
+            typer.secho(f"Nepoznata operacija „{operacija}“.", fg="red")
+            raise typer.Exit(1) from None
+
+    with session_scope() as session:
+        upit = (
+            select(RoutingRule)
+            .options(selectinload(RoutingRule.business_unit))
+            .where(RoutingRule.field == trazeno_polje, RoutingRule.active == True)  # noqa: E712
+        )
+        if trazena_op is not None:
+            upit = upit.where(RoutingRule.op == trazena_op)
+        if jedinica:
+            cilj = session.scalar(select(BusinessUnit).where(BusinessUnit.code == jedinica))
+            if cilj is None:
+                typer.secho(f"Nema jedinice „{jedinica}“.", fg="red")
+                raise typer.Exit(1)
+            upit = upit.where(RoutingRule.business_unit_id == cilj.id)
+
+        pravila = [p for p in session.scalars(upit) if p.priority != prioritet]
+        if not pravila:
+            typer.echo("Nijedno pravilo ne odgovara, ili su svi već na tom prioritetu.")
+            raise typer.Exit(0)
+
+        typer.echo(f"Pravila koja menjaju prioritet na {prioritet}: {len(pravila)}")
+        for pravilo in pravila[:12]:
+            kod = pravilo.business_unit.code if pravilo.business_unit else "?"
+            typer.echo(
+                f"   #{pravilo.id:<5} {pravilo.priority} -> {prioritet}  "
+                f"{pravilo.op.value} „{pravilo.pattern[:34]}“ -> {kod}  "
+                f"({pravilo.hits or 0} pogodaka)"
+            )
+        if len(pravila) > 12:
+            typer.echo(f"   … i još {len(pravila) - 12}")
+
+        if not stvarno:
+            typer.echo("")
+            typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+            raise typer.Exit(0)
+
+        for pravilo in pravila:
+            pravilo.priority = prioritet
+
+    typer.echo("")
+    typer.secho(f"Promenjeno: {len(pravila)}.", fg="green")
+
+
 @app.command("pravila-sukobi")
 def cmd_pravila_sukobi(
     stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),

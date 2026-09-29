@@ -237,3 +237,38 @@ def test_pravilo_gasi_i_vraca_bez_gubitka_brojaca(db):
     _pokreni("pravilo", str(broj), "--upali")
     with db.session_scope() as session:
         assert session.get(RoutingRule, broj).active is True
+
+
+def test_pravila_prioritet_daje_prednost_tacnom_pogotku(db):
+    """Motor uzima prvo pravilo koje pogodi — prioritet je jedini način da se kaže šta je važnije."""
+    from sqlalchemy import select
+
+    from sefsync.models import BusinessUnit, MatchField, MatchOp, RoutingRule, UnitKind
+
+    with db.session_scope() as session:
+        office = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        mp = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+        session.add_all([office, mp])
+        session.flush()
+        session.add(RoutingRule(              # tačan pogodak po dobavljaču
+            priority=60, field=MatchField.SUPPLIER_VAT, op=MatchOp.EQUALS,
+            pattern="100001159", business_unit_id=office.id, hits=322,
+        ))
+        session.add(RoutingRule(              # opšta adresa
+            priority=50, field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+            pattern="Srpskih vladara 46", business_unit_id=mp.id,
+        ))
+
+    _pokreni("pravila-prioritet", "30", "--polje", "supplier_vat",
+             "--op", "equals", "--jedinica", "OFFICE", "--stvarno")
+
+    with db.session_scope() as session:
+        po_pibu = session.scalar(
+            select(RoutingRule).where(RoutingRule.field == MatchField.SUPPLIER_VAT)
+        )
+        adresno = session.scalar(
+            select(RoutingRule).where(RoutingRule.field == MatchField.DELIVERY_ADDRESS)
+        )
+        assert po_pibu.priority == 30
+        assert adresno.priority == 50
+        assert po_pibu.priority < adresno.priority, "PIB mora da se proveri pre adrese"
