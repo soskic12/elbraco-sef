@@ -1524,3 +1524,34 @@ def test_ne_vraca_se_ono_sto_je_vec_u_erpu(client, podaci, db):
 
     with db.session_scope() as session:
         assert session.get(D, podaci["doc"]).business_unit_id is not None
+
+
+# --------------------------------------------------------------------------- #
+# „zapamti kao pravilo" ne sme da pravi pravila koja se bore
+# --------------------------------------------------------------------------- #
+
+
+def test_zapamti_preusmerava_postojece_pravilo(podaci, db):
+    """Ista adresa je vodila na deset jedinica — jer se svaki put dodavalo novo."""
+    from sqlalchemy import select
+
+    from sefsync.models import MatchField, RoutingRule
+    from sefsync.services.workflow import Workflow
+
+    Workflow(notifier=LazniNotifier()).assign_unit(
+        podaci["doc"], podaci["unit"], actor="nina", remember=True,
+        field_name=MatchField.DELIVERY_ADDRESS.value,
+    )
+    # isti dokument, ista adresa, druga jedinica — operater se predomislio
+    Workflow(notifier=LazniNotifier()).assign_unit(
+        podaci["doc"], podaci["druga"], actor="nina", remember=True,
+        field_name=MatchField.DELIVERY_ADDRESS.value,
+    )
+
+    with db.session_scope() as session:
+        pravila = list(session.scalars(
+            select(RoutingRule).where(RoutingRule.active == True)  # noqa: E712
+        ))
+        adresna = [p for p in pravila if p.field is MatchField.DELIVERY_ADDRESS]
+        assert len(adresna) == 1, "za isti obrazac sme da stoji samo jedno pravilo"
+        assert adresna[0].business_unit_id == podaci["druga"]

@@ -145,3 +145,35 @@ def test_analiza_razvrstavanja_racuna_tacnost(db):
     assert "Predloga koje je čovek video: 4" in ishod.stdout
     assert "75.0%" in ishod.stdout      # 3 od 4 ostalo kako je app predložila
     assert "25.0%" in ishod.stdout      # 1 ispravka
+
+
+def test_pravila_sukobi_nalazi_isti_obrazac_na_vise_jedinica(db):
+    """Mereno 29.09.: ista adresa vodila je na deset različitih jedinica."""
+    from sefsync.models import BusinessUnit, MatchField, MatchOp, RoutingRule, UnitKind
+
+    with db.session_scope() as session:
+        a = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+        b = BusinessUnit(code="MP001", name="SOMBOR", kind=UnitKind.RETAIL, erp_code="001")
+        session.add_all([a, b])
+        session.flush()
+        for jedinica, pogodaka in ((a, 40), (b, 3)):
+            session.add(RoutingRule(
+                field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+                pattern="Srpskih vladara 46", business_unit_id=jedinica.id,
+                hits=pogodaka,
+            ))
+
+    suvo = _pokreni("pravila-sukobi")
+    assert "Srpskih vladara 46".upper() in suvo.stdout.upper()
+    assert "ostaje" in suvo.stdout and "gasi se" in suvo.stdout
+
+    _pokreni("pravila-sukobi", "--stvarno")
+
+    with db.session_scope() as session:
+        from sqlalchemy import select
+
+        aktivna = list(session.scalars(
+            select(RoutingRule).where(RoutingRule.active == True)  # noqa: E712
+        ))
+        assert len(aktivna) == 1
+        assert aktivna[0].hits == 40, "ostaje ono sa više pogodaka"

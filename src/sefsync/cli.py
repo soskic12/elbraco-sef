@@ -1019,6 +1019,106 @@ def cmd_analiza_razvrstavanja(
                    f"{broj(Document.routing_corrected == True, Document.received_at.isnot(None))}")  # noqa: E712
 
 
+@app.command("pravila-sukobi")
+def cmd_pravila_sukobi(
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+) -> None:
+    """Pravila koja se medjusobno bore za isti dokument.
+
+    Kvacica „zapamti kao pravilo“ pravi novo pravilo svaki put, a ne gleda
+    postoji li vec isto sa drugom jedinicom. Mereno 29.09.: ista adresa
+    „SRPSKIH VLADARA 46, 25260, Apatin“ vodila je na **deset** razlicitih
+    jedinica, a isti PIB 103699024 na osam. Ko prvi pogodi, taj odlucuje - i
+    zato je jedno pravilo po adresi imalo tacnost 53 %.
+
+    Sa `--stvarno` ostaje pravilo sa najvise pogodaka, ostala se gase. Nista se
+    ne brise: ugaseno pravilo se vidi u spisku i moze da se vrati.
+    """
+    _boot()
+    from collections import defaultdict
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from .models import RoutingRule
+
+    with session_scope() as session:
+        pravila = list(
+            session.scalars(
+                select(RoutingRule)
+                .options(selectinload(RoutingRule.business_unit))
+                .where(RoutingRule.active == True)  # noqa: E712
+            )
+        )
+        grupe: dict[tuple, list[RoutingRule]] = defaultdict(list)
+        for pravilo in pravila:
+            kljuc = (
+                pravilo.field.value,
+                pravilo.op.value,
+                " ".join((pravilo.pattern or "").upper().split()),
+            )
+            grupe[kljuc].append(pravilo)
+
+        sporna = {
+            k: v for k, v in grupe.items()
+            if len({p.business_unit_id for p in v}) > 1
+        }
+        dvojnici = {
+            k: v for k, v in grupe.items()
+            if k not in sporna and len(v) > 1
+        }
+
+        if not sporna and not dvojnici:
+            typer.secho("Nema pravila koja se bore za isti dokument.", fg="green")
+            raise typer.Exit(0)
+
+        ugasiti: list[RoutingRule] = []
+
+        if sporna:
+            typer.secho(
+                f"Isti obrazac vodi na razlicite jedinice: {len(sporna)}", fg="yellow"
+            )
+            for (polje, operacija, obrazac), lista in sorted(
+                sporna.items(), key=lambda x: -len(x[1])
+            ):
+                lista.sort(key=lambda p: -(p.hits or 0))
+                pobednik = lista[0]
+                typer.echo("")
+                typer.echo(f"   {polje} {operacija} „{obrazac[:52]}“")
+                for pravilo in lista:
+                    jedinica = pravilo.business_unit.code if pravilo.business_unit else "?"
+                    oznaka = "  <- ostaje" if pravilo is pobednik else "     gasi se"
+                    typer.echo(
+                        f"      #{pravilo.id:<5} -> {jedinica:<8} "
+                        f"pogodaka {pravilo.hits or 0:<5} promašaja {pravilo.misses or 0:<4}"
+                        f"{oznaka}"
+                    )
+                ugasiti += lista[1:]
+
+        if dvojnici:
+            broj = sum(len(v) - 1 for v in dvojnici.values())
+            typer.echo("")
+            typer.echo(f"Isto pravilo upisano vise puta: {len(dvojnici)} obrazaca, "
+                       f"{broj} suvisnih")
+            for lista in dvojnici.values():
+                lista.sort(key=lambda p: -(p.hits or 0))
+                ugasiti += lista[1:]
+
+        typer.echo("")
+        if not stvarno:
+            typer.secho(
+                f"Suvi prolaz — ugasilo bi se {len(ugasiti)} pravila. "
+                f"Za stvarno dodaj --stvarno.",
+                fg="yellow",
+            )
+            raise typer.Exit(0)
+
+        for pravilo in ugasiti:
+            pravilo.active = False
+
+    typer.secho(f"Ugašeno: {len(ugasiti)}. Ništa nije obrisano.", fg="green")
+
+
 @app.command("sumnje")
 def cmd_sumnje(
     magacin: str = typer.Option("", "--magacin", help="Samo taj magacin (npr. 088)."),
@@ -1042,7 +1142,10 @@ def cmd_sumnje(
         )
         if magacin:
             upit = upit.where(NacrtKalkulacije.magacin == magacin)
-        redovi = list(session.execute(upit))
+        # MS SQL u JSON koloni cuva 'null' kao tekst, sto nije SQL NULL - pa
+        # filter propusti red u kom nema nicega. Provera u Pajtonu je jedina
+        # pouzdana (naslo se 29.09.: komanda je pukla na drugom redu).
+        redovi = [(red, doc) for red, doc in session.execute(upit) if red.sumnja]
 
         if not redovi:
             typer.echo("Nema nijednog predloga.")
@@ -1317,6 +1420,17 @@ def cmd_provera_prelaska() -> None:
                     NacrtKalkulacije.sumnja_odbio.is_(None),
                 )
             ) or 0
+            # vidi `sumnje`: JSON 'null' nije SQL NULL
+            ceka_odluku = sum(
+                1
+                for red in session.scalars(
+                    _select(NacrtKalkulacije).where(
+                        NacrtKalkulacije.sumnja.is_not(None),
+                        NacrtKalkulacije.sumnja_odbio.is_(None),
+                    )
+                )
+                if red.sumnja
+            )
             red(
                 True,
                 f"Predloga „možda je već u ERP-u“: {ceka_odluku} čeka odluku"

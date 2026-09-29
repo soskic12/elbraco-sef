@@ -406,15 +406,46 @@ class Workflow:
         if not value:
             return f"Pravilo nije napravljeno — polje {field.value} je prazno."
 
-        postoji = session.scalar(
-            select(RoutingRule).where(
-                RoutingRule.field == field,
-                RoutingRule.pattern == str(value),
-                RoutingRule.business_unit_id == unit.id,
+        # Traze se SVA pravila sa istim obrascem, bez obzira na jedinicu. Ranije
+        # se gledalo samo isto pravilo za istu jedinicu, pa je svaki novi
+        # "zapamti" za isti obrazac a drugu jedinicu pravio jos jedno pravilo.
+        # Mereno 29.09.: adresa „SRPSKIH VLADARA 46, 25260, Apatin“ vodila je na
+        # deset razlicitih jedinica, a isti PIB na osam - ko prvi pogodi, taj
+        # odlucuje, pa je tacnost jednog pravila pala na 53 %.
+        ista = list(
+            session.scalars(
+                select(RoutingRule).where(
+                    RoutingRule.field == field,
+                    RoutingRule.pattern == str(value),
+                    RoutingRule.active == True,  # noqa: E712
+                )
             )
         )
-        if postoji is not None:
+        if any(r.business_unit_id == unit.id for r in ista):
+            # Ako uz njega stoji i pravilo za drugu jedinicu, ono se gasi -
+            # operater je upravo rekao cije je.
+            suvisna = [r for r in ista if r.business_unit_id != unit.id]
+            for r in suvisna:
+                r.active = False
+            if suvisna:
+                return (
+                    f"Pravilo već postoji; ugašeno {len(suvisna)} koje je isti "
+                    f"obrazac slalo drugoj jedinici."
+                )
             return "Takvo pravilo već postoji."
+        if ista:
+            # Isti obrazac, druga jedinica: operater ispravlja, pa se pravilo
+            # menja umesto da se doda jos jedno koje se bori sa njim.
+            prvo, ostala = ista[0], ista[1:]
+            staro_ime = prvo.business_unit.code if prvo.business_unit else "?"
+            prvo.business_unit_id = unit.id
+            prvo.comment = f"ispravio {actor} sa dokumenta {doc.document_number}"[:300]
+            for r in ostala:
+                r.active = False
+            return (
+                f"Pravilo {field.value} = „{str(value)[:40]}” preusmereno sa "
+                f"{staro_ime} na {unit.code}."
+            )
         session.add(
             RoutingRule(
                 priority=50,
