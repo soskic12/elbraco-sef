@@ -96,3 +96,24 @@ def test_arhiviraj_stare_dira_samo_staro_i_gotovo(db, monkeypatch):
     assert stanje["STARO-CEKA"] is False
     assert stanje["STARO-SPREMNO"] is False
     assert stanje["NOVO-GOTOVO"] is False
+
+
+def test_nacrti_spisak_radi_i_bez_magacina(db):
+    """Zaustavljene kalkulacije se traže po stanju, a magacin se ne zna unapred."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=7, document_number="FA-1/26",
+                       supplier_name="NEKI DOBAVLJAČ")
+        session.add(doc)
+        session.flush()
+        session.add(NacrtKalkulacije(
+            document_id=doc.id, stanje=StanjeNacrta.PROBLEM, magacin="021",
+            problemi=["dobavljač nije otvoren u šifarniku"],
+        ))
+
+    ishod = _pokreni("nacrti", "--spisak", "--stanje", "problem")
+    assert "Svi magacini" in ishod.stdout
+    assert "FA-1/26" in ishod.stdout
+    # razlog mora da se vidi - sam broj ne govori ništa
+    assert "nije otvoren u šifarniku" in ishod.stdout

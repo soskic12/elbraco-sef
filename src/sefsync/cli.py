@@ -708,7 +708,8 @@ def cmd_nacrti(
     ),
     limit: int = typer.Option(None, help="Samo toliko najnovijih dokumenata."),
     magacin: str = typer.Option(None, help="Ispiši i spisak za taj magacin (npr. 010)."),
-    stanje: str = typer.Option("spreman", help="Koje stanje ispisati uz --magacin."),
+    spisak: bool = typer.Option(False, "--spisak", help="Ispiši spisak i bez magacina."),
+    stanje: str = typer.Option("spreman", help="Koje stanje ispisati uz --magacin ili --spisak."),
 ) -> None:
     """Stanje kalkulacija koje aplikacija sklapa: šta je spremno, a šta čeka čoveka."""
     _boot()
@@ -735,30 +736,39 @@ def cmd_nacrti(
     for kljuc, vrednost in brojac.items():
         typer.echo(f"  {kljuc.replace('_', ' '):<12} {vrednost}")
 
-    if magacin:
+    if magacin or spisak:
         from sqlalchemy.orm import selectinload as _selectinload
 
         from .models import Document
 
         with session_scope() as session:
+            upit = (
+                _select(NacrtKalkulacije)
+                .options(_selectinload(NacrtKalkulacije.document))
+                .where(NacrtKalkulacije.stanje == StanjeNacrta(stanje))
+            )
+            if magacin:
+                upit = upit.where(NacrtKalkulacije.magacin == magacin)
             redovi = list(
                 session.scalars(
-                    _select(NacrtKalkulacije)
-                    .options(_selectinload(NacrtKalkulacije.document))
-                    .where(NacrtKalkulacije.magacin == magacin)
-                    .where(NacrtKalkulacije.stanje == StanjeNacrta(stanje))
+                    upit
                     .join(Document, Document.id == NacrtKalkulacije.document_id)
                     .order_by(Document.issue_date.desc())
                 )
             )
             typer.echo("")
-            typer.echo(f"Magacin {magacin}, stanje „{stanje}“: {len(redovi)}")
+            gde = f"Magacin {magacin}, " if magacin else "Svi magacini, "
+            typer.echo(f"{gde}stanje „{stanje}“: {len(redovi)}")
             for r in redovi[:25]:
                 d = r.document
                 typer.echo(
                     f"   #{r.document_id:<6} {d.issue_date}  {(d.document_number or '?'):<22}"
                     f" {(d.supplier_name or '')[:28]:<28} {r.iznos or 0:>12,.2f}"
                 )
+                # Kod zaustavljenih kalkulacija sam broj ne govori nista -
+                # razlog je jedino sto covek moze da resi.
+                for problem in (r.problemi or [])[:3]:
+                    typer.echo(f"          {problem}")
 
     if not osvezi:
         typer.echo("")
