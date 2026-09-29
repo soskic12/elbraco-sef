@@ -1083,21 +1083,23 @@ def cmd_pravilo(
 def cmd_objasni(
     document_id: int = typer.Argument(..., help="Broj dokumenta iz panela."),
 ) -> None:
-    """Zasto bi dokument otisao bas toj jedinici - koja pravila pogadjaju i koje pobedjuje.
+    """Zasto bi dokument otisao bas toj jedinici - koja pravila pogadjaju i koje odlucuje.
 
-    Motor ide redom po prioritetu i uzima PRVO pravilo koje pogodi. Kad se dva
-    pravila otimaju oko istog dokumenta, iz spiska pravila se to ne vidi - vidi
-    se tek ovde, jer su poredjana onako kako ih motor stvarno gleda.
+    Motor ide redom po prioritetu i uzima PRVO pravilo koje pogodi. Iz spiska
+    pravila se ne vidi ko se otima oko konkretnog dokumenta; ovde se vidi, jer
+    su poredjana onako kako ih motor stvarno gleda.
+
+    Pita se sam motor (`RoutingEngine.pogodjena`), ne kopija njegovih uslova:
+    prva verzija je imala svoju kopiju, ispustila proveru vrste dokumenta i
+    prikazivala pravila koja motor nikad ne bi pogledao.
 
     Nista se ne menja: dokument ostaje tamo gde jeste.
     """
     _boot()
     from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
 
-    from .models import BusinessUnit, Document, MatchField, MatchOp, RoutingRule
-    from .routing.engine import RoutingEngine, _matches
-    from .textutil import normalize
+    from .models import BusinessUnit, Document
+    from .routing.engine import RoutingEngine
 
     with session_scope() as session:
         doc = session.get(Document, document_id)
@@ -1110,56 +1112,35 @@ def cmd_objasni(
             f"#{doc.id}  {doc.document_number or '?'}  "
             f"{(doc.supplier_name or '')[:34]}  PIB {doc.supplier_vat or '-'}"
         )
-        typer.echo(f"   sada: {jedinice.get(doc.business_unit_id, 'nerazvrstano')}"
-                   f"  ({doc.routing_source.value})")
+        typer.echo(f"   vrsta: {doc.document_type.value}")
+        typer.echo(f"   adresa isporuke: {(doc.delivery_address or '—')[:60]}")
+        typer.echo(
+            f"   sada: {jedinice.get(doc.business_unit_id, 'nerazvrstano')}"
+            f"  ({doc.routing_source.value})"
+        )
         if doc.routing_note:
             typer.echo(f"   {doc.routing_note[:100]}")
         typer.echo("")
 
+        motor = RoutingEngine.from_db(session)
         polja = doc.routing_fields()
-        pravila = list(
-            session.scalars(
-                select(RoutingRule)
-                .options(selectinload(RoutingRule.business_unit))
-                .where(RoutingRule.active == True)  # noqa: E712
-            )
-        )
-        pravila.sort(key=lambda r: (r.priority, r.id or 0))
-
-        pogodila = []
-        for pravilo in pravila:
-            if pravilo.supplier_vat and pravilo.supplier_vat.strip() != (
-                polja.get("supplier_vat") or ""
-            ).strip():
-                continue
-            if pravilo.field is MatchField.ANY_TEXT:
-                seno = " ".join(normalize(v) for v in polja.values() if v)
-            else:
-                seno = normalize(polja.get(pravilo.field.value) or "")
-            if not seno:
-                continue
-            obrazac = pravilo.pattern if pravilo.op is MatchOp.REGEX else normalize(pravilo.pattern)
-            try:
-                if _matches(pravilo.op, seno, obrazac):
-                    pogodila.append(pravilo)
-            except Exception:  # noqa: BLE001 - lose napisan regex ne rusi ispis
-                continue
+        pogodila = list(motor.pogodjena(polja))
 
         if not pogodila:
             typer.secho("Nijedno pravilo ne pogađa ovaj dokument.", fg="yellow")
         else:
             typer.echo(f"Pravila koja pogađaju ({len(pogodila)}), redom kako ih motor gleda:")
             for i, pravilo in enumerate(pogodila):
-                kod = pravilo.business_unit.code if pravilo.business_unit else "?"
-                oznaka = "  <- ODLUČUJE" if i == 0 else ""
+                kod = jedinice.get(pravilo.business_unit_id, "?")
+                vrsta = f" [samo {pravilo.document_type.value}]" if pravilo.document_type else ""
                 typer.secho(
                     f"   prioritet {pravilo.priority:<4} #{pravilo.id:<5} "
-                    f"{pravilo.field.value} {pravilo.op.value} „{pravilo.pattern[:30]}“ "
-                    f"-> {kod}{oznaka}",
+                    f"{pravilo.field.value} {pravilo.op.value} „{pravilo.pattern[:28]}“ "
+                    f"-> {kod}{vrsta}" + ("  <- ODLUČUJE" if i == 0 else ""),
                     fg="green" if i == 0 else None,
                 )
 
-        odluka = RoutingEngine.from_db(session).decide(polja)
+        odluka = motor.decide(polja)
         typer.echo("")
         typer.echo(
             f"Motor bi sada rekao: {jedinice.get(odluka.business_unit_id, 'nerazvrstano')}"

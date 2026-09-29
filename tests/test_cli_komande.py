@@ -309,3 +309,43 @@ def test_objasni_pokazuje_koje_pravilo_odlucuje(db):
     prvi = ishod.stdout.index("prioritet 40")
     drugi = ishod.stdout.index("prioritet 50")
     assert prvi < drugi
+
+
+def test_objasni_ne_prikazuje_pravila_za_drugu_vrstu_dokumenta(db):
+    """Prva verzija je imala svoju kopiju uslova i ispustila proveru vrste.
+
+    Zbog toga je prikazivala pravila koja motor nikad ne bi pogledao — i na
+    osnovu toga je izveden pogrešan zaključak o razvrstavanju.
+    """
+    from sefsync.models import (
+        BusinessUnit, Document, DocumentType, MatchField, MatchOp, RoutingRule, UnitKind,
+    )
+
+    with db.session_scope() as session:
+        office = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        mp = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+        session.add_all([office, mp])
+        session.flush()
+        session.add(RoutingRule(          # važi samo za knjižna odobrenja
+            priority=40, field=MatchField.ANY_TEXT, op=MatchOp.CONTAINS,
+            pattern="rabat", business_unit_id=office.id,
+            document_type=DocumentType.CREDIT_NOTE,
+        ))
+        session.add(RoutingRule(
+            priority=50, field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+            pattern="Srpskih vladara 46", business_unit_id=mp.id,
+        ))
+        doc = Document(
+            sef_invoice_id=901, document_number="F-2", document_type=DocumentType.INVOICE,
+            supplier_name="NEKO", supplier_vat="100000000",
+            delivery_address="Srpskih vladara 46, 25260, Apatin",
+            note="odobravamo rabat",
+        )
+        session.add(doc)
+        session.flush()
+        broj = doc.id
+
+    ishod = _pokreni("objasni", str(broj))
+    assert "rabat" not in ishod.stdout, "pravilo za odobrenja ne važi za fakturu"
+    assert "Srpskih vladara 46" in ishod.stdout
+    assert "MP002" in ishod.stdout

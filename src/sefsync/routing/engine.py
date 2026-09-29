@@ -127,8 +127,15 @@ class RoutingEngine:
             return self.povracaj_id, " (odobrenje iz objekta → magacin povraćaja)"
         return unit_id, ""
 
-    def decide(self, fields: dict[str, str | None]) -> RoutingDecision:
-        """`fields` je `UblDocument.routing_fields()` (ili isti oblik iz baze)."""
+    def pogodjena(self, fields: dict[str, str | None]):
+        """Sva pravila koja pogadjaju dokument, redom kako ih motor gleda.
+
+        Postoji da bi pitanje „zasto je otislo tu“ imalo odgovor iz ISTOG
+        koda koji i odlucuje. Prva verzija objasnjenja imala je svoju kopiju
+        uslova i u njoj ispustila proveru vrste dokumenta, pa je prikazivala
+        pravila koja motor nikad ne bi pogledao - i na osnovu toga sam izveo
+        pogresan zakljucak (29.09.). Dve kopije istog uslova se raziđu.
+        """
         normalized = {k: normalize(v) for k, v in fields.items() if k != "document_type"}
         # Tekst PDF priloga NE ulazi u any_text: on sadrzi i nasu adresu sedista,
         # nazive artikala i zaglavlje dobavljaca, pa siri svako "any_text" pravilo
@@ -173,19 +180,25 @@ class RoutingEngine:
             else:
                 subject = haystack
             if _matches(rule.op, subject, rule.pattern):
-                source = (
-                    RoutingSource.SUPPLIER_DEFAULT
-                    if rule.field is MatchField.SUPPLIER_VAT
-                    else RoutingSource.RULE
-                )
-                jedinica, dodatak = self._ispravi_odobrenje(rule.business_unit_id, doc_type)
-                return RoutingDecision(
-                    business_unit_id=jedinica,
-                    source=source,
-                    rule_id=rule.id,
-                    note=f"pravilo #{rule.id}: {rule.field.value} {rule.op.value} "
-                         f"'{rule.pattern}'{dodatak}",
-                )
+                yield rule
+
+    def decide(self, fields: dict[str, str | None]) -> RoutingDecision:
+        """`fields` je `UblDocument.routing_fields()` (ili isti oblik iz baze)."""
+        doc_type = (fields.get("document_type") or "").strip()
+        for rule in self.pogodjena(fields):
+            source = (
+                RoutingSource.SUPPLIER_DEFAULT
+                if rule.field is MatchField.SUPPLIER_VAT
+                else RoutingSource.RULE
+            )
+            jedinica, dodatak = self._ispravi_odobrenje(rule.business_unit_id, doc_type)
+            return RoutingDecision(
+                business_unit_id=jedinica,
+                source=source,
+                rule_id=rule.id,
+                note=f"pravilo #{rule.id}: {rule.field.value} {rule.op.value} "
+                     f"'{rule.pattern}'{dodatak}",
+            )
 
         if self.single_unit_id is not None:
             return RoutingDecision(
