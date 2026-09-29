@@ -165,7 +165,8 @@ def test_pravila_sukobi_nalazi_isti_obrazac_na_vise_jedinica(db):
 
     suvo = _pokreni("pravila-sukobi")
     assert "Srpskih vladara 46".upper() in suvo.stdout.upper()
-    assert "ostaje" in suvo.stdout and "gasi se" in suvo.stdout
+    # oba su nešto odlučivala — to je čovekova odluka, ne komandina
+    assert "TVOJA ODLUKA" in suvo.stdout
 
     _pokreni("pravila-sukobi", "--stvarno")
 
@@ -175,5 +176,33 @@ def test_pravila_sukobi_nalazi_isti_obrazac_na_vise_jedinica(db):
         aktivna = list(session.scalars(
             select(RoutingRule).where(RoutingRule.active == True)  # noqa: E712
         ))
+        assert len(aktivna) == 2, "ništa što je radilo ne sme da se ugasi samo"
+
+
+def test_pravila_sukobi_gasi_samo_ono_sto_nista_nije_odlucilo(db):
+    from sqlalchemy import select
+
+    from sefsync.models import BusinessUnit, MatchField, MatchOp, RoutingRule, UnitKind
+
+    with db.session_scope() as session:
+        a = BusinessUnit(code="MP002", name="APATIN", kind=UnitKind.RETAIL, erp_code="002")
+        b = BusinessUnit(code="MAG010", name="POVRAT", kind=UnitKind.WAREHOUSE, erp_code="010")
+        session.add_all([a, b])
+        session.flush()
+        session.add(RoutingRule(
+            field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+            pattern="Srpskih vladara 46", business_unit_id=a.id, hits=40,
+        ))
+        session.add(RoutingRule(       # nastalo greškom, nikad ništa nije odlučilo
+            field=MatchField.DELIVERY_ADDRESS, op=MatchOp.CONTAINS,
+            pattern="Srpskih vladara 46", business_unit_id=b.id,
+        ))
+
+    _pokreni("pravila-sukobi", "--stvarno")
+
+    with db.session_scope() as session:
+        aktivna = list(session.scalars(
+            select(RoutingRule).where(RoutingRule.active == True)  # noqa: E712
+        ))
         assert len(aktivna) == 1
-        assert aktivna[0].hits == 40, "ostaje ono sa više pogodaka"
+        assert aktivna[0].hits == 40

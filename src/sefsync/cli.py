@@ -1082,18 +1082,35 @@ def cmd_pravila_sukobi(
                 sporna.items(), key=lambda x: -len(x[1])
             ):
                 lista.sort(key=lambda p: -(p.hits or 0))
-                pobednik = lista[0]
+                # Gasi se samo ono sto NIKAD nista nije odlucilo. Pravilo sa
+                # pogotkom je nesto radilo, pa makar i lose - o njemu odlucuje
+                # covek. Prva verzija je birala "najvise pogodaka pobedjuje" i
+                # time bi zadrzala pravilo sa 43 pogotka i 36 promasaja, bas ono
+                # zbog kog je sve i krenulo (29.09.).
+                radila = [r for r in lista if (r.hits or 0) or (r.misses or 0)]
+                prazna = [r for r in lista if r not in radila]
                 typer.echo("")
                 typer.echo(f"   {polje} {operacija} „{obrazac[:52]}“")
                 for pravilo in lista:
                     jedinica = pravilo.business_unit.code if pravilo.business_unit else "?"
-                    oznaka = "  <- ostaje" if pravilo is pobednik else "     gasi se"
+                    if pravilo in prazna:
+                        oznaka = "     gasi se (nikad nije odlučilo)"
+                    elif len(radila) > 1:
+                        oznaka = "  <- TVOJA ODLUKA"
+                    else:
+                        oznaka = "  <- ostaje"
                     typer.echo(
                         f"      #{pravilo.id:<5} -> {jedinica:<8} "
                         f"pogodaka {pravilo.hits or 0:<5} promašaja {pravilo.misses or 0:<4}"
                         f"{oznaka}"
                     )
-                ugasiti += lista[1:]
+                if len(radila) > 1:
+                    typer.secho(
+                        "      → dva pravila su stvarno odlučivala; ovo ne diram, "
+                        "odluči i ugasi ručno u ekranu Pravila.",
+                        fg="yellow",
+                    )
+                ugasiti += prazna
 
         if dvojnici:
             broj = sum(len(v) - 1 for v in dvojnici.values())
@@ -1102,7 +1119,8 @@ def cmd_pravila_sukobi(
                        f"{broj} suvisnih")
             for lista in dvojnici.values():
                 lista.sort(key=lambda p: -(p.hits or 0))
-                ugasiti += lista[1:]
+                # I ovde: cuva se ono sto je radilo, gasi se visak bez traga.
+                ugasiti += [r for r in lista[1:] if not (r.hits or 0) and not (r.misses or 0)]
 
         typer.echo("")
         if not stvarno:
