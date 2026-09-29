@@ -363,7 +363,11 @@ def test_obavestenje_o_prijemu_ide_onome_ko_je_prosledio(db, podaci, monkeypatch
 
     primaoci, naslov = poslato[0]
     assert primaoci == ["nina@elbraco.rs"]
-    assert naslov.startswith("Prijem potvrđen · MP002")
+    # Naslov je namerno kratak i bez egzotičnih znakova — svaki takav znak
+    # preseca naslov na još jedan =?utf-8?q?…?= odsečak, a Gmail na Androidu
+    # ih loše spaja.
+    assert naslov.startswith("Prijem potvrđen:")
+    assert "MP002" in naslov
 
 
 def test_filter_sa_praznim_izborom(client, podaci):

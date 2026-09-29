@@ -177,4 +177,4 @@ def test_probni_rezim_preusmerava_sva_obavestenja(db, monkeypatch):
 
     primaoci, naslov = poslato[0]
     assert primaoci == ["bane12@elbraco.rs"]      # ne apatin@elbraco.rs
-    assert naslov.startswith("[PROBA → MP002]")
+    assert naslov.startswith("[PROBA MP002]")

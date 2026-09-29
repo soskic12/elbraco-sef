@@ -67,7 +67,7 @@ class Dispatcher:
             proba = self.settings.notify_override_to.strip()
             if proba:
                 # poruka nosi oznaku kome bi u redovnom radu otisla
-                message.subject = f"[PROBA → {unit.code if unit else 'NERAZVRSTANO'}] {message.subject}"
+                message.subject = f"[PROBA {unit.code if unit else 'NERAZVRSTANO'}] {message.subject}"
                 emails = [x.strip() for x in proba.split(",") if x.strip()]
                 phones = []
                 log.info("Probni režim: obaveštenje za dokument %s ide na %s", doc_id, emails)
@@ -158,7 +158,7 @@ class Dispatcher:
             message = Message(subject=naslov, body=telo, html=None)
             proba = self.settings.notify_override_to.strip()
             if proba:
-                message.subject = f"[PROBA → {magacin.code if magacin else '010'}] {message.subject}"
+                message.subject = f"[PROBA {magacin.code if magacin else '010'}] {message.subject}"
                 emails = [x.strip() for x in proba.split(",") if x.strip()]
 
         poslato = False
@@ -189,9 +189,8 @@ class Dispatcher:
             napomena = doc.received_note or ""
             poruka = Message(
                 subject=(
-                    f"Prijem potvrđen · {unit_name} · "
-                    f"{TYPE_LABEL.get(doc.document_type, 'Dokument')} "
-                    f"{doc.document_number or doc.sef_invoice_id}"
+                    f"Prijem potvrđen: {doc.document_number or doc.sef_invoice_id}"
+                    f" ({unit.code if unit else '?'})"
                 ),
                 body_text="\n".join(
                     [
@@ -272,12 +271,17 @@ class Dispatcher:
         return [x.strip() for x in raw.split(",") if x.strip()]
 
     def build_message(self, doc: Document, unit: BusinessUnit | None) -> Message:
+        # Naslov namerno bez crtica tipa "—" i tacaka "·": svaki takav znak
+        # preseca naslov na jos jedan =?utf-8?q?...?= odsecak, a Gmail na
+        # Androidu ih lose spaja. Na racunaru je izgledalo dobro, na telefonu ne
+        # (Bane, 29.09.). Srpska slova ostaju - bez njih naslov ne valja.
         label = TYPE_LABEL.get(doc.document_type, "Dokument")
         unit_name = f"{unit.code} - {unit.name}" if unit else "NERAZVRSTANO"
         prefix = "" if unit else "[NERAZVRSTANO] "
         subject = (
-            f"{prefix}{label} {doc.document_number or doc.sef_invoice_id} — "
-            f"{doc.supplier_name or 'nepoznat dobavljač'} — {money(doc.amount, doc.currency)}"
+            f"{prefix}{label} {doc.document_number or doc.sef_invoice_id}, "
+            f"{(doc.supplier_name or 'nepoznat dobavljač')[:40]}, "
+            f"{money(doc.amount, doc.currency)}"
         )
         link = f"{self.settings.public_base_url.rstrip('/')}/dokument/{doc.id}"
 
