@@ -1066,6 +1066,17 @@ def cmd_provera_prelaska() -> None:
         f"NOVI_TOK_OD = {podesavanja.novi_tok_od}" if podesavanja.novi_tok_od
         else "NOVI_TOK_OD nije zadat — stare fakture bi nudile upis kao i nove",
     )
+    # Prihvatanje na SEF-u je pravni cin prema dobavljacu. Upis kalkulacije ga
+    # ne dira - jedini put do automatskog prihvatanja je ova politika, pa mora
+    # da se vidi u proveri, a ne da se podrazumeva.
+    red(
+        podesavanja.auto_accept == "off",
+        "Prihvatanje na SEF-u radi samo čovek (AUTO_ACCEPT=off)"
+        if podesavanja.auto_accept == "off"
+        else f"PAZI: AUTO_ACCEPT={podesavanja.auto_accept} — sinhronizacija sama "
+        f"prihvata fakture na SEF-u",
+    )
+
     proba = podesavanja.notify_override_to.strip()
     red(
         not proba,
