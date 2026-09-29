@@ -270,7 +270,7 @@ def popust_za_uredjaj(
     }
 
 
-def zatvori_manjak_odobrenjem(document_id: int) -> str | None:
+def zatvori_manjak_odobrenjem(document_id: int, sesija=None) -> str | None:
     """Knjizno odobrenje zatvara otvoren manjak na fakturi koju ispravlja.
 
     Kad ostatak robe nikad ne stigne, dobavljac posalje knjizno odobrenje - put
@@ -282,11 +282,16 @@ def zatvori_manjak_odobrenjem(document_id: int) -> str | None:
 
     Vraca broj zatvorene fakture, ili None ako nije bilo sta da se zatvori.
     """
+    from contextlib import nullcontext
+
     from ..db import session_scope
     from ..models import Document, PrijavaManjka, utcnow
     from .mapiranje import kljuc_racuna
 
-    with session_scope() as session:
+    # Zove se i iz sinhronizacije, koja vec drzi sesiju. Otvoriti jos jednu
+    # znaci drzati dve veze ka bazi dok ciklus traje - mereno 29.09., tacno to
+    # je stajalo 73 sekunde dok su ljudi cekali da se prijave.
+    with (nullcontext(sesija) if sesija is not None else session_scope()) as session:
         odobrenje = session.get(Document, document_id)
         if odobrenje is None:
             return None

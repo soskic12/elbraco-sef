@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     # umesto da 30 sekundi drzi radnika i sacuva 502 umesto greske.
     db_pool_timeout: int = 10
     db_pool_recycle: int = 1800
+    # Upit duzi od ovoliko sekundi ide u log sa svojim tekstom. Bez toga se ne
+    # zna sta drzi vezu: merac kaze gde je uzeta, ne gde se zaglavila.
+    log_spor_upit_s: float = 2.0
     # Isto vazi i za vezu ka ERP-u, koja je do 29.09. isla sa podrazumevanih
     # 5+10 - i pala je prvog radnog dana ("QueuePool limit of size 5 overflow
     # 10 reached"), pa je IIS vracao 502. Provera duplikata pretrazuje sve

@@ -279,6 +279,18 @@ def _ids(raw: list[str]) -> list[int]:
     return out
 
 
+def _prebroj(upit):
+    """Broj redova koje upit vraca, bez zamotavanja u podupit.
+
+    `select(count()).select_from(upit.subquery())` izvlaci sve kolone svih
+    redova pa ih prebroji. Stranica reda to radi sedam puta po otvaranju -
+    jednom za ukupno i jednom za svaku karticu - pa je na 8.000 dokumenata
+    drzala vezu ka bazi po pedesetak sekundi. Mereno 29.09. na produkciji: tri
+    takva zahteva su drzala tri od pet veza, a ljudi nisu mogli da se prijave.
+    """
+    return upit.with_only_columns(func.count(), maintain_column_froms=True).order_by(None)
+
+
 def _queue_filter(query, prikaz: str):
     """Koji dokumenti pripadaju kojem prikazu."""
     aktivni = Document.archived == False
@@ -356,7 +368,7 @@ def queue(
                 )
             )
 
-        total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        total = session.scalar(_prebroj(query)) or 0
         rows = list(
             session.scalars(
                 query.order_by(Document.sent_date.desc(), Document.id.desc())
@@ -372,9 +384,7 @@ def queue(
             )
         )
         brojaci = {
-            naziv: session.scalar(
-                select(func.count()).select_from(_queue_filter(select(Document), naziv).subquery())
-            )
+            naziv: session.scalar(_prebroj(_queue_filter(select(Document), naziv)))
             for naziv in (
                 "red", "nepregledano", "nerazvrstano", "ceka_prijem", "manjak", "arhiva"
             )

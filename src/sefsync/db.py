@@ -53,7 +53,7 @@ def _kratko(putanja: str) -> str:
 
 
 def _prati_veze(engine: Engine) -> None:
-    """Belezi odakle je veza uzeta, da se zna ko je ne vraca."""
+    """Belezi odakle je veza uzeta i koji upiti traju predugo."""
     import time
     import traceback
 
@@ -71,6 +71,24 @@ def _prati_veze(engine: Engine) -> None:
     @event.listens_for(engine, "checkin")
     def _vracena(dbapi_con, zapis):  # noqa: ANN001, ARG001
         _uzete.pop(id(zapis), None)
+
+    # Spor upit je jedini nacin da se sazna sta stvarno traje. Merac veza kaze
+    # gde je veza uzeta, a ne gde se zaglavila - a stranica reda je drzala vezu
+    # pedesetak sekundi, sto je oborilo bazen.
+    prag = get_settings().log_spor_upit_s
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _pre(conn, cursor, izraz, parametri, kontekst, mnogo):  # noqa: ANN001, ARG001
+        conn.info["_pocetak"] = time.monotonic()
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _posle(conn, cursor, izraz, parametri, kontekst, mnogo):  # noqa: ANN001, ARG001
+        pocetak = conn.info.pop("_pocetak", None)
+        if pocetak is None:
+            return
+        trajalo = time.monotonic() - pocetak
+        if trajalo >= prag:
+            log.warning("Spor upit %.1fs: %s", trajalo, " ".join(izraz.split())[:300])
 
 
 def ko_drzi_veze(najstarijih: int = 10) -> list[dict]:

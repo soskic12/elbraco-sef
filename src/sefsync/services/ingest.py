@@ -434,7 +434,7 @@ class IngestService:
 
             session.flush()
             try:
-                zatvoren = zatvori_manjak_odobrenjem(doc.id)
+                zatvoren = zatvori_manjak_odobrenjem(doc.id, sesija=session)
             except SQLAlchemyError:
                 log.exception("Zatvaranje manjka odobrenjem %s nije proslo", doc.id)
             else:

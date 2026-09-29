@@ -1333,3 +1333,23 @@ def test_health_kaze_ko_drzi_vezu(client, db):
 
     # zatvorena sesija vraća vezu — inače merač ne bi vredeo ništa
     assert ko_drzi_veze() == []
+
+
+def test_brojanje_ne_zamotava_ceo_red_u_podupit(client, podaci, db):
+    """Stranica reda je brojala tako što izvuče sve kolone pa prebroji.
+
+    Na 8.000 dokumenata to je držalo vezu ka bazi pedesetak sekundi, sedam puta
+    po otvaranju stranice — dok ljudi nisu mogli da se prijave.
+    """
+    import sefsync.web.app as app_module
+    from sqlalchemy import select
+
+    from sefsync.models import Document
+
+    upit = app_module._prebroj(app_module._queue_filter(select(Document), "red"))
+    sql = str(upit)
+    assert "count(" in sql.lower()
+    assert "anon_1" not in sql, "ne sme da se zamotava u podupit"
+
+    with db.session_scope() as session:
+        assert session.scalar(upit) is not None
