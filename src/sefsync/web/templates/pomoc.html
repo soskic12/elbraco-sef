@@ -33,6 +33,15 @@
   aplikacija upiše kalkulaciju u ERP — ti je posle samo <b>zaknjižiš</b>.</p>
   <p class="muted small">Klikni tek kad je roba stvarno tu. Ako je oštećena, ne
   klikaj — javi kancelariji.</p>
+  <div class="small" style="margin-top:6px;padding:5px 8px;border-left:3px solid #b45309;
+                            background:#fffbeb">
+    <b>Tim klikom se faktura i prihvata na SEF-u</b>, ako joj ništa ne fali.
+    Prihvatanje je prema dobavljaču <b>nepovratno</b> — posle njega se faktura
+    više ne može odbiti. Zato: prvo prebroj, pa klikni.
+    <br>
+    Ako nešto fali, ne klikaj to dugme nego „Stiglo manje nego što piše“ —
+    tada se ništa ne prihvata dok se ne reši.
+  </div>
 {% endcall %}
 
 {% call korak('Ako je stiglo manje nego što faktura kaže') %}
@@ -105,6 +114,15 @@
   objektu koji uređaj prodaje. Kad preneseš, zabeleži kome.</p>
 {% endcall %}
 
+{% call korak('Kad upišeš kalkulaciju') %}
+  <p>Klik na <span class="tag">Upiši kalkulaciju</span> upisuje kalkulaciju u ERP
+  <b>i prihvata fakturu na SEF-u</b>, ako joj ništa ne fali. Prihvatanje je
+  nepovratno — posle njega se faktura više ne može odbiti, ostaje samo knjižno
+  odobrenje.</p>
+  <p class="muted small">Ako sa fakturom nešto nije u redu, <b>ne upisuj</b> —
+  javi kancelariji, oni odlučuju o odbijanju.</p>
+{% endcall %}
+
 {% call korak('„Možda je već u ERP-u“') %}
   <p>Žuti okvir znači da aplikacija sumnja da je ta faktura već uneta ručno, ali
   <b>nije sigurna</b> — broj se ne poklapa u potpunosti. Uz predlog piše koliko
@@ -119,6 +137,14 @@
   <p>Ulazni računi bez robe — struja, zakup, komunalije, usluge. Niko ih ne prima
   u magacinu, pa kalkulaciju upisuješ ti, dugmetom
   <span class="tag">Upiši kalkulaciju</span>.</p>
+{% endcall %}
+
+{% call korak('Šta se desi kad klikneš „Upiši kalkulaciju“') %}
+  <p>Kalkulacija ide u ERP kao <b>otvorena</b> — ti je posle zaknjižiš. Uz to se
+  faktura <b>prihvata na SEF-u</b>, ako joj ništa ne fali.</p>
+  <p class="muted small">Prihvatanje je prema dobavljaču nepovratno. Ako sa
+  fakturom nešto nije u redu, <b>ne upisuj</b> — javi kancelariji, odbijanje je
+  njihova odluka.</p>
 {% endcall %}
 
 {% call korak('„u ERP-u“ — kad fakture nestanu sa spiska') %}
@@ -253,7 +279,8 @@
 {% call korak('Šta aplikacija nikad ne radi sama') %}
   <ul class="small">
     <li>ne odbija fakturu na SEF-u — odbijanje uvek bira čovek,</li>
-    <li>ne prihvata fakturu kojoj nešto fali ili se o njoj još odlučuje,</li>
+    <li>ne prihvata fakturu sama od sebe — samo kad neko potvrdi prijem ili
+      upiše kalkulaciju, i samo ako joj ništa ne fali,</li>
     <li>ne knjiži kalkulaciju — upiše je, knjiži čovek u ERP-u,</li>
     <li>ne upisuje kalkulaciju dvaput za istu fakturu,</li>
     <li>ne dira šifarnik artikala ni komitenata u ERP-u,</li>

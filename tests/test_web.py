@@ -1353,3 +1353,27 @@ def test_brojanje_ne_zamotava_ceo_red_u_podupit(client, podaci, db):
 
     with db.session_scope() as session:
         assert session.scalar(upit) is not None
+
+
+def test_svaka_uloga_zna_da_njen_klik_prihvata_na_sefu(client, db):
+    """Prihvatanje je nepovratno — ne sme da piše samo operaterima."""
+    from sefsync.models import BusinessUnit as BU, UnitKind as UK
+
+    with db.session_scope() as session:
+        session.add_all([
+            BU(code="MAG010", name="POVRAĆAJ ROBE", kind=UK.WAREHOUSE, erp_code="010"),
+            BU(code="OFFICE", name="UPRAVA — FINANSIJE", kind=UK.HQ),
+            BU(code="MP002", name="PRODAJNO MESTO APATIN", kind=UK.RETAIL, erp_code="002"),
+        ])
+
+    ljudi = [
+        User("predrag", "Bajic Predrag", Role.POSLOVODJA, "002", "POSLOVODJA"),
+        User("ilijana", "Ilijana", Role.POSLOVODJA, "010", "POSLOVODJA"),
+        User("bogdan", "Sunajko Bogdan", Role.POSLOVODJA, "088", "FINANSIJE"),
+        OPERATER,
+    ]
+    for covek in ljudi:
+        prijavi(client, covek)
+        tekst = client.get("/pomoc").text
+        assert "prihvata" in tekst.lower(), f"{covek.login} ne vidi ništa o prihvatanju"
+        assert "nepovratno" in tekst.lower() or "ne radi sama" in tekst.lower()
