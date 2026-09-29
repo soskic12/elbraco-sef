@@ -206,3 +206,34 @@ def test_pravila_sukobi_gasi_samo_ono_sto_nista_nije_odlucilo(db):
         ))
         assert len(aktivna) == 1
         assert aktivna[0].hits == 40
+
+
+def test_pravilo_gasi_i_vraca_bez_gubitka_brojaca(db):
+    """Gasi se, ne briše — brojači su jedini podatak koliko je pravilo vredelo."""
+    from sefsync.models import BusinessUnit, MatchField, MatchOp, RoutingRule, UnitKind
+
+    with db.session_scope() as session:
+        u = BusinessUnit(code="MP003", name="ODŽACI", kind=UnitKind.RETAIL, erp_code="003")
+        session.add(u)
+        session.flush()
+        p = RoutingRule(
+            field=MatchField.SUPPLIER_VAT, op=MatchOp.CONTAINS, pattern="103699024",
+            business_unit_id=u.id, hits=5, misses=5,
+        )
+        session.add(p)
+        session.flush()
+        broj = p.id
+
+    ishod = _pokreni("pravilo", str(broj))
+    assert "103699024" in ishod.stdout
+    assert "tačnost 50%" in ishod.stdout
+
+    _pokreni("pravilo", str(broj), "--ugasi")
+    with db.session_scope() as session:
+        p = session.get(RoutingRule, broj)
+        assert p.active is False
+        assert p.hits == 5 and p.misses == 5      # istorija ostaje
+
+    _pokreni("pravilo", str(broj), "--upali")
+    with db.session_scope() as session:
+        assert session.get(RoutingRule, broj).active is True

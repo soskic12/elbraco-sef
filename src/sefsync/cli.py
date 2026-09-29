@@ -1019,6 +1019,66 @@ def cmd_analiza_razvrstavanja(
                    f"{broj(Document.routing_corrected == True, Document.received_at.isnot(None))}")  # noqa: E712
 
 
+@app.command("pravilo")
+def cmd_pravilo(
+    broj: int = typer.Argument(..., help="Broj pravila, onaj iza # u ispisu."),
+    ugasi: bool = typer.Option(False, "--ugasi", help="Isključi pravilo."),
+    upali: bool = typer.Option(False, "--upali", help="Vrati isključeno pravilo."),
+) -> None:
+    """Prikazuje jedno pravilo i, po potrebi, gasi ga ili vraca.
+
+    Gasi se, ne brise: brojaci pogodaka i promasaja su jedini podatak o tome
+    koliko je pravilo vredelo, pa ostaju. Ugaseno pravilo se vidi u `pravila` i
+    moze da se vrati jednim pozivom.
+    """
+    _boot()
+    from sqlalchemy.orm import selectinload
+
+    from .models import AuditLog, RoutingRule
+
+    with session_scope() as session:
+        pravilo = session.get(
+            RoutingRule, broj, options=[selectinload(RoutingRule.business_unit)]
+        )
+        if pravilo is None:
+            typer.secho(f"Nema pravila #{broj}.", fg="red")
+            raise typer.Exit(1)
+
+        jedinica = pravilo.business_unit.code if pravilo.business_unit else "?"
+        ukupno = (pravilo.hits or 0) + (pravilo.misses or 0)
+        tacnost = f"{(pravilo.hits or 0) / ukupno:.0%}" if ukupno else "—"
+        typer.echo(
+            f"#{pravilo.id}  {'aktivno' if pravilo.active else 'ISKLJUČENO'}  "
+            f"prioritet {pravilo.priority}"
+        )
+        typer.echo(f"   {pravilo.field.value} {pravilo.op.value} „{pravilo.pattern}“")
+        typer.echo(f"   -> {jedinica}")
+        typer.echo(
+            f"   pogodaka {pravilo.hits or 0}, promašaja {pravilo.misses or 0}, "
+            f"tačnost {tacnost}"
+        )
+        if pravilo.comment:
+            typer.echo(f"   {pravilo.comment}")
+
+        if not ugasi and not upali:
+            typer.echo("")
+            typer.echo("Za gašenje dodaj --ugasi, za vraćanje --upali.")
+            raise typer.Exit(0)
+        if ugasi and upali:
+            typer.secho("Ili --ugasi ili --upali, ne oboje.", fg="red")
+            raise typer.Exit(1)
+
+        pravilo.active = not ugasi
+        session.add(AuditLog(
+            actor="cli",
+            action="routing.rule.disabled" if ugasi else "routing.rule.enabled",
+            detail=f"#{pravilo.id} {pravilo.field.value} „{pravilo.pattern[:60]}“ -> {jedinica}",
+        ))
+
+    typer.echo("")
+    typer.secho(f"Pravilo #{broj} je {'ugašeno' if ugasi else 'vraćeno'}.", fg="green")
+
+
 @app.command("pravila-sukobi")
 def cmd_pravila_sukobi(
     stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
