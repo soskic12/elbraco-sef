@@ -442,3 +442,40 @@ def test_dovrsi_upise_nalazi_primljeno_a_neupisano(db, monkeypatch):
 
     _pokreni("dovrsi-upise", "--stvarno")
     assert len(pozvano) == 1
+
+
+def test_ozivi_veze_vraca_samo_jednoznacne(db):
+    """Dulet su sve LEXA veze ostale ugašene jer im je ključ bio prazan."""
+    from sqlalchemy import select
+
+    from sefsync.models import ItemMapping
+
+    with db.session_scope() as session:
+        # dva različita zvučnika istog dobavljača — ugašeni greškom
+        for ime, sifra in (("LEXA BT ZVUCNIK LX-201 SPARK", "98101"),
+                           ("LEXA BT ZVUCNIK LX-302 NITRO", "98102")):
+            session.add(ItemMapping(
+                supplier_vat="100123456", supplier_item_name=ime,
+                erp_item_code=sifra, source="kolebljivo", active=False,
+            ))
+        # isti naziv, dve šifre — tu je gašenje bilo ispravno
+        for sifra in ("15064", "84154"):
+            session.add(ItemMapping(
+                supplier_vat="107351003", supplier_item_name="MASINA ZA PRANJE VESA",
+                erp_item_code=sifra, source="kolebljivo", active=False,
+            ))
+
+    suvo = _pokreni("ozivi-veze")
+    assert "oživljava se (naziv vodi na jednu šifru): 2" in suvo.stdout
+    assert "ostaje ugašeno (naziv stvarno dvosmislen): 2" in suvo.stdout
+
+    _pokreni("ozivi-veze", "--stvarno")
+
+    with db.session_scope() as session:
+        zive = sorted(
+            v.erp_item_code
+            for v in session.scalars(
+                select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
+            )
+        )
+    assert zive == ["98101", "98102"]

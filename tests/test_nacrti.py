@@ -687,3 +687,75 @@ def test_osvezi_zapele_dira_samo_ono_sto_erp_moze_da_odmrzne(db, monkeypatch):
 
     assert sorted(dirani) == sorted([ceka, problem])
     assert ishod["pregledano"] == 2
+
+
+def test_povezivanje_bez_sifre_i_barkoda_ne_gasi_prethodnu_vezu(db, monkeypatch):
+    """Dule je povezao sve LEXA zvučnike i sve su mu ostale na spisku.
+
+    Ključ veze bio je (dobavljač, prazno, prazno) — isti za svaki takav artikal
+    tog dobavljača — pa je svako novo povezivanje gasilo prethodno kao
+    „kolebljivo".
+    """
+    from sqlalchemy import select
+
+    from sefsync.models import Document, DocumentLine, ItemMapping
+    from sefsync.services import nacrti as N
+    from sefsync.services.nacrti import povezi_sifru
+
+    # osvežavanje nacrta traži ERP; ovde se meri knjiženje veze
+    monkeypatch.setattr(N, "osvezi", lambda *a, **k: None)
+    monkeypatch.setattr(N, "_cekaju_isti_artikal", lambda *a, **k: [])
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=8800, document_number="R-1384/26VP",
+                       supplier_name="VITEL DOO", supplier_vat="100123456")
+        session.add(doc)
+        session.flush()
+        for i, ime in enumerate(
+            ("LEXA BT ZVUCNIK LX-201 SPARK", "LEXA BT ZVUCNIK LX-302 NITRO"), start=1
+        ):
+            session.add(DocumentLine(document_id=doc.id, line_no=i, name=ime,
+                                     quantity=1, line_amount=6900.0))
+        doc_id = doc.id
+
+    povezi_sifru(doc_id, 1, "98101", korisnik="dusan")
+    povezi_sifru(doc_id, 2, "98102", korisnik="dusan")
+
+    with db.session_scope() as session:
+        veze = list(session.scalars(
+            select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
+        ))
+        sifre = sorted(v.erp_item_code for v in veze)
+
+    assert sifre == ["98101", "98102"], "dva različita artikla — dve žive veze"
+
+
+def test_isti_naziv_sa_drugom_sifrom_i_dalje_gasi_vezu(db, monkeypatch):
+    """Kad isti naziv jednom znači jedno a drugi put drugo, veza se gasi."""
+    from sqlalchemy import select
+
+    from sefsync.models import Document, DocumentLine, ItemMapping
+    from sefsync.services import nacrti as N
+    from sefsync.services.nacrti import povezi_sifru
+
+    monkeypatch.setattr(N, "osvezi", lambda *a, **k: None)
+    monkeypatch.setattr(N, "_cekaju_isti_artikal", lambda *a, **k: [])
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=8801, document_number="R-2/26",
+                       supplier_name="CSM", supplier_vat="107351003")
+        session.add(doc)
+        session.flush()
+        for i in (1, 2):
+            session.add(DocumentLine(document_id=doc.id, line_no=i,
+                                     name="MASINA ZA PRANJE VESA", quantity=1))
+        doc_id = doc.id
+
+    povezi_sifru(doc_id, 1, "15064", korisnik="dusan")
+    povezi_sifru(doc_id, 2, "84154", korisnik="dusan")
+
+    with db.session_scope() as session:
+        zive = list(session.scalars(
+            select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
+        ))
+    assert zive == [], "dvosmislen naziv ne sme da ostane kao veza"

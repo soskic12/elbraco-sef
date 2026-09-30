@@ -658,13 +658,39 @@ def povezi_sifru(
         linija.erp_item_code = sifra
         linija.erp_mapping_source = "rucno"
 
-        postoji = session.scalar(
-            select(ItemMapping).where(
-                ItemMapping.supplier_vat == pib,
-                ItemMapping.supplier_item_id == (linija.sellers_item_id or None),
-                ItemMapping.barcode == (linija.standard_item_id or None),
+        # Kad stavka nema ni sifru dobavljaca ni barkod, identitet joj je NAZIV.
+        # Ranije je kljuc bio (dobavljac, prazno, prazno) - isti za svaki takav
+        # artikal tog dobavljaca - pa je svako novo povezivanje gasilo prethodno
+        # kao "kolebljivo". Dule je povezao sve LEXA zvucnike i sve su mu ostale
+        # na spisku, jer je poslednji klik ubio sve pre njega (30.09.).
+        ima_kljuc = bool((linija.sellers_item_id or "").strip()
+                         or (linija.standard_item_id or "").strip())
+        if ima_kljuc:
+            postoji = session.scalar(
+                select(ItemMapping).where(
+                    ItemMapping.supplier_vat == pib,
+                    ItemMapping.supplier_item_id == (linija.sellers_item_id or None),
+                    ItemMapping.barcode == (linija.standard_item_id or None),
+                )
             )
-        )
+        else:
+            from ..textutil import normalize
+
+            ime = normalize(linija.name or "")
+            postoji = next(
+                (
+                    m
+                    for m in session.scalars(
+                        select(ItemMapping).where(
+                            ItemMapping.supplier_vat == pib,
+                            ItemMapping.supplier_item_id.is_(None),
+                            ItemMapping.barcode.is_(None),
+                        )
+                    )
+                    if normalize(m.supplier_item_name or "") == ime
+                ),
+                None,
+            )
         if postoji is not None and postoji.erp_item_code.strip() != sifra:
             # Ista dobavljaceva sifra, drugi artikal - dakle ne znaci jedno.
             postoji.active = False

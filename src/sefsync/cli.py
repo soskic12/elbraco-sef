@@ -1159,6 +1159,79 @@ def cmd_dovrsi_upise(
     typer.secho(f"Upisano: {uspelo} od {len(kandidati)}.", fg="green")
 
 
+@app.command("ozivi-veze")
+def cmd_ozivi_veze(
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+) -> None:
+    """Vraca veze sifara ugasene greskom, ne zato sto su stvarno dvosmislene.
+
+    Kad stavka nema ni sifru dobavljaca ni barkod, kljuc veze je bio
+    (dobavljac, prazno, prazno) - isti za svaki takav artikal tog dobavljaca.
+    Zato je svako novo povezivanje gasilo prethodno kao „kolebljivo“: Dule je
+    povezao sve LEXA zvucnike i sve su mu ostale na spisku (30.09.).
+
+    Ozivljava se samo ono gde naziv vodi na tacno jednu sifru. Ako isti naziv
+    kod istog dobavljaca stvarno znaci vise artikala, veza ostaje ugasena - tu
+    je gasenje bilo ispravno.
+    """
+    _boot()
+    from collections import defaultdict
+
+    from sqlalchemy import select
+
+    from .models import ItemMapping
+    from .textutil import normalize
+
+    with session_scope() as session:
+        mrtve = list(
+            session.scalars(
+                select(ItemMapping).where(
+                    ItemMapping.active == False,  # noqa: E712
+                    ItemMapping.source == "kolebljivo",
+                    ItemMapping.supplier_item_id.is_(None),
+                    ItemMapping.barcode.is_(None),
+                )
+            )
+        )
+        if not mrtve:
+            typer.echo("Nema veza ugašenih zbog praznog ključa.")
+            raise typer.Exit(0)
+
+        po_imenu: dict[tuple, set] = defaultdict(set)
+        for m in mrtve:
+            po_imenu[(m.supplier_vat, normalize(m.supplier_item_name or ""))].add(
+                (m.erp_item_code or "").strip()
+            )
+
+        za_oziv = [
+            m
+            for m in mrtve
+            if len(po_imenu[(m.supplier_vat, normalize(m.supplier_item_name or ""))]) == 1
+        ]
+        ostaju = [m for m in mrtve if m not in za_oziv]
+
+        typer.echo(f"Ugašenih zbog praznog ključa: {len(mrtve)}")
+        typer.echo(f"   oživljava se (naziv vodi na jednu šifru): {len(za_oziv)}")
+        typer.echo(f"   ostaje ugašeno (naziv stvarno dvosmislen): {len(ostaju)}")
+        typer.echo("")
+        for m in za_oziv[:15]:
+            typer.echo(f"   {(m.supplier_item_name or '')[:44]:<44} -> {m.erp_item_code}")
+        if len(za_oziv) > 15:
+            typer.echo(f"   … i još {len(za_oziv) - 15}")
+
+        if not stvarno:
+            typer.echo("")
+            typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+            raise typer.Exit(0)
+
+        for m in za_oziv:
+            m.active = True
+            m.source = "rucno"
+
+    typer.echo("")
+    typer.secho(f"Oživljeno: {len(za_oziv)}. Pusti `nacrti --osvezi`.", fg="green")
+
+
 @app.command("dokument")
 def cmd_dokument(
     broj: str = typer.Argument(..., help="Broj fakture ili #id iz panela."),
