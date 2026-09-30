@@ -1921,3 +1921,25 @@ poslovođa više ne radi, reklamacije, odakle dolaze dokumenti i oznaka
 „nepregledano“, šta aplikacija uradi sama u kalkulaciji, upozorenje da se isti
 dokument ne radi dvaput, i tabela „ako nešto zaškripi“. Fajlovi u
 `docs/uputstva/` nose baner da se više ne održavaju i ostaju samo kao trag.
+
+## Veza po barkodu (30.09.)
+
+Dule se žalio: neko slika, on otvori šifru i poveže je na jednoj fakturi, a
+ostale i dalje stoje sa „čeka šifru“.
+
+Propagacija je postojala — `povezi_sifru` osvežava sve nacrte koji čekaju isti
+artikal — ali traženje šifre je gledalo **samo šifru dobavljača**:
+
+```
+1. mapiranje po (PIB + šifra dobavljača)
+2. ERP-ov šifarnik ARTIKLI po barkodu
+```
+
+Kolona `ItemMapping.barcode` se **upisivala a nikad nije čitala**. Zato je veza
+vredela samo za istog dobavljača i istu njegovu šifru; ista roba od drugog
+dobavljača, ili sa promenjenom šifrom dobavljača, i dalje je čekala.
+
+Dodat je treći put, između ta dva: **mapiranje po barkodu**. Mereno na 2.110
+aktivnih veza — 1.872 ima upisan barkod, 1.867 različitih, i **nijedan barkod
+ne vodi na dve šifre**, pa je traženje jednoznačno. Ako se ikad pojavi
+dvosmislen, app ne bira nego vraća „čeka čoveka“.

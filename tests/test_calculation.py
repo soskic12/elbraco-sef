@@ -1092,3 +1092,75 @@ def test_moguca_kalkulacija_ceka_coveka_i_preskace_sparene():
     # bez iznosa ili datuma nema po cemu
     assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", None, 82300, set()) is None
     assert moguca_kalkulacija(veza, "IF-2026-1044-001", "44011", 62160.0, None, set()) is None
+
+
+# --------------------------------------------------------------------------- #
+# veza zapamćena po barkodu vredi i za druge fakture
+# --------------------------------------------------------------------------- #
+
+
+def test_sifra_se_nalazi_i_po_zapamcenom_barkodu(db):
+    """Dule poveže šifru na jednoj fakturi — ostale su i dalje čekale.
+
+    Kolona `barcode` u mapiranju se upisivala a nikad nije čitala, pa je veza
+    vredela samo za istog dobavljača i istu njegovu šifru.
+    """
+    from sefsync.erp.kalkulacija import _nasa_sifra
+    from sefsync.models import DocumentLine, ItemMapping
+
+    class PraznaVeza:
+        def execute(self, *a, **k):
+            class Prazno:
+                def all(self):
+                    return []
+
+                def first(self):
+                    return None
+
+            return Prazno()
+
+    with db.session_scope() as session:
+        session.add(ItemMapping(
+            supplier_vat="100042618", supplier_item_id="EWE-123",
+            barcode="8600123456789", erp_item_code="93827", source="rucno",
+        ))
+        session.flush()
+
+        # druga faktura, drugi dobavljač, ista roba po barkodu
+        linija = DocumentLine(
+            document_id=1, line_no=1, name="Gorenje WPNEI",
+            sellers_item_id="DRUGA-SIFRA", standard_item_id="8600123456789",
+        )
+        sifra, odakle = _nasa_sifra(session, PraznaVeza(), "999999999", linija)
+
+    assert sifra == "93827"
+    assert odakle == "mapiranje po barkodu"
+
+
+def test_dvosmislen_barkod_ceka_coveka(db):
+    """Ako je isti barkod ranije povezan sa dve šifre, app ne bira."""
+    from sefsync.erp.kalkulacija import _nasa_sifra
+    from sefsync.models import DocumentLine, ItemMapping
+
+    class PraznaVeza:
+        def execute(self, *a, **k):
+            class Prazno:
+                def all(self):
+                    return []
+
+            return Prazno()
+
+    with db.session_scope() as session:
+        for pib, sifra in (("100042618", "93827"), ("101717578", "95398")):
+            session.add(ItemMapping(
+                supplier_vat=pib, supplier_item_id=f"S-{pib}",
+                barcode="8600123456789", erp_item_code=sifra, source="rucno",
+            ))
+        session.flush()
+        linija = DocumentLine(
+            document_id=1, line_no=1, name="X", standard_item_id="8600123456789",
+        )
+        sifra, odakle = _nasa_sifra(session, PraznaVeza(), "999999999", linija)
+
+    assert sifra is None
+    assert "više šifara" in odakle

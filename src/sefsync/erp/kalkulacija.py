@@ -246,6 +246,30 @@ def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine
         if m is not None:
             return m.erp_item_code, "mapiranje"
 
+    # Veza zapamcena po barkodu vazi i kad dobavljac promeni svoju sifru, i kad
+    # isti artikal stigne od drugog dobavljaca. Kolona `barcode` se do sada
+    # upisivala a nikad nije citana, pa je Dule povezao sifru na jednoj fakturi
+    # a ostale su i dalje cekale (zalba 30.09.).
+    #
+    # Mereno na 2.110 aktivnih veza: 1.872 ima barkod, 1.867 razlicitih, i
+    # nijedan barkod ne vodi na dve sifre - pa je trazenje jednoznacno. Ako se
+    # ikad pojavi dvosmislen, ne odlucuje se: vraca se "ceka coveka".
+    if linija.standard_item_id:
+        barkod = linija.standard_item_id.strip()
+        po_barkodu = (
+            session.query(ItemMapping)
+            .filter(
+                ItemMapping.barcode == barkod,
+                ItemMapping.active == True,  # noqa: E712 - MS SQL nema IS TRUE
+            )
+            .all()
+        )
+        sifre = {m.erp_item_code.strip() for m in po_barkodu if m.erp_item_code}
+        if len(sifre) == 1:
+            return sifre.pop(), "mapiranje po barkodu"
+        if len(sifre) > 1:
+            return None, "barkod je ranije povezan sa više šifara"
+
     if linija.standard_item_id:
         redovi = conn.execute(
             text(
