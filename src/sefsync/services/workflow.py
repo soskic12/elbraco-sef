@@ -118,11 +118,29 @@ class Workflow:
             if self._forward_one(doc_id, actor):
                 poslato += 1
             else:
-                problemi.append(f"#{doc_id}: slanje nije uspelo")
+                problemi.append(f"#{doc_id}: {self._zasto_nije_poslato(doc_id)}")
 
         if poslato == 0 and problemi:
             return ActionResult(False, "Ništa nije prosleđeno.", 0, problemi)
         return ActionResult(True, f"Prosleđeno: {poslato}.", poslato, problemi)
+
+    def _zasto_nije_poslato(self, doc_id: int) -> str:
+        """Objasnjenje za neuspelo prosledjivanje, umesto golog „slanje nije uspelo“.
+
+        Prosledjivanje jeste slanje obavestenja, pa jedinica bez adrese ne moze
+        da primi nista - a poruka to nije govorila, nego je covek ostajao sa
+        „slanje nije uspelo“ i bez ideje sta da uradi (naslo se 30.09. na
+        magacinu povrata, koji je docekao prvi dokument bez upisanog mejla).
+        """
+        with session_scope() as session:
+            doc = session.get(Document, doc_id)
+            jedinica = doc.business_unit if doc is not None else None
+            if jedinica is not None and not jedinica.email_list():
+                return (
+                    f"jedinica {jedinica.code} nema upisan mejl — "
+                    f"dopuni je u „Poslovne jedinice“"
+                )
+        return "slanje nije uspelo"
 
     def _forward_one(self, doc_id: int, actor: str) -> bool:
         ok = self.notifier.notify_document(doc_id)

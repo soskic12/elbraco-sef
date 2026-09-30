@@ -1555,3 +1555,25 @@ def test_zapamti_preusmerava_postojece_pravilo(podaci, db):
         adresna = [p for p in pravila if p.field is MatchField.DELIVERY_ADDRESS]
         assert len(adresna) == 1, "za isti obrazac sme da stoji samo jedno pravilo"
         assert adresna[0].business_unit_id == podaci["druga"]
+
+
+def test_jedinica_bez_mejla_kaze_sta_fali(podaci, db):
+    """„Slanje nije uspelo" ne kaže čoveku šta da uradi."""
+    from sefsync.models import BusinessUnit as BU
+    from sefsync.services.workflow import Workflow
+
+    with db.session_scope() as session:
+        session.get(BU, podaci["unit"]).emails = None
+
+    class NeProlazi:
+        def notify_document(self, doc_id):
+            return False
+
+        def notify_receipt(self, doc_id, confirmed_by):
+            return True
+
+    ishod = Workflow(notifier=NeProlazi()).forward([podaci["doc"]], actor="nina")
+    assert not ishod.ok
+    poruka = " ".join(ishod.problems)
+    assert "nema upisan mejl" in poruka
+    assert "MP002" in poruka

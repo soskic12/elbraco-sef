@@ -1559,13 +1559,13 @@ def cmd_provera_prelaska() -> None:
 
     # --- jedinice bez adrese ---
     with session_scope() as session:
+        # Gledaju se SVE jedinice koje primaju dokumente, ne samo maloprodaja:
+        # magacin povrata je bez mejla docekao prvi dokument i prosledjivanje je
+        # palo porukom "slanje nije uspelo" (30.09.).
         bez_mejla = [
             u.code
             for u in session.scalars(
-                _select(BusinessUnit).where(
-                    BusinessUnit.active == True,  # noqa: E712
-                    BusinessUnit.kind == UnitKind.RETAIL,
-                )
+                _select(BusinessUnit).where(BusinessUnit.active == True)  # noqa: E712
             )
             if not (u.emails or "").strip()
             and session.scalar(
@@ -1573,7 +1573,7 @@ def cmd_provera_prelaska() -> None:
                 .where(Document.business_unit_id == u.id)
             )
         ]
-        red(not bez_mejla, "Sve maloprodajne jedinice sa dokumentima imaju mejl"
+        red(not bez_mejla, "Sve jedinice sa dokumentima imaju mejl"
             if not bez_mejla else "Bez mejla, a imaju dokumente: " + ", ".join(sorted(bez_mejla)))
 
         stanja = {
