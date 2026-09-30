@@ -731,6 +731,15 @@ def _cekaju_isti_artikal(document_id: int, line_no: int) -> list[int]:
                     Document.supplier_vat == doc.supplier_vat,
                 )
             )
+        # Kad nema ni barkoda ni sifre dobavljaca, jedino preostaje naziv - a bez
+        # toga se veza ne bi prenela ni na jednu drugu fakturu.
+        if not uslovi and linija.name and doc is not None and doc.supplier_vat:
+            uslovi.append(
+                and_(
+                    DocumentLine.name == linija.name,
+                    Document.supplier_vat == doc.supplier_vat,
+                )
+            )
         if not uslovi:
             return []
         return list(

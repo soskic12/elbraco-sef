@@ -27,6 +27,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
 from ..models import Document, DocumentLine, DocumentType, ItemMapping, UnitKind
+from ..textutil import normalize
 from .connection import erp_engine_za_upis, get_erp_engine
 
 log = logging.getLogger(__name__)
@@ -282,6 +283,34 @@ def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine
             return redovi[0].a, "barkod"
         if len(redovi) > 1:
             return None, "barkod vodi na vise sifara"
+
+    # Poslednja nada: isti dobavljac, isti naziv. Neki dobavljaci ne salju ni
+    # svoju sifru ni barkod (Vitel: „LEXA BT ZVUCNIK LX-302 NITRO“, sifra i EAN
+    # prazni), pa veza nema za sta drugo da se zakaci - Dule je povezivao isti
+    # artikal na svakoj fakturi posebno (zalba 30.09.).
+    #
+    # Mereno na 2.110 veza: 2.057 razlicitih parova (dobavljac + naziv), od
+    # kojih 24 vode na vise sifara - svi od jednog dobavljaca koji salje opste
+    # nazive tipa „MASINA ZA PRANJE VESA“. Zato se odlucuje samo kad je pogodak
+    # jedan; opsti nazivi ostaju coveku.
+    if pib and (linija.name or "").strip():
+        ime = normalize(linija.name)
+        if ime:
+            po_imenu = [
+                m
+                for m in session.query(ItemMapping)
+                .filter(
+                    ItemMapping.supplier_vat == pib,
+                    ItemMapping.active == True,  # noqa: E712
+                )
+                .all()
+                if normalize(m.supplier_item_name or "") == ime
+            ]
+            sifre = {m.erp_item_code.strip() for m in po_imenu if m.erp_item_code}
+            if len(sifre) == 1:
+                return sifre.pop(), "mapiranje po nazivu"
+            if len(sifre) > 1:
+                return None, "isti naziv je ranije povezan sa više šifara"
 
     return None, "nepoznat"
 

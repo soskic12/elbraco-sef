@@ -32,6 +32,25 @@ DOZVOLJENE = {
 NAJVECA = 12 * 1024 * 1024  # 12 MB - telefonska slika je oko 2-5 MB
 
 
+def _po_sadrzaju(sadrzaj: bytes) -> str | None:
+    """Vrsta slike po prvim bajtovima, kad zaglavlje ne kaze nista upotrebljivo.
+
+    Potpisi su kratki i jednoznacni; ako se nijedan ne poklopi, fajl se odbija
+    kao i do sada.
+    """
+    if sadrzaj[:3] == bytes([0xFF, 0xD8, 0xFF]):
+        return ".jpg"
+    if sadrzaj[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+        return ".png"
+    if sadrzaj[:4] == b"RIFF" and sadrzaj[8:12] == b"WEBP":
+        return ".webp"
+    if sadrzaj[4:8] == b"ftyp" and sadrzaj[8:12] in (
+        b"heic", b"heix", b"hevc", b"mif1", b"msf1"
+    ):
+        return ".heic"
+    return None
+
+
 def _bezbedno_ime(ime: str | None) -> str:
     """Ime fajla bez putanje i bez znakova koji bi izasli iz foldera."""
     osnova = Path(ime or "slika").name
@@ -52,10 +71,22 @@ def sacuvaj(
     if not sadrzaj:
         raise ValueError("Prazan fajl.")
     if len(sadrzaj) > NAJVECA:
-        raise ValueError(f"Slika je veća od {NAJVECA // (1024 * 1024)} MB.")
+        raise ValueError(
+            f"Slika je {len(sadrzaj) / (1024 * 1024):.1f} MB, a najviše sme "
+            f"{NAJVECA // (1024 * 1024)} MB. Smanji je u galeriji pa pošalji ponovo."
+        )
     nastavak = DOZVOLJENE.get((mime or "").lower().split(";")[0].strip())
     if nastavak is None:
-        raise ValueError("Dozvoljene su samo slike (JPG, PNG, HEIC, WEBP).")
+        # Pregledac ume da posalje "application/octet-stream" - Android to radi
+        # kad se slika bira iz menadzera fajlova, pa je Bečej ostao bez slanja
+        # (zalba 30.09.). Zato se gleda sam sadrzaj: to je i inace jedini
+        # pouzdan podatak, jer zaglavlje salje onaj ko salje fajl.
+        nastavak = _po_sadrzaju(sadrzaj)
+    if nastavak is None:
+        raise ValueError(
+            "Dozvoljene su samo slike (JPG, PNG, HEIC, WEBP). "
+            f"Poslato je „{(mime or 'bez oznake')}”."
+        )
 
     with session_scope() as session:
         doc = session.get(Document, document_id)

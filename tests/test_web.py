@@ -1843,3 +1843,91 @@ def test_pad_obavestenja_ne_ponistava_prihvatanje(db, monkeypatch):
         assert session.get(D, doc_id).sef_status is SefStatus.APPROVED
         zapis = session.get(O, doc_id)
         assert zapis is not None and not zapis.uspelo  # trag o padu ostaje
+
+
+# --------------------------------------------------------------------------- #
+# slika sa telefona i veza šifre po nazivu
+# --------------------------------------------------------------------------- #
+
+
+def test_slika_se_prima_i_kad_pregledac_ne_kaze_vrstu(podaci, db):
+    """Android šalje „application/octet-stream" kad se bira iz menadžera fajlova."""
+    from sefsync.services.slike import sacuvaj
+
+    jpg = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + b"x" * 200
+    zapis = sacuvaj(
+        podaci["doc"], jpg, mime="application/octet-stream",
+        naziv_fajla="IMG_2031", korisnik="maja",
+    )
+    assert zapis is not None
+
+
+def test_ono_sto_nije_slika_se_i_dalje_odbija(podaci, db):
+    from sefsync.services.slike import sacuvaj
+
+    with pytest.raises(ValueError, match="samo slike"):
+        sacuvaj(podaci["doc"], b"%PDF-1.4 ...", mime="application/octet-stream",
+                naziv_fajla="racun.pdf", korisnik="maja")
+
+
+def test_prevelika_slika_kaze_koliko_je_velika(podaci, db):
+    from sefsync.services.slike import NAJVECA, sacuvaj
+
+    with pytest.raises(ValueError, match="MB"):
+        sacuvaj(podaci["doc"], b"x" * (NAJVECA + 1), mime="image/jpeg",
+                naziv_fajla="velika.jpg", korisnik="maja")
+
+
+def test_sifra_se_nalazi_po_nazivu_kad_nema_ni_sifre_ni_barkoda(db):
+    """Vitel šalje „LEXA BT ZVUCNIK LX-302 NITRO" bez šifre i bez EAN-a."""
+    from sefsync.erp.kalkulacija import _nasa_sifra
+    from sefsync.models import DocumentLine, ItemMapping
+
+    class PraznaVeza:
+        def execute(self, *a, **k):
+            class Prazno:
+                def all(self):
+                    return []
+
+            return Prazno()
+
+    with db.session_scope() as session:
+        session.add(ItemMapping(
+            supplier_vat="100123456", supplier_item_name="LEXA BT ZVUCNIK LX-302 NITRO",
+            erp_item_code="98120", source="rucno",
+        ))
+        session.flush()
+        linija = DocumentLine(
+            document_id=1, line_no=1, name="LEXA BT ZVUCNIK LX-302 NITRO",
+        )
+        sifra, odakle = _nasa_sifra(session, PraznaVeza(), "100123456", linija)
+
+    assert sifra == "98120"
+    assert odakle == "mapiranje po nazivu"
+
+
+def test_opsti_naziv_ne_odlucuje_sam(db):
+    """"MASINA ZA PRANJE VESA" je kod jednog dobavljača sedam različitih artikala."""
+    from sefsync.erp.kalkulacija import _nasa_sifra
+    from sefsync.models import DocumentLine, ItemMapping
+
+    class PraznaVeza:
+        def execute(self, *a, **k):
+            class Prazno:
+                def all(self):
+                    return []
+
+            return Prazno()
+
+    with db.session_scope() as session:
+        for sifra in ("15064", "84154"):
+            session.add(ItemMapping(
+                supplier_vat="107351003", supplier_item_name="MASINA ZA PRANJE VESA",
+                erp_item_code=sifra, source="rucno",
+            ))
+        session.flush()
+        linija = DocumentLine(document_id=1, line_no=1, name="MASINA ZA PRANJE VESA")
+        sifra, odakle = _nasa_sifra(session, PraznaVeza(), "107351003", linija)
+
+    assert sifra is None
+    assert "više šifara" in odakle
