@@ -1577,3 +1577,23 @@ def test_jedinica_bez_mejla_kaze_sta_fali(podaci, db):
     poruka = " ".join(ishod.problems)
     assert "nema upisan mejl" in poruka
     assert "MP002" in poruka
+
+
+def test_prazan_spisak_primalaca_ostavlja_trag(podaci, db, caplog):
+    """Bez ovoga u dnevniku nema nijednog reda — čovek nema gde da proveri zašto."""
+    import logging
+
+    from sefsync.models import BusinessUnit as BU
+    from sefsync.notify.dispatcher import Dispatcher
+
+    with db.session_scope() as session:
+        jedinica = session.get(BU, podaci["unit"])
+        jedinica.emails = None
+        jedinica.phones = None
+
+    with caplog.at_level(logging.WARNING):
+        assert Dispatcher().notify_document(podaci["doc"]) is False
+
+    poruke = " ".join(z.getMessage() for z in caplog.records)
+    assert "nema nijednu adresu" in poruke
+    assert "MP002" in poruke

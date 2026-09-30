@@ -78,6 +78,19 @@ class Dispatcher:
             }
             unit_id = unit.id if unit else None
 
+        # Prazan spisak primalaca je do sada prolazio nemo: kanal dobije praznu
+        # listu, vrati nista, i u dnevniku ne ostane nijedan red - pa je covek
+        # video samo "slanje nije uspelo" i nije imao gde da proveri zasto
+        # (naslo se 30.09. na magacinu povrata).
+        if not emails and not phones:
+            log.warning(
+                "Obaveštenje za dokument %s nije poslato: jedinica %s nema nijednu "
+                "adresu ni telefon.",
+                doc_id,
+                unit.code if unit else "—",
+            )
+            return False
+
         sent_any = False
         records: list[tuple[NotifyChannel, SendResult]] = []
 
