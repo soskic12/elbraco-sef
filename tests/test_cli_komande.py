@@ -349,3 +349,45 @@ def test_objasni_ne_prikazuje_pravila_za_drugu_vrstu_dokumenta(db):
     assert "rabat" not in ishod.stdout, "pravilo za odobrenja ne važi za fakturu"
     assert "Srpskih vladara 46" in ishod.stdout
     assert "MP002" in ishod.stdout
+
+
+def test_dokument_kaze_sta_drzi_kalkulaciju(db):
+    """Odgovor na „zašto ovo nije prošlo" sklapao se iz tri-četiri komande."""
+    from sefsync.models import (
+        BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta, UnitKind, utcnow,
+    )
+
+    with db.session_scope() as session:
+        u = BusinessUnit(code="MAG021", name="CMO SOMBOR", kind=UnitKind.WAREHOUSE,
+                         erp_code="021")
+        session.add(u)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=555, document_number="26-15240-238911",
+            supplier_name="MISON DOO BEOGRAD", amount=303937.35,
+            business_unit_id=u.id, received_at=utcnow(), received_by="MikicNemanja",
+        )
+        session.add(doc)
+        session.flush()
+        session.add(NacrtKalkulacije(
+            document_id=doc.id, stanje=StanjeNacrta.CEKA_SIFRU, magacin="021",
+            nemapirane=[{"line_no": 3, "naziv": "FRIŽIDER X", "ean": "123", "sifra_dobavljaca": "A9"}],
+        ))
+
+    ishod = _pokreni("dokument", "26-15240-238911")
+    assert "MISON DOO" in ishod.stdout
+    assert "MikicNemanja" in ishod.stdout
+    assert "ceka_sifru" in ishod.stdout
+    assert "FRIŽIDER X" in ishod.stdout       # tačno ono što je drži
+
+
+def test_dokument_prima_i_id_iz_panela(db):
+    from sefsync.models import Document
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=556, document_number="F-77", supplier_name="X")
+        session.add(doc)
+        session.flush()
+        broj = doc.id
+
+    assert "F-77" in _pokreni("dokument", f"#{broj}").stdout

@@ -1079,6 +1079,91 @@ def cmd_pravilo(
     typer.secho(f"Pravilo #{broj} je {'ugašeno' if ugasi else 'vraćeno'}.", fg="green")
 
 
+@app.command("dokument")
+def cmd_dokument(
+    broj: str = typer.Argument(..., help="Broj fakture ili #id iz panela."),
+) -> None:
+    """Sve o jednom dokumentu na jednom mestu: gde je, dokle je stigao i sta ga drzi.
+
+    Postoji zato sto se odgovor na „zasto ovo nije proslo“ do sada sklapao iz
+    tri-cetiri komande i pogleda u ekran.
+    """
+    _boot()
+    from sqlalchemy import select
+
+    from .models import (
+        AuditLog, BusinessUnit, Document, NacrtKalkulacije, PrijavaManjka,
+    )
+
+    with session_scope() as session:
+        if broj.startswith("#") and broj[1:].isdigit():
+            doc = session.get(Document, int(broj[1:]))
+        else:
+            doc = session.scalar(
+                select(Document).where(Document.document_number == broj.strip())
+            ) or session.scalar(
+                select(Document).where(Document.document_number.like(f"%{broj.strip()}%"))
+            )
+        if doc is None:
+            typer.secho(f"Nema dokumenta „{broj}“.", fg="red")
+            raise typer.Exit(1)
+
+        jedinice = {u.id: u.code for u in session.scalars(select(BusinessUnit))}
+        typer.echo(f"#{doc.id}  {doc.document_number or '?'}  {doc.document_type.value}")
+        typer.echo(f"   dobavljač   {(doc.supplier_name or '')[:40]}  PIB {doc.supplier_vat or '-'}")
+        typer.echo(f"   iznos       {doc.amount or 0:,.2f} {doc.currency or ''}")
+        typer.echo(f"   jedinica    {jedinice.get(doc.business_unit_id, 'nerazvrstano')}"
+                   f"   SEF: {doc.sef_status.value}   stanje: {doc.state.value}")
+        typer.echo(f"   prosleđeno  {doc.forwarded_at or '—'}  {doc.forwarded_by or ''}")
+        typer.echo(f"   prijem      {doc.received_at or '—'}  {doc.received_by or ''}")
+        if doc.po_starom:
+            typer.secho("   stiglo pre prelaska — kalkulaciju pravi čovek u ERP-u",
+                        fg="yellow")
+
+        manjak = session.get(PrijavaManjka, doc.id)
+        if manjak is not None:
+            stanje = "otvoren" if manjak.otvoren else f"zatvoren ({manjak.zatvoreno_kako})"
+            typer.echo(f"   manjak      {stanje}: {manjak.sazetak[:60]}")
+
+        red = session.get(NacrtKalkulacije, doc.id)
+        typer.echo("")
+        if red is None:
+            typer.secho("Nacrt kalkulacije nije ni računat — pokreni `nacrti --osvezi`.",
+                        fg="yellow")
+        else:
+            typer.echo(f"Kalkulacija: {red.stanje.value}"
+                       f"   magacin {red.magacin or '?'}   {red.erp_broj or ''}")
+            if red.upisao:
+                typer.echo(f"   upisao {red.upisao} {red.upisano_u or ''}")
+            if red.erp_napomena:
+                typer.echo(f"   {red.erp_napomena}")
+            if red.upozorenje:
+                typer.secho(f"   {red.upozorenje}", fg="yellow")
+            for problem in red.problemi or []:
+                typer.secho(f"   zaustavlja: {problem}", fg="yellow")
+            for stavka in red.nemapirane or []:
+                typer.secho(
+                    f"   čeka šifru: stavka {stavka.get('line_no')} "
+                    f"{(stavka.get('naziv') or '')[:40]} "
+                    f"(EAN {stavka.get('ean') or '-'}, "
+                    f"šifra dob. {stavka.get('sifra_dobavljaca') or '-'})",
+                    fg="yellow",
+                )
+            if red.sumnja:
+                typer.echo(f"   možda već u ERP-u: {red.sumnja.get('oznaka')} "
+                           f"— {red.sumnja.get('razlog')}")
+
+        zapisi = list(session.scalars(
+            select(AuditLog).where(AuditLog.document_id == doc.id).order_by(AuditLog.id)
+        ))
+        if zapisi:
+            typer.echo("")
+            typer.echo("Šta se dešavalo:")
+            for z in zapisi[-12:]:
+                typer.echo(f"   {z.at:%d.%m. %H:%M}  {z.actor:<14} {z.action}"
+                           f"  {(z.detail or '')[:60]}")
+
+
 @app.command("objasni")
 def cmd_objasni(
     document_id: int = typer.Argument(..., help="Broj dokumenta iz panela."),
