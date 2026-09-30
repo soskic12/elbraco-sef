@@ -626,3 +626,31 @@ def test_bez_prekidaca_operater_ne_moze_da_upise(client, db, podaci, monkeypatch
     )
 
     assert "isklju" in odgovor.headers["location"]
+
+
+def test_neuspeo_upis_ostaje_zapisan_na_dokumentu(db, monkeypatch):
+    """Poruka o neuspehu pojavi se jednom na ekranu pa nestane — trag mora da ostane."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=4242, document_number="26-15240-238911",
+                       supplier_name="MISON DOO")
+        session.add(doc)
+        session.flush()
+        session.add(NacrtKalkulacije(
+            document_id=doc.id, stanje=StanjeNacrta.SPREMAN, magacin="004",
+        ))
+        doc_id = doc.id
+
+    def puca(*a, **k):
+        raise RuntimeError("ERP ne odgovara")
+
+    monkeypatch.setattr(N, "pripremi", puca)
+    upisano, poruka = N.upisi_u_erp(doc_id, korisnik="MikicNemanja")
+
+    assert not upisano
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, doc_id)
+        assert red.upozorenje
+        assert "ERP ne odgovara" in red.upozorenje

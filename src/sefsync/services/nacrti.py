@@ -445,6 +445,7 @@ def upisi_u_erp(
         nacrt = pripremi(document_id, engine=engine)
     except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan
         log.warning("Nacrt za #%s nije sklopljen: %s", document_id, exc)
+        _zabelezi_neuspeh(document_id, f"kalkulacija nije sklopljena: {exc}")
         return False, f"Kalkulacija nije sklopljena: {exc}"
 
     if not nacrt.spreman:
@@ -458,12 +459,14 @@ def upisi_u_erp(
         return False, str(exc)
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku, trag u log
         log.exception("Kalkulacija za #%s nije upisana", document_id)
+        _zabelezi_neuspeh(document_id, f"upis nije prošao: {exc}")
         return False, f"Upis nije prošao: {exc}"
 
     # U kolonu ide samo broj kalkulacije (staje u 20 znakova) - ceo opis, sa
     # imenom baze, ostaje u dnevniku.
     broj = f"{nacrt.magacin}/{nacrt.zaglavlje.get('BROJ', '')}"
     _zabelezi_upis(document_id, broj, korisnik, opis=opis)
+    _zabelezi_neuspeh(document_id, None)   # uspelo je, staro upozorenje se skida
     poruka = f"Kalkulacija je upisana u ERP ({opis})."
     return True, poruka + prihvati_ako_je_kompletna(document_id, korisnik)
 
@@ -523,6 +526,21 @@ def prihvati_ako_je_kompletna(document_id: int, korisnik: str) -> str:
     if ishod.ok:
         return " Prihvaćena je i na SEF-u."
     return f" Na SEF-u nije prihvaćena: {ishod.message}"
+
+
+def _zabelezi_neuspeh(document_id: int, razlog: str | None) -> None:
+    """Zasto upis nije prosao - da ostane na dokumentu, a ne samo u poruci.
+
+    Potvrda prijema pokusava upis, i kad upis padne poruka se pojavi jednom na
+    ekranu pa nestane. Poslovodja je vidi u prolazu, operater nikad. Mereno
+    30.09.: faktura 26-15240-238911 imala je nacrt „spreman“ i potvrdjen prijem,
+    a kalkulacije u ERP-u nije bilo - i nigde se nije videlo zasto.
+    """
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None:
+            return
+        red.upozorenje = f"Upis nije prošao: {razlog}"[:250] if razlog else None
 
 
 def _zabelezi_upis(document_id: int, broj: str, korisnik: str, *, opis: str = "") -> None:
