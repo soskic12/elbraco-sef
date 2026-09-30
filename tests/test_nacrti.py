@@ -654,3 +654,36 @@ def test_neuspeo_upis_ostaje_zapisan_na_dokumentu(db, monkeypatch):
         red = session.get(NacrtKalkulacije, doc_id)
         assert red.upozorenje
         assert "ERP ne odgovara" in red.upozorenje
+
+
+def test_osvezi_zapele_dira_samo_ono_sto_erp_moze_da_odmrzne(db, monkeypatch):
+    """Šifra se otvara u ERP-u, pa panel mora sam da primeti da je stavka odmrznuta."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        def dodaj(broj, stanje, arhiviran=False):
+            doc = Document(sef_invoice_id=abs(hash(broj)) % 10**6, document_number=broj,
+                           archived=arhiviran)
+            session.add(doc)
+            session.flush()
+            session.add(NacrtKalkulacije(document_id=doc.id, stanje=stanje))
+            return doc.id
+
+        ceka = dodaj("CEKA", StanjeNacrta.CEKA_SIFRU)
+        problem = dodaj("PROBLEM", StanjeNacrta.PROBLEM)
+        dodaj("SPREMAN", StanjeNacrta.SPREMAN)
+        dodaj("UPISAN", StanjeNacrta.UPISAN)
+        dodaj("ARHIVIRAN", StanjeNacrta.CEKA_SIFRU, arhiviran=True)
+
+    dirani = []
+
+    def lazni_osvezi(doc_id, engine=None):
+        dirani.append(doc_id)
+        return None
+
+    monkeypatch.setattr(N, "osvezi", lazni_osvezi)
+    ishod = N.osvezi_zapele()
+
+    assert sorted(dirani) == sorted([ceka, problem])
+    assert ishod["pregledano"] == 2

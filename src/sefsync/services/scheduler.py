@@ -39,6 +39,19 @@ class SyncWorker:
                 log.info("Ciklus zavrsen: %s", stats.summary())
             except Exception:  # noqa: BLE001 - radnik ne sme da umre zbog jednog ciklusa
                 log.exception("Neocekivana greska u ciklusu sinhronizacije")
+
+            # Sifra se otvara u ERP-u, van panela, pa se zapeli nacrti moraju
+            # preracunati sami - inace covek uradi posao a ekran i dalje kaze
+            # "ceka sifru", dok neko rucno ne pusti `nacrti --osvezi`.
+            if self.settings.erp_upis_kalkulacije:
+                try:
+                    from .nacrti import osvezi_zapele
+
+                    ishod = osvezi_zapele(limit=self.settings.osvezi_zapele_limit)
+                    if ishod["odmrznuto"]:
+                        log.info("Odmrznuto nacrta: %(odmrznuto)s od %(pregledano)s", ishod)
+                except Exception:  # noqa: BLE001 - ERP ume da bude nedostupan
+                    log.exception("Osvežavanje zapelih nacrta nije prošlo")
             elapsed = time.monotonic() - started
             self._stop.wait(max(5.0, interval - elapsed))
         log.info("Radnik zaustavljen.")

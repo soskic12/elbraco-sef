@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     # Upit duzi od ovoliko sekundi ide u log sa svojim tekstom. Bez toga se ne
     # zna sta drzi vezu: merac kaze gde je uzeta, ne gde se zaglavila.
     log_spor_upit_s: float = 2.0
+    # Koliko zapelih nacrta se preracuna u svakom ciklusu. Sifra se otvara u
+    # ERP-u, pa panel mora sam da primeti da je stavka odmrznuta.
+    osvezi_zapele_limit: int = 200
     # Isto vazi i za vezu ka ERP-u, koja je do 29.09. isla sa podrazumevanih
     # 5+10 - i pala je prvog radnog dana ("QueuePool limit of size 5 overflow
     # 10 reached"), pa je IIS vracao 502. Provera duplikata pretrazuje sve

@@ -361,6 +361,48 @@ def _upisi_stanje(document_id: int, stanje: StanjeNacrta) -> NacrtKalkulacije:
         return red
 
 
+def osvezi_zapele(*, limit: int = 200, engine=None) -> dict:
+    """Preracunava samo nacrte koji cekaju coveka, i to na strani ERP-a.
+
+    Petnaestominutni ciklus je do sada radio samo sinhronizaciju sa SEF-om, pa
+    kad Dule otvori sifru u ERP-u aplikacija to ne primeti dok neko rucno ne
+    pusti `nacrti --osvezi`. Svima je i dalje pisalo „ceka sifru“ iako je posao
+    obavljen (zalba 30.09.).
+
+    Gledaju se samo stanja koja ERP moze da odmrzne - `ceka_sifru` i `problem`.
+    Spremni i upisani se ne diraju: njih menja covek u panelu, ne sifarnik.
+    """
+    with session_scope() as session:
+        ids = list(
+            session.scalars(
+                select(NacrtKalkulacije.document_id)
+                .join(Document, Document.id == NacrtKalkulacije.document_id)
+                .where(
+                    NacrtKalkulacije.stanje.in_(
+                        (StanjeNacrta.CEKA_SIFRU, StanjeNacrta.PROBLEM)
+                    ),
+                    Document.archived == False,  # noqa: E712
+                )
+                .order_by(NacrtKalkulacije.document_id.desc())
+                .limit(limit)
+            )
+        )
+
+    brojac = {"pregledano": len(ids), "odmrznuto": 0, "greska": 0}
+    for doc_id in ids:
+        try:
+            red = osvezi(doc_id, engine=engine)
+        except Exception as exc:  # noqa: BLE001 - jedan dokument ne sme da obori ciklus
+            brojac["greska"] += 1
+            log.warning("Nacrt za #%s nije osvežen: %s", doc_id, exc)
+            continue
+        if red is not None and red.stanje not in (
+            StanjeNacrta.CEKA_SIFRU, StanjeNacrta.PROBLEM
+        ):
+            brojac["odmrznuto"] += 1
+    return brojac
+
+
 def osvezi_sve(*, samo_razvrstane: bool = True, limit: int | None = None, engine=None) -> dict:
     """Prolazi kroz dokumente i osvezava nacrte. Vraca brojace po stanju."""
     with session_scope() as session:
