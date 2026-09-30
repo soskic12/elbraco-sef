@@ -126,8 +126,14 @@
 {% if zapeli %}
 <h2>Zaustavljeno iz drugog razloga</h2>
 <div class="card small muted">
-  Ovde šifra nije problem — kalkulacija ne može da se sklopi dok se ne reši ono što piše.
-  Najčešće: dobavljača nema u šifarniku ERP-a, ili šifra postoji u mapiranju a artikal je obrisan.
+  Ovde šifra nije problem — kalkulacija ne može da se sklopi dok se ne reši ono što piše,
+  a roba dotle stoji neuknjižena.
+  <br>
+  <b>Najčešće: artikal nema maloprodajnu cenu u tom objektu.</b> Cena se upisuje u ERP-u,
+  pa kalkulacija prolazi sama pri sledećem osvežavanju — ili odmah, dugmetom
+  „Upiši kalkulaciju“ na fakturi.
+  <br>
+  Ređe: dobavljača nema u šifarniku ERP-a, ili šifra postoji u mapiranju a artikal je obrisan.
 </div>
 {% for nacrt in zapeli %}
 <div class="card">

@@ -395,6 +395,7 @@ def queue(
             "queue.html",
             {
                 "popusta": _broj_popusta(session),
+                "zaustavljenih": _broj_zaustavljenih(session),
                 "documents": rows,
                 "units": units,
                 "brojaci": brojaci,
@@ -1022,6 +1023,23 @@ def _sme_na_dokument(session, user, doc) -> bool:
     return True
 
 
+def _broj_zaustavljenih(session) -> int:
+    """Koliko kalkulacija stoji zaustavljeno - za oznaku u navigaciji.
+
+    Stoje pri dnu ekrana „Sifre“, ispod spiska stavki koje cekaju sifru, pa se
+    lako propuste; broj u navigaciji je jedino sto se vidi odmah. A dok stoje,
+    roba je neuknjizena.
+    """
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(NacrtKalkulacije)
+            .where(NacrtKalkulacije.stanje == StanjeNacrta.PROBLEM)
+        )
+        or 0
+    )
+
+
 def _broj_popusta(session) -> int:
     """Koliko popusta ceka prenos - za oznaku u navigaciji."""
     from ..models import PopustZaPrenos
@@ -1469,6 +1487,7 @@ def sifre_page(request: Request, user: Operater) -> HTMLResponse:
         {
             "nacrti": nacrti,
             "zapeli": zapeli,
+            "zaustavljenih": len(zapeli),
             "slike": slike_po_stavci,
             "broj": broj,
             "racunato": racunato,

@@ -1639,3 +1639,25 @@ def test_mejl_se_uzima_iz_sifarnika_osoblja_kad_jedinica_nema_svoj(podaci, db, m
 
     assert pitano == [sifra], "šifarnik se pita baš za šifru objekta"
     assert primaoci == ["reklamacije@elbraco.rs"]
+
+
+def test_zaustavljene_kalkulacije_se_broje_u_navigaciji(client, podaci, db):
+    """Stoje pri dnu ekrana „Šifre" i lako se propuste — a roba dotle stoji."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    prijavi(client, OPERATER)
+    assert "Šifre <b" not in client.get("/red").text      # dok ih nema, nema ni broja
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=podaci["doc"], stanje=StanjeNacrta.PROBLEM, magacin="002",
+            problemi=["stavka 1: artikal 87606 nema cenu u objektu 002"],
+        ))
+
+    tekst = client.get("/red").text
+    assert "Šifre <b" in tekst and "(1)" in tekst
+
+    # i na samom ekranu, sa razlogom
+    sifre = client.get("/sifre").text
+    assert "nema cenu u objektu 002" in sifre
+    assert "maloprodajnu cenu" in sifre       # objašnjenje imenuje pravi uzrok

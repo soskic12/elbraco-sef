@@ -256,6 +256,15 @@
   jedinici kao i svaki drugi.</p>
 {% endcall %}
 
+{% call korak('Zaustavljene kalkulacije') %}
+  <p>Broj u crvenom pored <b>Šifre</b> u vrhu ekrana su kalkulacije koje se ne
+  mogu sklopiti. <b>Dok stoje, roba je neuknjižena.</b></p>
+  <p class="muted small">Najčešći uzrok je da <b>artikal nema maloprodajnu cenu
+  u tom objektu</b> — cena se upiše u ERP-u i kalkulacija prođe sama pri
+  sledećem osvežavanju. Ređe: dobavljača nema u šifarniku ERP-a, ili je artikal
+  obrisan a šifra ostala u mapiranju.</p>
+{% endcall %}
+
 {% call korak('Šifre artikala') %}
   <p>Ekran <b>Šifre</b> pokazuje stavke kojima fali naša šifra, sa slikom koju je
   poslao poslovođa. Kad povežeš šifru, veza važi za sve buduće fakture istog

@@ -114,7 +114,9 @@
     {% if user and user.is_operator %}
       <a href="/red">Red</a>
       <a href="/pj">Poslovne jedinice</a>
-      <a href="/sifre">Šifre</a>
+      {# Zaustavljene kalkulacije stoje pri dnu ekrana Sifre, pa se lako
+         propuste - broj u navigaciji je jedino sto se vidi odmah. #}
+      <a href="/sifre">Šifre{% if zaustavljenih %} <b style="color:#fecaca">({{ zaustavljenih }})</b>{% endif %}</a>
       <a href="/pravila">Pravila</a>
       <a href="/tacnost">Tačnost</a>
       <a href="/popusti">Popusti{% if popusta %} ({{ popusta }}){% endif %}</a>
