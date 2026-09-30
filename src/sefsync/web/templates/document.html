@@ -71,6 +71,23 @@
             {{ doc.received_at.strftime('%d.%m.%Y %H:%M') }}
             <div class="muted small" style="font-weight:400">{{ doc.received_note or '' }}</div>
           {% else %}<span class="muted" style="font-weight:400">čeka se</span>{% endif %}</dd>
+      {% if obavestenje %}
+      <dt>Obaveštenje o prethodnom porezu</dt>
+      <dd style="font-weight:400">
+        {% if obavestenje.uspelo %}
+          <span class="tag ok">poslato {{ obavestenje.broj }}</span>
+          <div class="muted small">{{ obavestenje.poslao }},
+            {{ obavestenje.poslato_u.strftime('%d.%m.%Y %H:%M') }}
+            {%- if obavestenje.iznos_pdv %} · PDV {{ '%.2f'|format(obavestenje.iznos_pdv) }}{% endif %}</div>
+        {% else %}
+          <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
+            <b>Obaveštenje nije poslato.</b> Prihvatanje na SEF-u jeste prošlo, pa ovo
+            treba uraditi ručno na portalu, dugmetom „Kreiraj obaveštenje o prethodnom porezu“.
+            <div class="muted">{{ (obavestenje.greska or '')[:160] }}</div>
+          </div>
+        {% endif %}
+      </dd>
+      {% endif %}
       {% if manjak %}
       <dt>Manjak</dt>
       <dd style="font-weight:400">

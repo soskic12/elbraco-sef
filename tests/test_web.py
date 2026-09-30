@@ -1661,3 +1661,185 @@ def test_zaustavljene_kalkulacije_se_broje_u_navigaciji(client, podaci, db):
     sifre = client.get("/sifre").text
     assert "nema cenu u objektu 002" in sifre
     assert "maloprodajnu cenu" in sifre       # objašnjenje imenuje pravi uzrok
+
+
+# --------------------------------------------------------------------------- #
+# obaveštenje o prethodnom porezu — uz prihvatanje knjižnog odobrenja
+# --------------------------------------------------------------------------- #
+
+
+def _odobrenje(db, **izmene):
+    from sefsync.models import Document as D, DocumentType
+
+    podrazumevano = dict(
+        sef_invoice_id=7001, document_number="26-3X3-002855",
+        document_type=DocumentType.CREDIT_NOTE,
+        supplier_name="ERG DOO ŠIMANOVCI", supplier_vat="103034716",
+        amount=-7140.0, vat_amount=-1190.0,
+        issue_date=__import__("datetime").date(2026, 9, 25),
+    )
+    podrazumevano.update(izmene)
+    with db.session_scope() as session:
+        doc = D(**podrazumevano)
+        session.add(doc)
+        session.flush()
+        return doc.id
+
+
+def test_telo_obavestenja_nosi_broj_i_datum_odobrenja(db):
+    """Broj obaveštenja je doslovno broj knjižnog odobrenja (Bane, 30.09.)."""
+    from sefsync.models import Document as D
+    from sefsync.services.obavestenje import telo_zahteva
+
+    doc_id = _odobrenje(db)
+    with db.session_scope() as session:
+        telo = telo_zahteva(session.get(D, doc_id))
+
+    assert telo["noticeNumber"] == "26-3X3-002855"
+    assert telo["relatedDocumentNumber"] == "26-3X3-002855"
+    assert telo["relatedDocumentIssueDate"] == "2026-09-25"
+    assert telo["totalVatAmount"] == 1190.0          # uvek pozitivno
+    assert telo["documentIssueOrigin"] == "DocumentIssuedViaSef"
+    assert telo["basisOfNotice"] == "CreditNoteIssued"
+    assert telo["documentReferenceType"] == "CreditNoteReferenceToInvoice"
+    assert telo["recipient"]["vatRegistrationCode"] == "103034716"
+
+
+def test_odobrenje_na_vise_faktura_ide_kao_period(db):
+    from sefsync.models import Document as D
+    from sefsync.services.obavestenje import telo_zahteva
+
+    doc_id = _odobrenje(db, billing_reference_count=3)
+    with db.session_scope() as session:
+        telo = telo_zahteva(session.get(D, doc_id))
+    assert telo["documentReferenceType"] == "CreditNoteReferenceToPeriod"
+
+
+def test_nulti_pdv_nema_obavestenje(db):
+    """Pravilo iz dokumentacije: iznos mora biti veći od nule."""
+    from sefsync.services.obavestenje import posalji
+
+    doc_id = _odobrenje(db, vat_amount=0.0)
+    poslato, poruka = posalji(doc_id, korisnik="bogdan")
+    assert not poslato
+    assert "nula" in poruka
+
+
+def test_faktura_nema_obavestenje(db):
+    from sefsync.models import DocumentType
+    from sefsync.services.obavestenje import posalji
+
+    doc_id = _odobrenje(db, document_type=DocumentType.INVOICE)
+    poslato, poruka = posalji(doc_id, korisnik="bogdan")
+    assert not poslato
+    assert "knjižno odobrenje" in poruka
+
+
+def test_prihvatanje_odobrenja_salje_obavestenje(db, monkeypatch):
+    """Obaveštenje ide uz prihvatanje i ni u jednom drugom trenutku."""
+    import sefsync.sef.client as sef_client
+    from sefsync.models import ObavestenjeOPrethodnomPorezu as O
+    from sefsync.services.acceptance import AcceptanceService
+
+    poslato = []
+
+    class LazniSef:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def accept_reject(self, sef_id, accepted, comment):
+            return {"Success": True, "Invoice": {"Status": "Approved"}}
+
+        def posalji_obavestenje_o_prethodnom_porezu(self, telo):
+            poslato.append(telo)
+            return {"Id": 482, "SendingStatus": "Sent"}
+
+    monkeypatch.setattr(sef_client, "SefClient", LazniSef)
+    doc_id = _odobrenje(db)
+
+    ishod = AcceptanceService(client=LazniSef()).accept(doc_id, actor="bogdan")
+
+    assert ishod.ok
+    assert "Obaveštenje 26-3X3-002855 je poslato" in ishod.message
+    assert poslato and poslato[0]["noticeNumber"] == "26-3X3-002855"
+
+    with db.session_scope() as session:
+        zapis = session.get(O, doc_id)
+        assert zapis.uspelo
+        assert zapis.sef_notice_id == 482
+        assert zapis.poslao == "bogdan"
+
+
+def test_prihvatanje_fakture_ne_salje_obavestenje(db, monkeypatch):
+    import sefsync.sef.client as sef_client
+    from sefsync.models import DocumentType, ObavestenjeOPrethodnomPorezu as O
+    from sefsync.services.acceptance import AcceptanceService
+
+    poslato = []
+
+    class LazniSef:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def accept_reject(self, sef_id, accepted, comment):
+            return {"Success": True, "Invoice": {"Status": "Approved"}}
+
+        def posalji_obavestenje_o_prethodnom_porezu(self, telo):
+            poslato.append(telo)
+            return {"Id": 1}
+
+    monkeypatch.setattr(sef_client, "SefClient", LazniSef)
+    doc_id = _odobrenje(db, document_type=DocumentType.INVOICE, sef_invoice_id=7002)
+
+    AcceptanceService(client=LazniSef()).accept(doc_id, actor="nina")
+
+    assert poslato == []
+    with db.session_scope() as session:
+        assert session.get(O, doc_id) is None
+
+
+def test_pad_obavestenja_ne_ponistava_prihvatanje(db, monkeypatch):
+    """Prihvatanje je već prošlo na SEF-u — poruka kaže da obaveštenje treba ručno."""
+    import sefsync.sef.client as sef_client
+    from sefsync.models import Document as D, ObavestenjeOPrethodnomPorezu as O, SefStatus
+    from sefsync.services.acceptance import AcceptanceService
+
+    class LazniSef:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def accept_reject(self, sef_id, accepted, comment):
+            return {"Success": True, "Invoice": {"Status": "Approved"}}
+
+        def posalji_obavestenje_o_prethodnom_porezu(self, telo):
+            raise RuntimeError("SEF greska 400")
+
+    monkeypatch.setattr(sef_client, "SefClient", LazniSef)
+    doc_id = _odobrenje(db, sef_invoice_id=7003)
+
+    ishod = AcceptanceService(client=LazniSef()).accept(doc_id, actor="ilijana")
+
+    assert ishod.ok                                   # prihvatanje stoji
+    assert "nije poslato" in ishod.message
+    with db.session_scope() as session:
+        assert session.get(D, doc_id).sef_status is SefStatus.APPROVED
+        zapis = session.get(O, doc_id)
+        assert zapis is not None and not zapis.uspelo  # trag o padu ostaje

@@ -1943,3 +1943,38 @@ Dodat je treći put, između ta dva: **mapiranje po barkodu**. Mereno na 2.110
 aktivnih veza — 1.872 ima upisan barkod, 1.867 različitih, i **nijedan barkod
 ne vodi na dve šifre**, pa je traženje jednoznačno. Ako se ikad pojavi
 dvosmislen, app ne bira nego vraća „čeka čoveka“.
+
+## Obaveštenje o prethodnom porezu (30.09.)
+
+Uz svako knjižno odobrenje kupac mora dobavljaču da javi koliko PDV-a nije
+koristio kao prethodni porez. Na portalu je to dugme „Kreiraj obaveštenje o
+prethodnom porezu“ na samom dokumentu.
+
+**API to pokriva u celosti:** `POST /api/publicApi/recipients-notice-on-input-vat/sender/send`,
+uz `GET` za pregled, PDF i spisak onih koja su pala pri slanju.
+
+**Prva analiza je bila pogrešna** i dala 21 % pokrivenosti: „Broj dokumenta o
+smanjenju“ sam čitao kao broj originalne fakture. Slike sa portala su pokazale
+da je to **broj samog odobrenja**, a datum uz njega datum tog odobrenja —
+original se ne traži uopšte. Sa ispravnim čitanjem, od 967 odobrenja može se
+poslati **966**; jedino koje ne može je ono sa nultim PDV-om, jer propis traži
+iznos veći od nule.
+
+| polje | odakle |
+|---|---|
+| `noticeNumber` | broj odobrenja, doslovno (Bane: „bukvalno 26-3X3-002855“) |
+| `totalVatAmount` | PDV sa odobrenja, uvek pozitivan |
+| `documentIssueOrigin` | `DocumentIssuedViaSef` |
+| `basisOfNotice` | `CreditNoteIssued` |
+| `documentReferenceType` | `...ToInvoice` (947) ili `...ToPeriod` kad pokriva više faktura (20) |
+| `relatedDocumentNumber` / `...IssueDate` | broj i datum **odobrenja** |
+| `recipient` | PIB dobavljača |
+
+**Šalje se isključivo uz prihvatanje odobrenja na SEF-u** — Bane, 30.09.: „to
+treba da ode prilikom prihvatanja sa sefa, u tom trenutku za odgovarajuće k.o.,
+ne treba masovna komanda“. Prihvatanjem se PDV i ispravlja, pa je to i pravno
+tačan trenutak.
+
+Neuspeh slanja **ne poništava prihvatanje** — ono je već prošlo na SEF-u. Trag
+o padu ostaje na dokumentu, crveno, sa uputstvom da se obaveštenje napravi
+ručno na portalu. `provera-prelaska` broji prihvaćena odobrenja bez obaveštenja.

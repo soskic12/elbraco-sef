@@ -1781,6 +1781,22 @@ def cmd_provera_prelaska() -> None:
             + "; ".join(f"{p} → {', '.join(v)}" for p, v in sorted(sporne.items())),
         )
 
+        # --- prihvacena odobrenja bez obavestenja o prethodnom porezu ---
+        try:
+            from .services.obavestenje import bez_obavestenja
+
+            propalo = bez_obavestenja(session)
+        except Exception as exc:  # noqa: BLE001 - provera ne sme da padne zbog ovoga
+            propalo = []
+            log.debug("Provera obaveštenja nije prošla: %s", exc)
+        red(
+            not propalo,
+            "Sva prihvaćena knjižna odobrenja imaju obaveštenje o prethodnom porezu"
+            if not propalo
+            else f"Bez obaveštenja o prethodnom porezu: {len(propalo)} "
+            + ", ".join((d.document_number or "?") for d in propalo[:5]),
+        )
+
         # --- sema panela: nove kolone i tabele posle dopune ---
         from sqlalchemy import inspect as _inspect
 

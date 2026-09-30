@@ -107,6 +107,13 @@
   sve buduće fakture istog dobavljača.</p>
 {% endcall %}
 
+{% call korak('Obaveštenje o prethodnom porezu') %}
+  <p>Kad se knjižno odobrenje <b>prihvati na SEF-u</b>, aplikacija sama pošalje
+  dobavljaču obaveštenje o prethodnom porezu. Ti ne radiš ništa posebno.</p>
+  <p class="muted small">Ako je palo, na dokumentu stoji crveno upozorenje i
+  obaveštenje treba napraviti ručno na portalu.</p>
+{% endcall %}
+
 {% call korak('Popusti za prenos') %}
   <p>Kad dobavljač odobri samo <b>deo</b> vrednosti — jer je uređaj stigao
   oštećen — roba ostaje kod nas i prodaje se jeftinije. Takvo odobrenje ide na
@@ -198,6 +205,18 @@
   odobrenje, prihvata se tada. Ako je poslovođa rekao „šalju ispravljenu
   fakturu“ ili „ne znam“, kalkulacija se ni ne upisuje — odlučuješ ti.</p>
   <p class="muted small"><b>Odbijanje</b> uvek radi čovek, dugmetom na dokumentu.</p>
+{% endcall %}
+
+{% call korak('Obaveštenje o prethodnom porezu') %}
+  <p>Kad <b>prihvatiš knjižno odobrenje</b> na SEF-u, aplikacija tog časa šalje
+  dobavljaču <b>obaveštenje o prethodnom porezu</b> — ono što se na portalu radi
+  dugmetom „Kreiraj obaveštenje o prethodnom porezu“. Broj obaveštenja je
+  doslovno broj odobrenja, a iznos je PDV sa njega.</p>
+  <p class="muted small">Ne radi se odvojeno i ne šalje se u paketu — ide samo uz
+  prihvatanje. Ako slanje padne, prihvatanje <b>ostaje</b>, a na dokumentu stoji
+  crveno upozorenje: tada obaveštenje napravi ručno na portalu.</p>
+  <p class="muted small">Odobrenje sa nultim PDV-om nema obaveštenje — propis
+  traži iznos veći od nule.</p>
 {% endcall %}
 
 {% call korak('Kad poslovođa prijavi manjak') %}

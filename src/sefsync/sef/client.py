@@ -187,6 +187,50 @@ class SefClient:
         )
         return resp.content
 
+    # ------------------------------------------------------------------ #
+    # obavestenje primaoca o prethodnom porezu
+    # ------------------------------------------------------------------ #
+
+    def posalji_obavestenje_o_prethodnom_porezu(self, telo: dict[str, Any]) -> dict[str, Any]:
+        """POST /recipients-notice-on-input-vat/sender/send - salje obavestenje dobavljacu.
+
+        Obavestenje se izdaje uz svako knjizno odobrenje: njime kupac javlja
+        dobavljacu koliko PDV-a nije koristio kao prethodni porez. Na portalu je
+        to dugme „Kreiraj obavestenje o prethodnom porezu“ na samom dokumentu.
+
+        Slanje je prema dobavljacu i nepovratno, pa se radi svesno, jednim
+        klikom po dokumentu - nikad u paketu.
+        """
+        resp = self._request(
+            "POST",
+            f"{API}/recipients-notice-on-input-vat/sender/send",
+            json=telo,
+            headers={"accept": "application/json"},
+        )
+        return resp.json()
+
+    def obavestenje_pdf(self, notice_id: int) -> bytes:
+        """GET /recipients-notice-on-input-vat/sender/{id}/pdf - PDF poslatog obavestenja."""
+        resp = self._request(
+            "GET",
+            f"{API}/recipients-notice-on-input-vat/sender/{notice_id}/pdf",
+            headers={"accept": "*/*"},
+        )
+        return resp.content
+
+    def obavestenja_sa_greskom(self) -> list[dict[str, Any]]:
+        """GET /recipients-notice-on-input-vat/sender/mistake-status.
+
+        Obavestenje ume da zavrsi u statusu „Greska u slanju“ i tada ga SEF ne
+        salje dalje - a mi bismo mislili da je otislo.
+        """
+        resp = self._request(
+            "GET",
+            f"{API}/recipients-notice-on-input-vat/sender/mistake-status",
+            headers={"accept": "application/json"},
+        )
+        return resp.json() or []
+
     def purchase_changes(self, on_date: date | str) -> list[dict[str, Any]]:
         """POST /api/publicApi/purchase-invoice/changes - promene statusa na dati datum.
 

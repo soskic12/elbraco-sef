@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..config import Settings, get_settings
 from ..db import session_scope
-from ..models import AuditLog, Document, ProcessState, SefStatus, utcnow
+from ..models import AuditLog, Document, DocumentType, ProcessState, SefStatus, utcnow
 from ..sef.client import SefClient, SefError
 
 log = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class AcceptanceService:
                 )
             sef_id = doc.sef_invoice_id
             number = doc.document_number
+            vrsta = doc.document_type
 
         try:
             response = self.client.accept_reject(sef_id, accepted, comment)
@@ -96,7 +97,23 @@ class AcceptanceService:
             )
         action = "prihvacen" if accepted else "odbijen"
         log.info("Dokument %s (%s) %s na SEF-u od strane %s", sef_id, number, action, actor)
-        return AcceptResult(success, f"Dokument je {action} na SEF-u.", new_status)
+        poruka = f"Dokument je {action} na SEF-u."
+
+        # Obavestenje o prethodnom porezu ide uz PRIHVATANJE knjiznog odobrenja i
+        # ni u jednom drugom trenutku: prihvatanjem se PDV ispravlja, i tada se
+        # dobavljacu javlja koliko nije koristeno kao prethodni porez. Bane,
+        # 30.09.: „to treba da ode prilikom prihvatanja sa sefa, u tom trenutku
+        # za odgovarajuce k.o., ne treba masovna komanda“.
+        #
+        # Neuspeh ne ponistava prihvatanje - ono je vec proslo na SEF-u; poruka
+        # kaze coveku da obavestenje treba poslati rucno.
+        if accepted and vrsta is DocumentType.CREDIT_NOTE:
+            from .obavestenje import posalji
+
+            _, dodatak = posalji(doc_id, korisnik=actor)
+            poruka += " " + dodatak
+
+        return AcceptResult(success, poruka, new_status)
 
     # ------------------------------------------------------------------ #
 

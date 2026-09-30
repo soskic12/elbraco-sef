@@ -748,6 +748,41 @@ class PrijavaManjka(Base):
         return "; ".join(delovi)
 
 
+class ObavestenjeOPrethodnomPorezu(Base):
+    """Obavestenje koje kupac salje dobavljacu uz knjizno odobrenje.
+
+    Njime se javlja koliko PDV-a nije koristeno kao prethodni porez. Na SEF
+    portalu je to dugme „Kreiraj obavestenje o prethodnom porezu“ na samom
+    dokumentu; ovde se pamti da je poslato, sa brojem koji je SEF vratio.
+
+    Broj obavestenja je **broj samog knjiznog odobrenja**, doslovno - tako je
+    Bane trazio (30.09.), i tako se uvek vidi na sta se odnosi.
+
+    Slanje je prema dobavljacu i nepovratno, pa se cuva i trag ko ga je pustio.
+    """
+
+    __tablename__ = "obavestenje_prethodni_porez"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Broj koji smo poslali = broj odobrenja; SEF vraca svoj Id i status.
+    broj: Mapped[str] = mapped_column(String(200))
+    sef_notice_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    status: Mapped[str | None] = mapped_column(String(30), default=None)
+    iznos_pdv: Mapped[float | None] = mapped_column(Float, default=None)
+    vrsta_veze: Mapped[str | None] = mapped_column(String(50), default=None)
+    poslao: Mapped[str] = mapped_column(String(100))
+    poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    greska: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    document: Mapped[Document] = relationship()
+
+    @property
+    def uspelo(self) -> bool:
+        return self.sef_notice_id is not None and not self.greska
+
+
 class PopustZaPrenos(Base):
     """Naknadni popust koji je dobavljac odobrio za jedan uredjaj.
 
