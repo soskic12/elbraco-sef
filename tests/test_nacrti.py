@@ -24,12 +24,13 @@ OPERATER = User("bogdan", "Sunajko Bogdan", Role.OPERATER, None, "FINANSIJE")
 class LazniNacrt:
     """Ono sto generator vrati, bez ERP-a."""
 
-    def __init__(self, problemi=(), nemapirane=()):
+    def __init__(self, problemi=(), nemapirane=(), napomene=()):
         self.magacin = "002"
         self.tabela_zaglavlja = "MKALKUL"
         self.zaglavlje = {"IZNOS_ZA_NAP": 194666.40}
         self.problemi = list(problemi)
         self.nemapirane = list(nemapirane)
+        self.napomene = list(napomene)
 
     @property
     def spreman(self) -> bool:

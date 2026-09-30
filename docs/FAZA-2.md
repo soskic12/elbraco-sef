@@ -2084,3 +2084,70 @@ da pošalje sliku. Vrsta se sada prepoznaje po prvim bajtovima samog fajla.
   nema maloprodajnu cenu u tom objektu*.
 * `dokument <broj>` ispisuje sve o jednoj fakturi: gde je, dokle je stigla, šta
   drži kalkulaciju i šta se sve sa njom dešavalo.
+
+## ID PDV evidencije (30.09.)
+
+Bogdan je do sada ručno menjao ID PDV evidencije na skoro svakoj kalkulaciji
+koja nije običan ulazni račun. Aplikacija je u zaglavlje pisala `LASTUSER: 1` —
+napisano je tako još u prvoj verziji generatora, u uverenju da je to *id
+korisnika*. Ime kolone vara: **`ULKALKUL.LASTUSER` i `MKALKUL.LASTUSER` drže ID
+PDV evidencije**, šifarnik je `dbo.TIPEVID`. Provereno na 088/00011 (OTP banka):
+`LASTUSER 75`, a u `PDVEVID` mu odgovara red `ULK880011` TIP 75 „Provizije,
+takse“.
+
+Da je vrednost bila 1, a ne 0, otkrilo se tek pri merenju — ranija tvrdnja da
+app „ostavlja nulu“ bila je pogrešna. Praktična posledica je ista: pogađala je
+samo obične ulazne račune.
+
+### Šta se vidi iz same fakture
+
+Mereno na celoj `ELBS_2026`, 8.939 kalkulacija sa upisanom oznakom:
+
+| pravilo | poklapanje |
+|---|---|
+| magacin 010 → **35** (povrat robe) | 600 od 603; pozitivne kalkulacije na 010 **ne postoje** |
+| negativno na 088 → **34** (finansijsko odobrenje) | 368 od 370, sve bez stavki |
+| račun **sa** PDV-om → 1 ili 21 | 1.255 : 408 : 14 (šest); **nikad** 75 ni 23 |
+| račun **bez** PDV-a → 75 ili 23 | 921 : 168 : 2; **nikad** 21 |
+
+Poslednja dva reda su ono što nismo videli iz prve: „bez PDV-a“ ne znači 23.
+Banke i PTT naplaćuju bez PDV-a i to je 75, a ne 23 — 921 prema 168.
+
+### Šta se uči iz istorije
+
+Za račune bez PDV-a bira se ono što je čovek ranije birao kod tog dobavljača.
+Spisak se ne održava rukom; čita se iz `ULKALKUL` pri svakoj kalkulaciji.
+
+Prvi pokušaj je tražio da dobavljač **uvek** bude ista vrsta. Previše krto:
+Banca intesa ima 323 puta 75 i po jednom 1 i 23 — dve omaške u 325 zapisa
+blokirale bi ceo dobavljač. Sada je prag „bar 3 puta i bar 90 % istorije“:
+
+| prag | pogođenih 75 | ukupno |
+|---|---:|---:|
+| uvek ista vrsta | 688 / 921 | 92,6 % |
+| **≥ 3 i ≥ 90 %** | **887 / 921** | **94,8 %** |
+| ≥ 3 i ≥ 85 % | 888 / 921 | 94,8 % |
+
+Ispod 90 % se više ništa ne dobija. Danas app pogađa 71,9 % (jer piše 1 svuda).
+
+Mereno pošteno: svaka kalkulacija se pogađa samo iz onih koje su pre nje po
+datumu, pa je 887 donja granica — banke koje su u istoriji već naučene pogađaju
+se od prvog dana.
+
+### 21 se nikad ne bira sam
+
+Pravo na odbitak PDV-a zavisi od toga šta je kupljeno i za šta se koristi, a to
+se iz fakture ne vidi. Isti dobavljač ide na oba: NIS 88:63, Lukoil 63:54, Euro
+petrol 58:40, Sinagoga 15:14. Zato app upisuje 1 i ostavlja žutu napomenu sa
+brojkama („ranije 58 puta 21, 40 puta 1“).
+
+Napomena bi stajala na 859 kalkulacija godišnje — oko 3–4 dnevno — i pokriva
+**svih 408** stvarnih dvadesetjedinica. Prag „bar dva puta 21“ smanjio bi broj
+napomena na 672, ali bi propustio 41 pravu. Zato ostaje prag jedan.
+
+Napomena je žuta i ne zaustavlja upis (crveni okvir „Proveri u ERP-u“ i dalje
+znači da je nešto palo). Čuva se u `nacrt_kalkulacije.napomene` i preživljava
+uspešan upis — tada i treba da se vidi, jer se knjiži posle.
+
+Komanda za popravku ranijih kalkulacija nije pravljena: Bogdan ih je već ručno
+ispravio (Bane, 30.09.).

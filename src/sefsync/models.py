@@ -622,6 +622,9 @@ class NacrtKalkulacije(Base):
     problemi: Mapped[list | None] = mapped_column(JSON, default=None)
     # Po jedna stavka koja nema nasu sifru: line_no, naziv, sifra dobavljaca, EAN...
     nemapirane: Mapped[list | None] = mapped_column(JSON, default=None)
+    # Ono sto ne zaustavlja upis, ali covek treba da pogleda pre knjizenja.
+    # Za sada: ID PDV evidencije kod dobavljaca kod kog se javlja i 21.
+    napomene: Mapped[list | None] = mapped_column(JSON, default=None)
     racunato_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
     # Upis u ERP (faza 2): broj kalkulacije i ko je pustio

@@ -6,3 +6,12 @@
     <b>Proveri u ERP-u:</b> {{ n.upozorenje }}
   </div>
 {% endif %}
+{# Ne zaustavlja upis, ali covek treba da pogleda pre knjizenja. #}
+{% if n and n.napomene %}
+  {% for napomena in n.napomene %}
+    <div class="small" style="margin:4px 0;padding:5px 8px;border-left:3px solid #d97706;
+                              background:#fffbeb">
+      <b>Pogledaj pre knjiženja:</b> {{ napomena }}
+    </div>
+  {% endfor %}
+{% endif %}

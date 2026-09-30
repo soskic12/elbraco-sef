@@ -675,6 +675,7 @@ def test_poslovodja_ima_spisak_sta_treba_slikati(client, podaci, db, monkeypatch
         problemi: list = []
         nemapirane = [{"line_no": 1, "naziv": "Frižider", "sifra_dobavljaca": "EW-9911",
                        "ean": "860012345", "kolicina": 2.0, "cena": 5.0, "jedinica": "H87"}]
+        napomene: list = []
         spreman = False
 
     with db.session_scope() as session:

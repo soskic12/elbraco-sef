@@ -269,6 +269,7 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
         red.iznos = nacrt.zaglavlje.get("IZNOS_ZA_NAP")
         red.problemi = list(nacrt.problemi) or None
         red.nemapirane = list(nacrt.nemapirane) or None
+        red.napomene = list(nacrt.napomene) or None
         red.racunato_u = utcnow()
         session.flush()
         session.expunge(red)

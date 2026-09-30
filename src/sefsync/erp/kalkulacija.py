@@ -27,6 +27,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
 from ..models import Document, DocumentLine, DocumentType, ItemMapping, UnitKind
+from ..routing.engine import MAGACIN_POVRACAJ
 from ..textutil import normalize
 from .connection import erp_engine_za_upis, get_erp_engine
 
@@ -43,8 +44,9 @@ IZVOR = "Elektronske fakture"
 # 87 od 3.075 racuna na 088 i kod svih se broj redova poklapa red za red.
 TABELA_PDV_EVIDENCIJE = "PDVEVIDX"
 TIP_ULAZNI_RACUN = 1     # sifarnik TIPEVID: "ULAZNI RACUNI"
-TIP_BEZ_EPPDV = 23       # "ULAZNI RACUNI (BEZ EPPDV)" - deo koji ne nosi PDV
-TIP_POVRAT_ROBE = 35     # "Povrat robe" - stoji na stavkama knjiznih odobrenja
+TIP_BEZ_EPPDV = 23       # "ULAZNI RACUNI (BEZ EPPDV)" - racun koji ne nosi PDV
+TIP_POVRAT_ROBE = 35           # "Povrat robe" - magacin 010, sve negativno
+TIP_FINANSIJSKO_ODOBRENJE = 34  # "Finansijska odobrenja" - negativno, bez robe
 
 # Clarion ne ostavlja NULL: u kolonu koja nije popunjena upisuje nulu ili prazan
 # string. Nas INSERT je nabrajao samo polja koja racunamo, pa je ostalo 78 kolona
@@ -70,6 +72,29 @@ PROKNJIZENO_JESTE = 1   # proknjizio poslovodja - NIKAD iz aplikacije
 # Proknjizena pa je administrator zakljucao da ne moze unazad da se menja, zbog
 # obracuna PDV-a. Dakle i ovo je zaknjizeno, ne samo "zakljucano" (Bane, 26.09.).
 PROKNJIZENO_ZAKLJUCANO = 2
+
+# ID PDV evidencije stoji u koloni koja se zove `LASTUSER` - ime vara, ali je
+# tako (provereno 30.09. na celoj bazi: 088/00011 OTP banka ima LASTUSER 75, i
+# u PDVEVID mu odgovara red TIP 75 "Provizije, takse"). Sifarnik je TIPEVID.
+#
+# Nasi dosadasnji upisi imali su 0, sto je prazna vrsta - `dopuni_prazna` je
+# popunjavala nulom jer joj nista nismo zadali. Bogdan je to rucno ispravljao.
+KOLONA_PDV_EVIDENCIJE = "LASTUSER"
+
+# Koliko puta dobavljac mora da se pojavi sa istom vrstom da bi se preuzela, i
+# koliki deo njegove istorije ta vrsta mora da nosi.
+#
+# "Uvek ista vrsta" je previse krto: Banca intesa ima 323 puta 75 i po jednom 1
+# i 23 - dve omaske u 325 zapisa blokirale bi ucenje za sve tri stotine. Mereno
+# na celoj 2026: prag 100 % pogadja 688 od 921 provizije, a 90 % pogadja 887.
+# Ispod 90 % se vise ne dobija (85 % daje 888).
+DOVOLJNO_ZA_UCENJE = 3
+UDEO_ZA_UCENJE = 0.90
+
+# Vrsta koju app NIKAD ne bira sama: pravo na odbitak zavisi od toga sta je
+# kupljeno i za sta se koristi, a to se iz fakture ne vidi. Mereno: Euro petrol
+# je 59 puta 21 i 40 puta 1, Sinagoga 18:15 - isti dobavljac, ista vrsta racuna.
+TIP_BEZ_ODBITKA = 21
 
 # Da nule nema u produkciji nije znak da je pogresna: ELBS_2026 ima samo 1 (211,
 # poslednjih dvadesetak dana) i 2 (8.630, cela godina), jer ljudi knjize odmah po
@@ -135,6 +160,8 @@ class Nacrt:
     stavke: list[dict] = field(default_factory=list)
     problemi: list[str] = field(default_factory=list)
     nemapirane: list[dict] = field(default_factory=list)  # stavke bez nase sifre
+    # Ono sto ne zaustavlja upis, ali covek treba da pogleda.
+    napomene: list[str] = field(default_factory=list)
     pdv_evidencija: list[dict] = field(default_factory=list)  # redovi za PDVEVIDX
 
     @property
@@ -186,6 +213,85 @@ def _analitika_dobavljaca(
         if red:
             return red.a
     return None
+
+
+def vrsta_pdv_evidencije(
+    conn: Connection,
+    dobavljac: str | None,
+    magacin: str,
+    *,
+    predznak: float,
+    ima_pdv: bool,
+) -> tuple[int, str | None]:
+    """ID PDV evidencije za kalkulaciju. Vraca (vrsta, napomena za coveka).
+
+    Do sada je app u svaku kalkulaciju pisala 1 ("ULAZNI RACUNI"), pa je Bogdan
+    rucno ispravljao odobrenja, provizije i racune bez PDV-a.
+
+    Mereno 30.09. na ELBS_2026, 8.939 kalkulacija sa oznakom:
+
+    * **35 Povrat robe** - magacin 010. Na 010 nema nijedne pozitivne
+      kalkulacije, a 600 od 603 nosi 35.
+    * **34 Finansijska odobrenja** - negativan dokument na 088; svih 368 je
+      negativno i bez stavki.
+    * racun **sa PDV-om** je 1 ili 21, nikad 75 ni 23 (1.255 : 408 : 14);
+    * racun **bez PDV-a** je 75 ili 23, nikad 1 ni 21 (921 : 168 : 2).
+
+    Kod racuna bez PDV-a se bira po dobavljacu, iz onoga sto je covek ranije
+    birao. Spisak se tako odrzava sam - sedam banaka (OTP 418, Raiffeisen, NLB,
+    Dunav, AIK, PTT, Addiko) nosi vecinu 75.
+
+    **21 se nikad ne bira sam.** Pravo na odbitak zavisi od toga sta je kupljeno
+    i za sta se koristi, sto se iz fakture ne vidi: Euro petrol je 59 puta 21 i
+    40 puta 1. Kad je dobavljac ranije imao 21, upisuje se 1 uz napomenu.
+
+    Postena simulacija (svaka kalkulacija pogodjena samo iz onih pre nje):
+    94,8 % umesto 71,9 % koliko daje danasnje "uvek 1".
+    """
+    if magacin == MAGACIN_POVRACAJ:
+        return TIP_POVRAT_ROBE, None
+    # Negativno van 088 se ne javlja: roba se vraca preko 010, a u maloprodaji i
+    # na 021 nema nijedne negativne kalkulacije.
+    if predznak < 0 and magacin == MAGACIN_ULAZNI_RACUN:
+        return TIP_FINANSIJSKO_ODOBRENJE, None
+
+    istorija = (
+        conn.execute(
+            text(
+                f"SELECT {KOLONA_PDV_EVIDENCIJE} vrsta, COUNT(*) n, "
+                "  CASE WHEN (ISNULL(PDV,0)+ISNULL(PRENETIPOREZ,0)) = 0 THEN 1 ELSE 0 END bez_pdv "
+                "FROM dbo.ULKALKUL "
+                f"WHERE RTRIM(DOBAVLJAC) = :d AND {KOLONA_PDV_EVIDENCIJE} <> 0 "
+                f"  AND RTRIM(MAGACIN) = '{MAGACIN_ULAZNI_RACUN}' AND IZNOS_ZA_NAP >= 0 "
+                f"GROUP BY {KOLONA_PDV_EVIDENCIJE}, "
+                "  CASE WHEN (ISNULL(PDV,0)+ISNULL(PRENETIPOREZ,0)) = 0 THEN 1 ELSE 0 END"
+            ),
+            {"d": dobavljac.strip()},
+        ).all()
+        if dobavljac
+        else []
+    )
+
+    if ima_pdv:
+        koliko_21 = sum(int(r.n) for r in istorija if int(r.vrsta) == TIP_BEZ_ODBITKA)
+        if koliko_21:
+            koliko_1 = sum(int(r.n) for r in istorija if int(r.vrsta) == TIP_ULAZNI_RACUN)
+            return TIP_ULAZNI_RACUN, (
+                f"kod ovog dobavljača je ranije {koliko_21} puta biran 21 "
+                f"(bez prava na odbitak PDV-a), a {koliko_1} puta 1 — "
+                "proveri ID PDV evidencije pre knjiženja"
+            )
+        return TIP_ULAZNI_RACUN, None
+
+    # Bez PDV-a: provizija/taksa (75) ili racun bez EPPDV (23). Uzima se ono sto
+    # je dobavljac ubedljivo najcesce bio, i tek kad se ponovilo dovoljno puta.
+    bez_pdv = {int(r.vrsta): int(r.n) for r in istorija if int(r.bez_pdv) == 1}
+    ukupno = sum(bez_pdv.values())
+    if ukupno:
+        vrsta, koliko = max(bez_pdv.items(), key=lambda x: x[1])
+        if koliko >= DOVOLJNO_ZA_UCENJE and koliko / ukupno >= UDEO_ZA_UCENJE:
+            return vrsta, None
+    return TIP_BEZ_EPPDV, None
 
 
 def _artikal(conn: Connection, sifra: str) -> dict | None:
@@ -502,11 +608,10 @@ def pripremi(
                 "ROB_CENA": neto,
                 "IZNOS": vrednost,
                 "DOBAV": dobavljac or "",
-                # Tip poreske evidencije stavke. Mereno: na 021 je 1 na svih
-                # 1.376 stavki i u maloprodaji isto, a na 010 je 35 ("Povrat
-                # robe") na 690 od 692 - i svih 690 su negativne stavke, sto je
-                # tacno ono sto knjizno odobrenje i pravi.
-                "IDPDV": TIP_POVRAT_ROBE if predznak < 0 else TIP_ULAZNI_RACUN,
+                # Tip poreske evidencije stavke. Popunjava se posle petlje,
+                # kad se zna ima li racun PDV-a: zaglavlje i stavke u ERP-u
+                # uvek nose istu vrstu.
+                "IDPDV": TIP_ULAZNI_RACUN,
                 "_izvor_sifre": odakle,
             }
 
@@ -603,8 +708,22 @@ def pripremi(
         # VALUTA je nula nula puta. Na 010 je jednaka datumu u 584 od 587, na
         # 021 i u maloprodaji je kasnije. Kad roka nema, stoji datum prometa.
         rok = clarion_dan(doc.due_date) if doc.due_date else dan_prometa
+
+        # ID PDV evidencije. Kolona se zove LASTUSER - ime vara, ali je tako.
+        vrsta, napomena = vrsta_pdv_evidencije(
+            conn,
+            dobavljac,
+            magacin,
+            predznak=predznak,
+            ima_pdv=abs(round(pdv_opsta + pdv_posebna, 2)) > 0,
+        )
+        if napomena:
+            nacrt.napomene.append(napomena)
+        for stavka in nacrt.stavke:
+            stavka["IDPDV"] = vrsta
+
         nacrt.zaglavlje = {
-            "LASTUSER": 1,
+            KOLONA_PDV_EVIDENCIJE: vrsta,
             "MAGACIN": magacin,
             "VRSTAKNJIZ": "U",
             "BROJ": broj,

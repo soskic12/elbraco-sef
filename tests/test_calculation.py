@@ -1164,3 +1164,134 @@ def test_dvosmislen_barkod_ceka_coveka(db):
 
     assert sifra is None
     assert "više šifara" in odakle
+
+
+# --------------------------------------------------------------------------- #
+# ID PDV evidencije (kolona LASTUSER)
+# --------------------------------------------------------------------------- #
+
+
+class _ConnIstorija:
+    """Veza koja na upit o istoriji dobavljaca vraca zadate parove (vrsta, bez_pdv)."""
+
+    def __init__(self, redovi=()):
+        self.redovi = [
+            type("R", (), {"vrsta": v, "n": n, "bez_pdv": b})() for v, n, b in redovi
+        ]
+
+    def execute(self, *a, **k):
+        return self
+
+    def all(self):
+        return self.redovi
+
+
+def test_pdv_evidencija_povrat_robe():
+    """Magacin 010 je uvek povrat robe: nema nijedne pozitivne kalkulacije."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, napomena = K.vrsta_pdv_evidencije(
+        _ConnIstorija(), "0001", "010", predznak=-1.0, ima_pdv=True
+    )
+    assert vrsta == K.TIP_POVRAT_ROBE
+    assert napomena is None
+
+
+def test_pdv_evidencija_finansijsko_odobrenje():
+    """Negativan dokument bez robe (088) je finansijsko odobrenje - svih 368."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija(), "0001", "088", predznak=-1.0, ima_pdv=True
+    )
+    assert vrsta == K.TIP_FINANSIJSKO_ODOBRENJE
+
+
+def test_pdv_evidencija_negativno_u_maloprodaji_ne_postaje_34():
+    """Van 088 negativnog nema; ako se pojavi, app ne izmislja 34."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija(), "0001", "003", predznak=-1.0, ima_pdv=True
+    )
+    assert vrsta == K.TIP_ULAZNI_RACUN
+
+
+def test_pdv_evidencija_racun_sa_pdvom_je_ulazni():
+    """Racun sa PDV-om je 1 ili 21, nikad 75 ni 23 - pa je podrazumevano 1."""
+    from sefsync.erp import kalkulacija as K
+
+    # Dobavljac je ranije bio 75, ali to je bilo na racunima bez PDV-a.
+    vrsta, napomena = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(75, 40, 1)]), "0001", "088", predznak=1.0, ima_pdv=True
+    )
+    assert vrsta == K.TIP_ULAZNI_RACUN
+    assert napomena is None
+
+
+def test_pdv_evidencija_nikad_ne_bira_21_nego_javi():
+    """21 se ne vidi iz fakture (Euro petrol: 59 puta 21 i 40 puta 1).
+
+    App upisuje 1 i ostavlja napomenu, umesto da pogadja.
+    """
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, napomena = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(1, 40, 0), (21, 59, 0)]), "0001", "088",
+        predznak=1.0, ima_pdv=True,
+    )
+    assert vrsta == K.TIP_ULAZNI_RACUN
+    assert napomena and "59 puta biran 21" in napomena and "40 puta 1" in napomena
+
+
+def test_pdv_evidencija_trpi_omasku_u_istoriji():
+    """Banca intesa: 323 puta 75, pa po jednom 1 i 23 - ucenje to ne sme da sruši."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(75, 323, 1), (1, 1, 1), (23, 1, 1)]), "0001", "088",
+        predznak=1.0, ima_pdv=False,
+    )
+    assert vrsta == 75
+
+
+def test_pdv_evidencija_uci_proviziju_od_dobavljaca():
+    """Banka je bez izuzetka 75 - to se preuzima iz ERP-ove istorije."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, napomena = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(75, 418, 1)]), "0001", "088", predznak=1.0, ima_pdv=False
+    )
+    assert vrsta == 75
+    assert napomena is None
+
+
+def test_pdv_evidencija_ne_uci_od_jednog_susreta():
+    """Jedan jedini raniji slucaj nije dovoljan - ostaje 23."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(75, 1, 1)]), "0001", "088", predznak=1.0, ima_pdv=False
+    )
+    assert vrsta == K.TIP_BEZ_EPPDV
+
+
+def test_pdv_evidencija_mesanog_dobavljaca_ne_pogadja():
+    """Kad je dobavljac bio i 75 i 23, app ne bira - ostaje podrazumevano 23."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(75, 20, 1), (23, 14, 1)]), "0001", "088",
+        predznak=1.0, ima_pdv=False,
+    )
+    assert vrsta == K.TIP_BEZ_EPPDV
+
+
+def test_pdv_evidencija_nepoznat_dobavljac_bez_pdva():
+    """Racun bez PDV-a od nepoznatog dobavljaca je 23, ne 1."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija(), None, "088", predznak=1.0, ima_pdv=False
+    )
+    assert vrsta == K.TIP_BEZ_EPPDV

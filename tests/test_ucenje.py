@@ -283,7 +283,7 @@ def test_ista_sifra_dobavljaca_za_drugi_artikal_gasi_vezu(db, monkeypatch):
 
     class Nacrt:
         magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
-        problemi, nemapirane = [], []
+        problemi, nemapirane, napomene = [], [], []
         spreman = True
 
     monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())
@@ -315,7 +315,7 @@ def test_ne_pamti_ostavlja_sifarnik_netaknut(db, monkeypatch):
 
     class Nacrt:
         magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
-        problemi, nemapirane = [], []
+        problemi, nemapirane, napomene = [], [], []
         spreman = True
 
     monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())

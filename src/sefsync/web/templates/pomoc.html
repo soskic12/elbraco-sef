@@ -162,6 +162,38 @@
   ume da stoji dvaput u komitentima.</p>
 {% endcall %}
 
+{% call korak('ID PDV evidencije — šta aplikacija sama upiše') %}
+  <p>Kalkulacija ide u ERP sa već postavljenim ID-om PDV evidencije. Do sada je
+  svuda pisala <b>1</b>, pa si ispravljao ručno. Sada bira ovako:</p>
+  <table class="small">
+    <tr><th style="width:22%">Šta je faktura</th><th style="width:14%">ID</th><th>Zašto</th></tr>
+    <tr><td>Povraćaj robe (magacin 010)</td><td><b>35</b></td>
+      <td>Na 010 nema nijedne pozitivne kalkulacije</td></tr>
+    <tr><td>Knjižno odobrenje bez robe</td><td><b>34</b></td>
+      <td>Finansijsko odobrenje — svih 368 u bazi je takvo</td></tr>
+    <tr><td>Račun <b>sa</b> PDV-om</td><td><b>1</b></td>
+      <td>Ulazni račun; 75 i 23 se tu nikad ne javljaju</td></tr>
+    <tr><td>Račun <b>bez</b> PDV-a, poznat dobavljač</td><td><b>75</b> ili <b>23</b></td>
+      <td>Ono što si ti kod njega birao ranije (banke, PTT, osiguranje → 75)</td></tr>
+    <tr><td>Račun bez PDV-a, nepoznat dobavljač</td><td><b>23</b></td>
+      <td>Bez EPPDV — sigurnija pretpostavka</td></tr>
+  </table>
+  <p class="muted small">Spisak dobavljača se ne održava rukom — aplikacija ga
+  čita iz samog ERP-a, iz onoga što je ranije upisano. Kad kod nekog dobavljača
+  promeniš izbor nekoliko puta, ona ga preuzme sama.</p>
+{% endcall %}
+
+{% call korak('Žuta napomena „Pogledaj pre knjiženja“') %}
+  <p><b>21</b> (bez prava na odbitak PDV-a) aplikacija <b>nikad ne bira sama</b>.
+  Da li ima prava na odbitak zavisi od toga šta je kupljeno i za šta se koristi,
+  a to se iz fakture ne vidi — kod istog dobavljača je nekad 21, nekad 1.</p>
+  <p>Zato upiše <b>1</b> i ispod fakture ostavi žutu napomenu sa brojkama:
+  koliko je puta kod tog dobavljača ranije biran 21, a koliko 1. Odluka je
+  tvoja, u ERP-u, pre knjiženja.</p>
+  <p class="muted small">Napomena ne zaustavlja ništa i ne mora da znači da je
+  nešto pogrešno — samo da je taj dobavljač od onih kod kojih se ide na oba.</p>
+{% endcall %}
+
 {% call korak('„Možda je već u ERP-u“ — žuti okvir') %}
   <p>Kad se broj računa ne poklapa, a dobavljač, datum i iznos jesu, dobijaš
   predlog. Uz njega piše koliko su brojevi slični — „isti broj, kraće zapisan“,
@@ -312,6 +344,17 @@
   <p class="muted small">Ako je neko već potvrdio prijem pa je dokument
   prebačen, potvrda se poništava — novi poslovođa mora sam da potvrdi da je
   roba kod njega.</p>
+{% endcall %}
+{% endif %}
+
+{% if uloga != 'operater' %}
+{% call korak('Žute napomene ispod fakture') %}
+  <p>Žuti okvir <b>Pogledaj pre knjiženja</b> ne zaustavlja ništa — kalkulacija
+  jeste u ERP-u. Znači da je aplikacija nešto upisala kako najčešće bude, a
+  vredi da pogledaš pre nego što zaknjižiš. Za sada se javlja samo za
+  <b>ID PDV evidencije</b>.</p>
+  <p class="muted small">Crveni okvir <b>Proveri u ERP-u</b> je nešto drugo —
+  tamo je upis pao ili je kalkulacija ostala u pogrešnom magacinu.</p>
 {% endcall %}
 {% endif %}
 
