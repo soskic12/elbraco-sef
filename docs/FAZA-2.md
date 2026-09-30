@@ -1978,3 +1978,109 @@ tačan trenutak.
 Neuspeh slanja **ne poništava prihvatanje** — ono je već prošlo na SEF-u. Trag
 o padu ostaje na dokumentu, crveno, sa uputstvom da se obaveštenje napravi
 ručno na portalu. `provera-prelaska` broji prihvaćena odobrenja bez obaveštenja.
+
+## Prva dva radna dana — 29. i 30.09.
+
+### Panel je dvaput pao na 502
+
+Prvo sam podigao pogrešan bazen. Poruka `QueuePool limit of size 5 overflow 10
+reached` dolazi od **ERP** veze, koja je išla sa podrazumevanim bazenom, a ja
+sam povećao bazen baze panela. Sutradan je palo isto.
+
+Pravi uzrok je nađen tek kad sam prestao da nagađam i ugradio merač: `/health`
+sada pokazuje stanje oba bazena i **ko drži vezu** — mesto u kodu i koliko
+dugo, bez uzimanja ijedne nove veze, jer mora da radi baš kad je bazen pun.
+
+Merač je odmah pokazao tri zahteva na `/red` koji drže vezu **43–55 sekundi**.
+Brojanje je išlo kao `count` nad podupitom koji izvlači **sve kolone svih
+redova**, i to sedam puta po otvaranju stranice — jednom za ukupno i jednom za
+svaku karticu. Uz to je sinhronizacija držala dve veze odjednom, jer je moje
+zatvaranje manjka knjižnim odobrenjem otvaralo svoju sesiju usred ciklusa.
+
+Posle popravke: `u_upotrebi 0`, nijedan upit preko dve sekunde.
+
+### Prebacivanje dokumenata
+
+Mereno 29.09.: **49 dokumenata** je ispravljeno pošto su već bili prosleđeni, 2
+i pošto je prijem potvrđen — a nijedna nova jedinica nije o tome obaveštena.
+
+Sada, kad se jedinica stvarno promeni: nova dobija obaveštenje, tuđa potvrda
+prijema se poništava, a ako je kalkulacija već upisana ostaje u starom magacinu
+uz crveno upozorenje sa njenim brojem. Ponovna dodela **iste** jedinice ne šalje
+ništa, pa „zapamti pravilo“ ne spamuje.
+
+Uz to dugme **„Nije za moju jedinicu“**: čovek vraća dokument kancelariji sa
+napomenom, umesto da javlja telefonom bez traga.
+
+### Pravila razvrstavanja su se međusobno borila
+
+Kvačica „zapamti kao pravilo“ gledala je postoji li isto pravilo za **istu**
+jedinicu, pa je za isti obrazac a drugu jedinicu pravila još jedno. Posledica:
+adresa `SRPSKIH VLADARA 46, 25260, APATIN` vodila je na **deset** jedinica, isti
+PIB `103699024` na osam. Ko prvi pogodi, taj odlučuje.
+
+Očišćeno 77 mrtvih pravila (`pravila-sukobi`), a **26 pravila po PIB-u za usluge
+podignuto na prioritet 30**, iznad adresnih na 50 — jer motor uzima **prvo**
+pravilo koje pogodi, pa je račun za struju na adresi prodavnice odlazio u
+prodavnicu. `objasni <id>` pokazuje koja pravila pogađaju jedan dokument i koje
+odlučuje.
+
+**Greška u analizi:** tvrdio sam da opšte ključne reči („rabat“, „promet“)
+odvode fakture za robu u Upravu. Ne odvode — ta pravila već imaju
+`document_type = CreditNote` i motor ih na fakturi preskače. Zaključak je došao
+iz `objasni`, koja je imala **svoju kopiju uslova** i u njoj ispustila proveru
+vrste. Motor sada izlaže `pogodjena()`, koju koriste i odlučivanje i
+objašnjenje.
+
+### Fakture koje su tiho stajale
+
+Potvrda prijema pokušava upis odmah. Ako nacrt tada nije spreman — najčešće
+stavka bez naše šifre — upis se odbije, a kad se šifra kasnije otvori **niko ne
+pokreće upis ponovo**. Taj put je uz to bio jedini bez ikakvog traga.
+
+Sada: razlog se upisuje u dnevnik i ostaje crveno na dokumentu, komanda
+`dovrsi-upise` nalazi takve i dovršava ih, a **petnaestominutni ciklus
+preračunava zapele nacrte** — šifra se otvara u ERP-u, van panela, pa panel mora
+sam da primeti da je stavka odmrznuta.
+
+### Tri greške oko veza šifara
+
+1. **Barkod se upisivao a nikad nije čitao.** Veza je vredela samo za istog
+   dobavljača i istu njegovu šifru.
+2. **Naziv nije bio ključ.** Vitel šalje stavke bez šifre i bez EAN-a („LEXA BT
+   ZVUCNIK LX-302 NITRO“), pa veza nije imala za šta da se zakači.
+3. **Prazan ključ je gasio prethodnu vezu.** Ključ je bio `(dobavljač, prazno,
+   prazno)` — isti za svaki takav artikal — pa je svako novo povezivanje ubijalo
+   prethodno kao „kolebljivo“, a novo nije ni pravilo. Dule je povezao sve LEXA
+   zvučnike i ostao bez ijedne žive veze.
+
+Uz to: ponovno povezivanje **iste** šifre sada oživljava ugašenu vezu (ranije je
+čovek mogao da klikće bez efekta), a `ozivi-veze` vraća ono što je ugašeno
+greškom — samo gde naziv vodi na tačno jednu šifru.
+
+Mereno: od 2.057 parova (dobavljač + naziv) **24 vode na više šifara**, svi od
+dobavljača koji šalje opšte nazive tipa „MASINA ZA PRANJE VESA“ (sedam mašina).
+Zato se po nazivu odlučuje samo kad je pogodak jedan.
+
+### Slika sa telefona
+
+Odbijali smo fajl po onome što **pregledač kaže** da šalje. Android pošalje
+`application/octet-stream` kad se bira iz menadžera fajlova, pa Bečej nije mogao
+da pošalje sliku. Vrsta se sada prepoznaje po prvim bajtovima samog fajla.
+
+### Sitnije
+
+* Magacin povrata nije imao mejl **na poslovnoj jedinici**, ali ga ima u
+  šifarniku osoblja uz Ilijanu i objekat 010. Dispečer sada, kad jedinica nema
+  svoj mejl, čita adrese iz šifarnika po šifri objekta. Šifarnik se i dalje samo
+  čita.
+* Prazan spisak primalaca više ne prolazi nemo — upisuje se upozorenje sa imenom
+  jedinice.
+* Naslov mejla je skraćen i bez znakova `—` i `·`: svaki takav znak preseca
+  naslov na još jedan `=?utf-8?q?…?=` odsečak, a Gmail na Androidu ih loše
+  spaja. Kodiranje je oduvek bilo ispravno.
+* Zaustavljene kalkulacije se broje uz **Šifre** u navigaciji; objašnjenje uz njih
+  imenovalo je retke uzroke, a sva četiri zatečena slučaja su ista: *artikal
+  nema maloprodajnu cenu u tom objektu*.
+* `dokument <broj>` ispisuje sve o jednoj fakturi: gde je, dokle je stigla, šta
+  drži kalkulaciju i šta se sve sa njom dešavalo.
