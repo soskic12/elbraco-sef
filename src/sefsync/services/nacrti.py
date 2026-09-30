@@ -517,7 +517,7 @@ def upisi_u_erp(
     # U kolonu ide samo broj kalkulacije (staje u 20 znakova) - ceo opis, sa
     # imenom baze, ostaje u dnevniku.
     broj = f"{nacrt.magacin}/{nacrt.zaglavlje.get('BROJ', '')}"
-    _zabelezi_upis(document_id, broj, korisnik, opis=opis)
+    _zabelezi_upis(document_id, broj, korisnik, opis=opis, napomene=nacrt.napomene)
     _zabelezi_neuspeh(document_id, None)   # uspelo je, staro upozorenje se skida
     poruka = f"Kalkulacija je upisana u ERP ({opis})."
     return True, poruka + prihvati_ako_je_kompletna(document_id, korisnik)
@@ -595,7 +595,14 @@ def _zabelezi_neuspeh(document_id: int, razlog: str | None) -> None:
         red.upozorenje = f"Upis nije prošao: {razlog}"[:250] if razlog else None
 
 
-def _zabelezi_upis(document_id: int, broj: str, korisnik: str, *, opis: str = "") -> None:
+def _zabelezi_upis(
+    document_id: int,
+    broj: str,
+    korisnik: str,
+    *,
+    opis: str = "",
+    napomene: list[str] | None = None,
+) -> None:
     with session_scope() as session:
         red = session.get(NacrtKalkulacije, document_id)
         if red is None:
@@ -605,6 +612,10 @@ def _zabelezi_upis(document_id: int, broj: str, korisnik: str, *, opis: str = ""
         red.erp_broj = broj[:20]
         red.upisano_u = utcnow()
         red.upisao = korisnik
+        # Napomena treba da se vidi BAS posle upisa - knjizi se posle njega.
+        # Ovde se cuva jer se nacrt posle uspesnog upisa vise ne preracunava.
+        if napomene is not None:
+            red.napomene = list(napomene) or None
         session.add(
             AuditLog(
                 actor=korisnik,

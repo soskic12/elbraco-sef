@@ -612,6 +612,38 @@ def test_operater_moze_da_upise_kalkulaciju_bez_prijema(client, db, podaci, monk
         assert red.upisao == "bogdan"
 
 
+def test_napomena_preziva_uspesan_upis(client, db, podaci, monkeypatch):
+    """Zuta napomena treba da se vidi BAS posle upisa - knjizi se posle njega.
+
+    Nacrt se posle uspesnog upisa vise ne preracunava, pa bi se napomena
+    izgubila da se ne sacuva u tom trenutku.
+    """
+    from sefsync.models import NacrtKalkulacije
+    from sefsync.services import nacrti
+    import sefsync.web.app as app_module
+
+    napomena = "kod ovog dobavljača je ranije 58 puta biran 21, a 40 puta 1"
+
+    def lazni_upis(nacrt, produkcija=False):
+        nacrt.zaglavlje["BROJ"] = "03018"
+        return "ELBSX_2026: ULKALKUL 088/U/03018"
+
+    monkeypatch.setattr(nacrti, "pripremi",
+                        lambda *a, **k: LazniNacrt(napomene=[napomena]))
+    monkeypatch.setattr(nacrti, "upisi", lazni_upis)
+    monkeypatch.setattr(app_module.get_settings(), "erp_upis_kalkulacije", True)
+
+    odgovor = client.post(
+        f"/dokument/{podaci}/upisi-kalkulaciju", follow_redirects=False
+    )
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.napomene == [napomena]
+        assert red.upozorenje is None, "napomena nije greska pri upisu"
+
+
 def test_bez_prekidaca_operater_ne_moze_da_upise(client, db, podaci, monkeypatch):
     from sefsync.services import nacrti
     import sefsync.web.app as app_module
