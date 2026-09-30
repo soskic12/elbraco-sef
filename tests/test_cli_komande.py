@@ -391,3 +391,54 @@ def test_dokument_prima_i_id_iz_panela(db):
         broj = doc.id
 
     assert "F-77" in _pokreni("dokument", f"#{broj}").stdout
+
+
+def test_dovrsi_upise_nalazi_primljeno_a_neupisano(db, monkeypatch):
+    """Roba primljena, nacrt u međuvremenu spreman, a upis niko ne pokreće."""
+    import datetime as dt
+
+    from sefsync.models import (
+        Document, NacrtKalkulacije, OdlukaManjka, PrijavaManjka, StanjeNacrta, utcnow,
+    )
+    from sefsync.services import nacrti as N
+
+    monkeypatch.setattr(get_settings(), "erp_upis_kalkulacije", True, raising=False)
+    monkeypatch.setattr(get_settings(), "novi_tok_od", dt.date(2026, 9, 28), raising=False)
+
+    with db.session_scope() as session:
+        def dodaj(broj, stanje, prijem=True, manjak=False, kada=None):
+            doc = Document(
+                sef_invoice_id=abs(hash(broj)) % 10**6, document_number=broj,
+                supplier_name="MISON DOO",
+                created_at=kada or dt.datetime(2026, 9, 29, 9, 0),
+                received_at=utcnow() if prijem else None,
+                received_by="MikicNemanja" if prijem else None,
+            )
+            session.add(doc)
+            session.flush()
+            session.add(NacrtKalkulacije(document_id=doc.id, stanje=stanje, magacin="004"))
+            if manjak:
+                session.add(PrijavaManjka(
+                    document_id=doc.id, odluka=OdlukaManjka.KASNIJE, prijavio="predrag",
+                    stavke=[{"line_no": 1, "naziv": "X", "fakturisano": 2, "stiglo": 1}],
+                ))
+
+        dodaj("TREBA-1", StanjeNacrta.SPREMAN)
+        dodaj("NIJE-PRIMLJENO", StanjeNacrta.SPREMAN, prijem=False)
+        dodaj("CEKA-SIFRU", StanjeNacrta.CEKA_SIFRU)
+        dodaj("SA-MANJKOM", StanjeNacrta.SPREMAN, manjak=True)
+        dodaj("PO-STAROM", StanjeNacrta.SPREMAN, kada=dt.datetime(2026, 9, 20, 9, 0))
+
+    suvo = _pokreni("dovrsi-upise")
+    assert "TREBA-1" in suvo.stdout
+    for ne_sme in ("NIJE-PRIMLJENO", "CEKA-SIFRU", "SA-MANJKOM", "PO-STAROM"):
+        assert ne_sme not in suvo.stdout, f"{ne_sme} ne sme da se dira"
+
+    pozvano = []
+    monkeypatch.setattr(N, "upisi_u_erp",
+                        lambda doc_id, **k: (pozvano.append(doc_id), (True, "Upisana."))[1])
+    import sefsync.cli as C
+    monkeypatch.setattr(C, "upisi_u_erp", N.upisi_u_erp, raising=False)
+
+    _pokreni("dovrsi-upise", "--stvarno")
+    assert len(pozvano) == 1

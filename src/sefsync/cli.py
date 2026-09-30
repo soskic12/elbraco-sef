@@ -25,6 +25,8 @@ def _force_utf8() -> None:
 
 _force_utf8()
 
+KORISNIK_DOVRSAVANJA = "dovrsi-upise"
+
 app = typer.Typer(add_completion=False, help="Preuzimanje i obrada ulaznih e-faktura sa SEF-a.")
 log = logging.getLogger("sefsync.cli")
 
@@ -1077,6 +1079,84 @@ def cmd_pravilo(
 
     typer.echo("")
     typer.secho(f"Pravilo #{broj} je {'ugašeno' if ugasi else 'vraćeno'}.", fg="green")
+
+
+@app.command("dovrsi-upise")
+def cmd_dovrsi_upise(
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+    limit: int = typer.Option(50, "--limit", help="Najvise toliko dokumenata."),
+) -> None:
+    """Upisuje kalkulacije za robu koja je primljena a nacrt u medjuvremenu spreman.
+
+    Potvrda prijema pokusava upis odmah. Ako nacrt tada nije spreman - najcesce
+    zato sto stavka nema nasu sifru - upis se odbije, a kad Dule kasnije otvori
+    sifru, nacrt postane spreman i **niko ne pokrece upis ponovo**. Faktura
+    tako tiho stoji: roba primljena, kalkulacija spremna, u ERP-u nista
+    (naslo se 30.09. na 26-15240-238911).
+
+    Ne dira fakture od pre prelaska ni one sa otvorenim manjkom.
+    """
+    _boot()
+    from sqlalchemy import select
+
+    from .models import Document, NacrtKalkulacije, PrijavaManjka, StanjeNacrta
+    from .services.nacrti import upisi_u_erp
+
+    podesavanja = get_settings()
+    if not podesavanja.erp_upis_kalkulacije:
+        typer.secho("ERP_UPIS_KALKULACIJE je isključen — nema šta da se upisuje.", fg="red")
+        raise typer.Exit(1)
+
+    with session_scope() as session:
+        redovi = list(
+            session.execute(
+                select(NacrtKalkulacije, Document)
+                .join(Document, Document.id == NacrtKalkulacije.document_id)
+                .where(
+                    NacrtKalkulacije.stanje == StanjeNacrta.SPREMAN,
+                    Document.received_at.is_not(None),
+                    Document.archived == False,  # noqa: E712
+                )
+                .order_by(Document.received_at)
+            )
+        )
+        kandidati = []
+        for red, doc in redovi:
+            if doc.po_starom:
+                continue
+            manjak = session.get(PrijavaManjka, doc.id)
+            if manjak is not None and manjak.otvoren:
+                continue
+            kandidati.append((doc.id, doc.document_number, doc.supplier_name,
+                              red.magacin, doc.received_by))
+
+    if not kandidati:
+        typer.echo("Nema takvih faktura — sve primljeno je i upisano.")
+        raise typer.Exit(0)
+
+    kandidati = kandidati[:limit]
+    typer.echo(f"Primljeno, spremno, a nije u ERP-u: {len(kandidati)}")
+    for _, broj, dobavljac, magacin, ko in kandidati:
+        typer.echo(f"   {(broj or '?')[:24]:<24} {(dobavljac or '')[:26]:<26} "
+                   f"mag {magacin or '?':<4} prijem: {ko or '?'}")
+
+    if not stvarno:
+        typer.echo("")
+        typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+        raise typer.Exit(0)
+
+    uspelo = 0
+    for doc_id, broj, _, _, _ in kandidati:
+        ok, poruka = upisi_u_erp(
+            doc_id, korisnik=KORISNIK_DOVRSAVANJA,
+            produkcija=podesavanja.erp_allow_production_write,
+        )
+        boja = "green" if ok else "yellow"
+        typer.secho(f"   {(broj or '?')[:24]:<24} {poruka[:80]}", fg=boja)
+        uspelo += 1 if ok else 0
+
+    typer.echo("")
+    typer.secho(f"Upisano: {uspelo} od {len(kandidati)}.", fg="green")
 
 
 @app.command("dokument")

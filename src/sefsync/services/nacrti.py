@@ -449,6 +449,15 @@ def upisi_u_erp(
         return False, f"Kalkulacija nije sklopljena: {exc}"
 
     if not nacrt.spreman:
+        # Jedini put koji nije ostavljao nikakav trag: ni u dnevniku ni na
+        # dokumentu. Faktura 26-15240-238911 je tako stajala - prijem potvrdjen,
+        # upis odbijen jer stavka nije imala sifru, i nigde se to nije videlo
+        # (30.09.).
+        razlog = "; ".join(
+            [f"stavka {x['line_no']}: {x['naziv']}" for x in nacrt.nemapirane[:2]]
+            + nacrt.problemi[:2]
+        )
+        log.info("Kalkulacija za #%s nije spremna: %s", document_id, razlog[:160])
         osvezi(document_id, engine=engine)
         return False, "Kalkulacija još nije spremna — pogledaj tab „Šifre“."
 
