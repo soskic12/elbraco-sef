@@ -43,3 +43,39 @@ def find_by_login(login: str) -> dict[str, str] | None:
 def email_for_login(login: str) -> str:
     osoba = find_by_login(login)
     return osoba["email"] if osoba else ""
+
+
+UPIT_PO_OBJEKTU = (
+    "SELECT RTRIM(ISNULL(Email, '')) AS email FROM dbo.kontakti_osobe "
+    "WHERE RTRIM(ISNULL(SifraPovezanogObjekta, '')) = :objekat "
+    "AND RTRIM(ISNULL(Email, '')) <> ''"
+)
+
+
+def emails_for_unit(sifra_objekta: str) -> list[str]:
+    """Mejlovi ljudi vezanih za taj objekat u sifarniku osoblja.
+
+    Adresa ume da stoji samo ovde, a ne i na poslovnoj jedinici u panelu:
+    magacin povrata je tako docekao prvi dokument i prosledjivanje je palo,
+    iako je Ilijanin `reklamacije@elbraco.rs` sve vreme bio upisan uz objekat
+    010 (30.09.).
+
+    Sifarnik se samo cita - deli ga i projekat LOGISTIKA, pa se u njega ne
+    upisuje nasa sema.
+    """
+    sifra = (sifra_objekta or "").strip()
+    if not sifra:
+        return []
+    try:
+        with get_erp_engine().connect() as conn:
+            redovi = conn.execute(text(UPIT_PO_OBJEKTU), {"objekat": sifra}).mappings().all()
+    except Exception as exc:  # noqa: BLE001 - nedostupna baza ne sme da obori obavestenje
+        log.warning("Ne mogu da pročitam osoblje objekta %s: %s", sifra, str(exc)[:160])
+        return []
+
+    nadjeni: list[str] = []
+    for red in redovi:
+        adresa = (red["email"] or "").strip()
+        if adresa and adresa.lower() != "nepoznato" and adresa not in nadjeni:
+            nadjeni.append(adresa)
+    return nadjeni

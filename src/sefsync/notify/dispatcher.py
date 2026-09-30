@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from ..config import Settings, get_settings
 from ..db import session_scope
+from ..erp.staff import emails_for_unit as staff_emails_for_unit
 from ..models import (
     BusinessUnit,
     Document,
@@ -63,6 +64,16 @@ class Dispatcher:
             unit = doc.business_unit
             message = self.build_message(doc, unit)
             emails = unit.email_list() if unit else self._fallback_emails()
+            if unit is not None and not emails:
+                # Adresa ume da stoji samo u sifarniku osoblja, uz sifru
+                # objekta. Tako je magacin povrata ostao bez obavestenja iako
+                # je Ilijanin mejl sve vreme bio upisan uz objekat 010.
+                emails = staff_emails_for_unit(unit.erp_code or unit.code)
+                if emails:
+                    log.info(
+                        "Jedinica %s nema svoj mejl — uzimam iz šifarnika osoblja: %s",
+                        unit.code, ", ".join(emails),
+                    )
             phones = unit.phone_list() if unit else []
             proba = self.settings.notify_override_to.strip()
             if proba:

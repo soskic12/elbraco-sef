@@ -1597,3 +1597,45 @@ def test_prazan_spisak_primalaca_ostavlja_trag(podaci, db, caplog):
     poruke = " ".join(z.getMessage() for z in caplog.records)
     assert "nema nijednu adresu" in poruke
     assert "MP002" in poruke
+
+
+def test_mejl_se_uzima_iz_sifarnika_osoblja_kad_jedinica_nema_svoj(podaci, db, monkeypatch):
+    """Adresa magacina povrata stajala je samo uz osobu, ne i uz jedinicu.
+
+    Zbog toga je prosleđivanje padalo sa „slanje nije uspelo", iako je
+    reklamacije@elbraco.rs sve vreme bio upisan uz objekat 010.
+    """
+    import sefsync.notify.dispatcher as d
+    from sefsync.models import BusinessUnit as BU
+
+    with db.session_scope() as session:
+        jedinica = session.get(BU, podaci["unit"])
+        jedinica.emails = None
+        sifra = jedinica.erp_code
+
+    pitano = []
+
+    def iz_sifarnika(objekat):
+        pitano.append(objekat)
+        return ["reklamacije@elbraco.rs"]
+
+    monkeypatch.setattr(d, "staff_emails_for_unit", iz_sifarnika)
+
+    primaoci = []
+
+    class LazniKanal:
+        def send(self, adrese, poruka):
+            from sefsync.notify.base import SendResult
+
+            primaoci.extend(adrese)
+            return [SendResult(True, a) for a in adrese]
+
+    class NemiPush:
+        def send(self, telefoni, poruka, meta):
+            return []
+
+    dispecer = d.Dispatcher(email=LazniKanal(), push=NemiPush())
+    assert dispecer.notify_document(podaci["doc"]) is True
+
+    assert pitano == [sifra], "šifarnik se pita baš za šifru objekta"
+    assert primaoci == ["reklamacije@elbraco.rs"]
