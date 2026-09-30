@@ -706,6 +706,21 @@ def povezi_sifru(
                 )
             )
         elif postoji is not None:
+            # Covek je rekao istu sifru kao i pre - to je potvrda, pa ugasena
+            # veza ozivljava. Bez ovoga je mogao da klikce koliko hoce i nista
+            # se ne bi promenilo: veza ostane mrtva a stavka i dalje ceka
+            # (naslo se 30.09. uz LEXA zvucnike).
+            if not postoji.active:
+                postoji.active = True
+                postoji.source = "rucno"
+                session.add(
+                    AuditLog(
+                        actor=korisnik,
+                        action="mapiranje.ozivljeno",
+                        document_id=document_id,
+                        detail=f"{pib}/{linija.name or '-'}: {sifra}",
+                    )
+                )
             postoji.confirmed_at = utcnow()
             postoji.confirmed_by = korisnik
             postoji.hits += 1

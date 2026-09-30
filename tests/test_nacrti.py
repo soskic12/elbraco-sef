@@ -759,3 +759,35 @@ def test_isti_naziv_sa_drugom_sifrom_i_dalje_gasi_vezu(db, monkeypatch):
             select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
         ))
     assert zive == [], "dvosmislen naziv ne sme da ostane kao veza"
+
+
+def test_ponovno_povezivanje_iste_sifre_ozivljava_vezu(db, monkeypatch):
+    """Bez ovoga je čovek mogao da klikće koliko hoće — veza ostaje mrtva."""
+    from sqlalchemy import select
+
+    from sefsync.models import Document, DocumentLine, ItemMapping
+    from sefsync.services import nacrti as N
+    from sefsync.services.nacrti import povezi_sifru
+
+    monkeypatch.setattr(N, "osvezi", lambda *a, **k: None)
+    monkeypatch.setattr(N, "_cekaju_isti_artikal", lambda *a, **k: [])
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=8802, document_number="R-3/26",
+                       supplier_name="VITEL", supplier_vat="100123456")
+        session.add(doc)
+        session.flush()
+        session.add(DocumentLine(document_id=doc.id, line_no=1,
+                                 name="LEXA BT ZVUCNIK LX-201 SPARK", quantity=1))
+        session.add(ItemMapping(
+            supplier_vat="100123456", supplier_item_name="LEXA BT ZVUCNIK LX-201 SPARK",
+            erp_item_code="87422", source="kolebljivo", active=False,
+        ))
+        doc_id = doc.id
+
+    povezi_sifru(doc_id, 1, "87422", korisnik="dusan")
+
+    with db.session_scope() as session:
+        veza = session.scalar(select(ItemMapping))
+        assert veza.active is True
+        assert veza.source == "rucno"
