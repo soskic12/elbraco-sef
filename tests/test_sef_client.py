@@ -84,3 +84,47 @@ def test_provera_naloga_ide_postom_sa_telom():
     assert seen["method"] == "POST"
     body = json.loads(seen["body"])
     assert body == {"registrationNumber": "20123456", "vatNumber": "104220952"}
+
+
+def test_pdf_ceka_da_ga_sef_napravi(monkeypatch):
+    """SEF na prvi poziv vrati JSON „not generated“, pa tek posle pravi PDF.
+
+    Mereno 01.10.: treba mu 2-3 sekunde. Bez čekanja je panel tih 85 bajtova
+    slao pregledaču kao `application/pdf`, pa je Štampaj prvo javio grešku.
+    """
+    from sefsync.sef.client import SefClient
+
+    poruka = (b'{"message":"Extended PDF has not been generated '
+              b'for invoice Id 478831242."}')
+    odgovori = [poruka, poruka, poruka, b"%PDF-1.4 pravi sadrzaj"]
+    pozivi = []
+
+    klijent = SefClient.__new__(SefClient)
+    klijent.PDF_PAUZA_S = 0
+
+    def lazni(metod, putanja, **kw):
+        pozivi.append(kw["params"]["invoiceId"])
+        return type("R", (), {"content": odgovori[len(pozivi) - 1]})()
+
+    monkeypatch.setattr(klijent, "_request", lazni, raising=False)
+
+    assert klijent.purchase_pdf(478831242).startswith(b"%PDF-")
+    assert len(pozivi) == 4, "nije sačekao da SEF napravi PDF"
+
+
+def test_pdf_odustane_i_kaze_zasto(monkeypatch):
+    """Kad PDF nikad ne stigne, diže se greška sa SEF-ovom porukom."""
+    import pytest
+
+    from sefsync.sef.client import SefClient, SefError
+
+    klijent = SefClient.__new__(SefClient)
+    klijent.PDF_PAUZA_S = 0
+    monkeypatch.setattr(
+        klijent, "_request",
+        lambda *a, **k: type("R", (), {"content": b'{"message":"nema ga"}'})(),
+        raising=False,
+    )
+
+    with pytest.raises(SefError, match="nema ga"):
+        klijent.purchase_pdf(1)

@@ -2253,3 +2253,21 @@ Aplikacija **ne bira dobavljača sama i ne dira šifarnik** — predlog je putok
 Prva verzija merne skripte vratila je nulu i za Kulu — `normalize` vraća velika
 slova, a spisak pravnih oblika sam napisao malim. Brojevi gore su posle
 ispravke.
+
+### „Štampaj“ je prvo javljao grešku (01.10.)
+
+PDF se otvarao tek iz drugog pokušaja. Nije bio pregledač.
+
+`GET /purchase-invoice/pdf` na **prvi** poziv vrati **status 200 i JSON** —
+`{"message":"Extended PDF has not been generated for invoice Id N."}`, 85
+bajtova — i tek tim pozivom pokrene pravljenje. Panel je tih 85 bajtova slao
+pregledaču sa `Content-Type: application/pdf`, pa je ovaj prijavio oštećen
+dokument; na osvežavanje je PDF već bio gotov i otvarao se.
+
+Mereno na pet netaknutih dokumenata: SEF-u treba **2–3 sekunde**, odnosno 4–6
+pokušaja na pola sekunde. Dokumenti koji su već jednom traženi stižu iz prvog
+pokušaja (0,1–0,4 s).
+
+`purchase_pdf` sada čeka — do 14 pokušaja na pola sekunde (7 s) — i diže grešku
+sa SEF-ovom porukom ako PDF nikad ne stigne. Ruta uz to nikad ne šalje
+pregledaču nešto što ne počinje na `%PDF-`.

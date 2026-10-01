@@ -791,8 +791,11 @@ def dokument_pdf(doc_id: int, user: Korisnik) -> Response:
         log.warning("PDF za dokument %s nije preuzet: %s", doc_id, exc)
         return _back(f"/dokument/{doc_id}", f"SEF nije dao PDF: {exc}", False)
 
-    if not sadrzaj:
-        return _back(f"/dokument/{doc_id}", "SEF je vratio prazan PDF.", False)
+    # Pregledacu se nikad ne salje nesto sto nije PDF: on to prijavi kao
+    # ostecen dokument, a covek ne vidi sta je zapravo stiglo.
+    if sadrzaj[:5] != b"%PDF-":
+        log.warning("SEF za dokument %s nije vratio PDF: %r", doc_id, sadrzaj[:200])
+        return _back(f"/dokument/{doc_id}", "SEF još nije napravio PDF — probaj ponovo.", False)
     return Response(
         content=sadrzaj,
         media_type="application/pdf",

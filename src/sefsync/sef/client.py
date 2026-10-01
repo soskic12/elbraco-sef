@@ -10,6 +10,7 @@ nisu deo ovog projekta pa su izostavljene.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime
 from typing import Any
 
@@ -177,15 +178,44 @@ class SefClient:
         )
         return resp.content
 
+    # SEF prosireni PDF pravi tek kad ga neko zatrazi. Mereno 01.10. na pet
+    # netaknutih dokumenata: treba mu 2-3 sekunde, odnosno 4-6 pokusaja na
+    # pola sekunde; dokument koji je vec jednom trazen stigne iz prvog.
+    PDF_POKUSAJA = 14
+    PDF_PAUZA_S = 0.5
+
     def purchase_pdf(self, invoice_id: int) -> bytes:
-        """GET /api/publicApi/purchase-invoice/pdf - prosireni PDF prikaz dokumenta."""
-        resp = self._request(
-            "GET",
-            f"{API}/purchase-invoice/pdf",
-            params={"invoiceId": invoice_id},
-            headers={"accept": "*/*"},
+        """GET /api/publicApi/purchase-invoice/pdf - prosireni PDF prikaz dokumenta.
+
+        SEF na prvi poziv vrati **status 200 i JSON** - `{"message": "Extended
+        PDF ... not generated for invoice Id N."}`, 85 bajtova - i tek tim
+        pozivom pokrene pravljenje. Posle par sekundi isti poziv vraca pravi
+        PDF od ~165 kB.
+
+        Zato se ovde ceka. Bez toga je panel tih 85 bajtova slao pregledacu kao
+        `application/pdf`, pa je Stampaj prvo prijavio gresku a tek na osvezavanje
+        otvorio dokument (Bane, 01.10.).
+        """
+        poslednji = b""
+        for pokusaj in range(self.PDF_POKUSAJA):
+            resp = self._request(
+                "GET",
+                f"{API}/purchase-invoice/pdf",
+                params={"invoiceId": invoice_id},
+                headers={"accept": "*/*"},
+            )
+            if resp.content[:5] == b"%PDF-":
+                if pokusaj:
+                    log.info("PDF za %s stigao iz %s. pokusaja", invoice_id, pokusaj + 1)
+                return resp.content
+            poslednji = resp.content
+            time.sleep(self.PDF_PAUZA_S)
+
+        raise SefError(
+            f"SEF nije napravio PDF ni posle "
+            f"{self.PDF_POKUSAJA * self.PDF_PAUZA_S:.0f} s: "
+            f"{poslednji[:200].decode('utf-8', 'replace')}"
         )
-        return resp.content
 
     # ------------------------------------------------------------------ #
     # obavestenje primaoca o prethodnom porezu
