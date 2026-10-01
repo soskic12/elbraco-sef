@@ -263,6 +263,19 @@
   traži iznos veći od nule.</p>
 {% endcall %}
 
+{% call korak('„Zaustavljeno“ zbog dobavljača') %}
+  <p>Kad dobavljač nije otvoren u ERP-ovom šifarniku komitenata, kalkulacija
+  stoji i ispod nje piše zašto, sa matičnim brojem i PIB-om sa fakture.</p>
+  <p>Ako aplikacija nađe komitenta koji po imenu i mestu <b>liči</b>, doda i
+  „Možda je 00709 Komunalac JKP, Kula“ — i kaže šta se razlikuje („u šifarniku
+  mu stoji matični 08004790, a na fakturi 82080“). To je najčešće kod javnih
+  preduzeća: SEF za njih šalje JBKJS umesto matičnog broja.</p>
+  <p class="muted small">Predlog je samo putokaz — aplikacija ne bira dobavljača
+  sama i ne menja šifarnik. Dopuni komitentu PIB ili matični u ERP-u, pa
+  kalkulacija prođe sama. Kad predloga nema, dobavljača stvarno nema i treba ga
+  otvoriti.</p>
+{% endcall %}
+
 {% call korak('Kad poslovođa prijavi manjak') %}
   <table class="small">
     <tr><th style="width:38%">Poslovođa je izabrao</th><th>Šta ti radiš</th></tr>

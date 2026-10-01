@@ -2222,3 +2222,34 @@ Usput: „KNJIŽNO ODOBRENJE ZA POVRAT AVANSA“ i „Odobravamo otpis neispravn
 CJ301BX“ padali su u dijagnostici pod „nema ni barkod ni šifru dobavljača —
 čovek“, a nijedno nikad neće imati našu šifru. `avans` i `otpis` su dodati u
 uzorak finansijskih stavki.
+
+### Predlog komitenta kad brojevi promaše (01.10.)
+
+Kad se dobavljač ne nađe ni po `MATBROJ` ni po `ZIRORACUN`/`BPG`, razlog
+zaustavljanja sada nosi i predlog: *„Možda je 00709 Komunalac JKP, Kula — u
+šifarniku mu stoji matični 08004790, a na fakturi 82080.“*
+
+Ključ je **skup reči iz imena**, bez pravnog oblika (doo, ad, jkp, javno
+komunalno preduzeće…) i bez reči kraćih od tri slova. SEF u ime po pravilu
+stavi i mesto („…KOMUNALAC, KULA“, „BCE GROUP DOO ČAČAK“), pa se poredi sa
+imenom **i sedištem** komitenta. Mereno na 45.105 komitenata: 96 % skupova reči
+vodi na tačno jednog. Predlog se daje samo kad je kandidat jedan.
+
+Provereno na pravom šifarniku, oba zatečena slučaja:
+
+| sa fakture | predlog |
+|---|---|
+| JAVNO KOMUNALNO PREDUZEĆE KOMUNALAC, KULA | 00709 Komunalac JKP, Kula |
+| BCE GROUP DOO ČAČAK | nema — i stvarno ga nema |
+
+Pretraga ne čita ceo šifarnik: najduža reč ide u `LIKE`, pa se poređenje radi
+nad nekoliko redova. Poređenje u ERP-u ne razlikuje ni velika slova ni kvačice,
+pa „CACAK“ nalazi „Čačak“.
+
+Aplikacija **ne bira dobavljača sama i ne dira šifarnik** — predlog je putokaz
+čoveku. Peglanje brojeva po dužini bi značilo pogađanje identiteta dobavljača, a
+2.252 reda ima „PIB“ koji je samo cifre a nije devetocifren.
+
+Prva verzija merne skripte vratila je nulu i za Kulu — `normalize` vraća velika
+slova, a spisak pravnih oblika sam napisao malim. Brojevi gore su posle
+ispravke.

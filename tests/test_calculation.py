@@ -254,6 +254,9 @@ def test_kalkulacija_nosi_datum_prometa_a_ne_danasnji(db, monkeypatch):
         def scalar(self):
             return None
 
+        def all(self):
+            return []
+
         def __iter__(self):
             return iter(())
 
@@ -317,6 +320,9 @@ def test_faktura_sa_vise_poreskih_stopa_deli_pdv(db):
         def scalar(self):
             return None
 
+        def all(self):
+            return []
+
         def __iter__(self):
             return iter(())
 
@@ -376,6 +382,9 @@ def test_racun_za_struju_deli_evidenciju_na_tip_1_i_23(db):
 
         def scalar(self):
             return None
+
+        def all(self):
+            return []
 
         def __iter__(self):
             return iter(())
@@ -440,6 +449,9 @@ def test_racun_bez_neoporezivog_dela_nema_posebnu_evidenciju(db):
         def scalar(self):
             return None
 
+        def all(self):
+            return []
+
         def __iter__(self):
             return iter(())
 
@@ -491,6 +503,9 @@ def test_usluga_nema_datum_prijema_robe(db):
 
         def scalar(self):
             return None
+
+        def all(self):
+            return []
 
         def __iter__(self):
             return iter(())
@@ -618,6 +633,9 @@ def test_knjizno_odobrenje_nosi_tip_povrat_robe(db):
 
         def scalar(self):
             return None
+
+        def all(self):
+            return []
 
         def __iter__(self):
             return iter(())
@@ -875,6 +893,9 @@ def test_valuta_nikad_nije_nula(db):
 
         def scalar(self):
             return None
+
+        def all(self):
+            return []
 
         def __iter__(self):
             return iter(())
@@ -1375,3 +1396,65 @@ def test_povezana_sifra_bez_pamcenja_ipak_vazi_za_tu_fakturu(db):
     nacrt = K.pripremi(doc_id, engine=engine)
     assert not nacrt.nemapirane, "stavka i dalje čeka šifru, a čovek ju je rekao"
     assert [s["ARTIKAL"] for s in nacrt.stavke] == ["90911"]
+
+
+class _ConnNazivi:
+    """Veza koja na pretragu NAZIVI vraća zadate komitente."""
+
+    def __init__(self, redovi=()):
+        self.redovi = [
+            type("R", (), {"a": a, "nz": nz, "mesto": m, "mb": mb, "zr": zr})()
+            for a, nz, m, mb, zr in redovi
+        ]
+
+    def execute(self, *a, **k):
+        return self
+
+    def all(self):
+        return self.redovi
+
+
+def test_predlog_dobavljaca_nalazi_javno_preduzece():
+    """Komunalac Kula postoji kao 00709, ali ga ni MB ni PIB ne nađu.
+
+    SEF za javna preduzeća šalje JBKJS (82080) umesto matičnog (08004790), a
+    PIB mu je u šifarniku zapisan sa nulom viška. Predlog treba da kaže i jedno
+    i drugo, da čovek zna šta da ispravi.
+    """
+    from sefsync.erp.kalkulacija import predlog_dobavljaca
+
+    conn = _ConnNazivi([("00709", "Komunalac JKP", "Kula", "08004790", "1000662387")])
+    predlog = predlog_dobavljaca(
+        conn, "JAVNO KOMUNALNO PREDUZEĆE KOMUNALAC, KULA", "82080", "100662387"
+    )
+
+    assert predlog is not None
+    assert "00709" in predlog and "Komunalac JKP" in predlog and "Kula" in predlog
+    assert "1000662387" in predlog and "100662387" in predlog
+
+
+def test_predlog_dobavljaca_cuti_kad_ga_stvarno_nema():
+    """BCE Group Čačak nije u šifarniku ni pod jednim brojem ni po imenu."""
+    from sefsync.erp.kalkulacija import predlog_dobavljaca
+
+    conn = _ConnNazivi([("57401", "Basket group d.o.o.", "Beograd", "17233629", "")])
+    assert predlog_dobavljaca(conn, "BCE GROUP DOO ČAČAK", "21587516", "") is None
+
+
+def test_predlog_dobavljaca_ne_bira_izmedju_dva():
+    """Dva Komunalca iz istog mesta — app ne pogađa, čovek otvara šifarnik."""
+    from sefsync.erp.kalkulacija import predlog_dobavljaca
+
+    conn = _ConnNazivi([
+        ("00709", "Komunalac", "Kula", "08004790", ""),
+        ("57549", "Komunalac JKP", "Kula", "21123269", ""),
+    ])
+    assert predlog_dobavljaca(conn, "JKP KOMUNALAC, KULA", "82080", "100662387") is None
+
+
+def test_predlog_dobavljaca_ne_siri_ime():
+    """Komitent sme da ima manje reči od fakture, ali ne i neku svoju."""
+    from sefsync.erp.kalkulacija import predlog_dobavljaca
+
+    conn = _ConnNazivi([("00709", "Komunalac Vrbas", "Vrbas", "", "")])
+    assert predlog_dobavljaca(conn, "JKP KOMUNALAC, KULA", "82080", "100662387") is None

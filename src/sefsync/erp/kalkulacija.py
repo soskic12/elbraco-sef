@@ -215,6 +215,86 @@ def _analitika_dobavljaca(
     return None
 
 
+# Reci koje ne razlikuju jednog komitenta od drugog - pravni oblik i opsti deo
+# imena javnih preduzeca. Bez njih "JAVNO KOMUNALNO PREDUZECE KOMUNALAC, KULA"
+# i "Komunalac JKP" iz Kule postaju isti skup reci.
+_PRAVNI_OBLIK = {
+    "DOO", "OOD", "AD", "KD", "JKP", "JP", "PR", "SZR", "SUR", "STR", "SZTR",
+    "DRUSTVO", "OGRANICENOM", "ODGOVORNOSCU", "JAVNO", "KOMUNALNO", "PREDUZECE",
+    "PREDUZETNIK", "ORTACKO", "AKCIONARSKO", "RADNJA",
+}
+
+
+def _reci(tekst: str | None) -> frozenset[str]:
+    """Reci po kojima se komitent prepoznaje - bez pravnog oblika i kratkih."""
+    return frozenset(
+        w for w in normalize(tekst or "").split()
+        if len(w) > 2 and w not in _PRAVNI_OBLIK
+    )
+
+
+def predlog_dobavljaca(
+    conn: Connection,
+    naziv: str | None,
+    maticni: str | None,
+    pib: str | None,
+) -> str | None:
+    """Kad se dobavljac ne nadje po brojevima - koji komitent mu najvise lici.
+
+    Ne odlucuje nista i ne upisuje nista: vraca recenicu koja ide uz razlog
+    zaustavljanja, da covek vidi gde da gleda.
+
+    Zasto uopste treba: dobavljac ume da **postoji** u sifarniku a da se ne
+    nadje. JKP Komunalac Kula je analitika 00709 i ima osam kalkulacija, ali
+    SEF za javna preduzeca salje JBKJS (82080) umesto maticnog (08004790), a
+    PIB mu je u sifarniku zapisan sa nulom viska (1000662387 umesto
+    100662387) - pa oba puta otkazu (01.10.).
+
+    Kljuc je skup reci iz imena, a SEF u ime po pravilu stavi i mesto
+    ("...KOMUNALAC, KULA", "BCE GROUP DOO CACAK"), pa se poredi sa imenom i
+    sedistem komitenta. Mereno na 45.105 komitenata: 96 % skupova reci vodi na
+    tacno jednog. Predlog se daje samo kad je kandidat jedan - inace nista.
+    """
+    trazene = _reci(naziv)
+    if not trazene:
+        return None
+
+    # Najduza rec je najprepoznatljivija; suzava pretragu na nekoliko redova
+    # umesto citanja celog sifarnika. Poredjenje u ERP-u ne razlikuje ni velika
+    # slova ni kvacice, pa "CACAK" nalazi "Čačak".
+    najduza = max(trazene, key=len)
+    try:
+        redovi = conn.execute(
+            text(
+                "SELECT TOP 200 RTRIM(ANALITIKA) a, RTRIM(NAZIV1) nz, "
+                "RTRIM(ISNULL(SEDISTE,'')) mesto, RTRIM(ISNULL(MATBROJ,'')) mb, "
+                "RTRIM(ISNULL(ZIRORACUN,'')) zr FROM dbo.NAZIVI "
+                "WHERE NAZIV1 LIKE :u"
+            ),
+            {"u": f"%{najduza}%"},
+        ).all()
+    except SQLAlchemyError as exc:  # pretraga je pomoc, ne sme da obori nacrt
+        log.info("Predlog dobavljača nije izračunat: %s", exc)
+        return None
+
+    kandidati = [
+        r for r in redovi
+        if _reci(r.nz) and _reci(r.nz) <= trazene and _reci(r.mesto) <= trazene
+    ]
+    if len(kandidati) != 1:
+        return None
+
+    k = kandidati[0]
+    razlike = []
+    if (maticni or "").strip() and k.mb and k.mb != maticni.strip():
+        razlike.append(f"matični {k.mb}, a na fakturi {maticni.strip()}")
+    if (pib or "").strip() and k.zr and k.zr != pib.strip():
+        razlike.append(f"PIB {k.zr}, a na fakturi {pib.strip()}")
+    rep = f" — u šifarniku mu stoji {'; '.join(razlike)}" if razlike else ""
+    mesto = f", {k.mesto}" if k.mesto else ""
+    return f"Možda je {k.a} {k.nz}{mesto}{rep}."
+
+
 def vrsta_pdv_evidencije(
     conn: Connection,
     dobavljac: str | None,
@@ -482,9 +562,16 @@ def pripremi(
             conn, doc.supplier_reg_no, doc.supplier_vat, doc.payment_account
         )
         if dobavljac is None:
-            nacrt.problemi.append(
-                f"Dobavljač {doc.supplier_name} (MB {doc.supplier_reg_no}) ne postoji u NAZIVI."
+            razlog = (
+                f"Dobavljač {doc.supplier_name} (MB {doc.supplier_reg_no}, "
+                f"PIB {doc.supplier_vat or '-'}) ne postoji u NAZIVI."
             )
+            predlog_dob = predlog_dobavljaca(
+                conn, doc.supplier_name, doc.supplier_reg_no, doc.supplier_vat
+            )
+            if predlog_dob:
+                razlog = f"{razlog} {predlog_dob}"
+            nacrt.problemi.append(razlog)
 
         broj_racuna = broj_racuna_za_erp(doc.document_number)
         broj = sledeci_broj(conn, tabela_z, magacin)
