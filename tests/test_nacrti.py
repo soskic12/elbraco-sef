@@ -824,3 +824,24 @@ def test_ponovno_povezivanje_iste_sifre_ozivljava_vezu(db, monkeypatch):
         veza = session.scalar(select(ItemMapping))
         assert veza.active is True
         assert veza.source == "rucno"
+
+
+def test_prepoznaje_finansijske_stavke_po_nazivu():
+    """`razlozi_cekanja` razdvaja „čovek mora“ od „ovo nikad neće biti artikal“.
+
+    Dva zatečena odobrenja na 010 (01.10.) padala su pod „čovek“, a nijedno
+    nikad neće imati našu šifru.
+    """
+    from sefsync.services.nacrti import _NIJE_ARTIKAL as uzorak
+
+    for naziv in (
+        "KNJIŽNO ODOBRENJE ZA POVRAT AVANSA",
+        "Odobravamo otpis neispravne robe CJ301BX",
+        "Odobrenje po Saglasnosti broj 277102/2026",
+        "Troškovi transporta",
+    ):
+        assert uzorak.search(naziv), naziv
+
+    for naziv in ("VIVAX IMAGO LED TV-55S60WO", "LEXA BT ZVUCNIK LX-302 NITRO",
+                  "MASINA ZA PRANJE VESA"):
+        assert not uzorak.search(naziv), naziv

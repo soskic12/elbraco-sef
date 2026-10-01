@@ -2186,3 +2186,39 @@ Popravljeno na dva mesta:
 
 Test koji to drži: `test_povezana_sifra_bez_pamcenja_ipak_vazi_za_tu_fakturu`
 (pada na staroj verziji).
+
+## Dobavljač koji postoji, a ne može da se nađe (01.10.)
+
+Četiri zaustavljene kalkulacije, dva različita uzroka.
+
+**BCE GROUP DOO ČAČAK (MB 21587516)** — stvarno nije otvoren. Nula pogodaka u
+sve četiri kolone po kojima se traži (`MATBROJ`, `ZIRORACUN`, `BPG`, `TEKUCI`),
+ni po imenu. Dve fakture, 169.214 i 35.253. Otvara ga čovek u ERP-u.
+
+**JKP Komunalac Kula — postoji, analitika `00709`, osam kalkulacija.** Ne nađe
+se zato što dva promašaja padaju jedan na drugi:
+
+| gde | na fakturi | u ERP-u |
+|---|---|---|
+| matični broj | 82080 (JBKJS) | `MATBROJ` 08004790 |
+| PIB | 100662387 | `ZIRORACUN` **1000662387** |
+
+SEF za javna preduzeća šalje JBKJS umesto matičnog — to je poznato (Srbijagas
+86132 umesto 20084600) i zato lookup ide dalje na PIB. Ali PIB u šifarniku ima
+**nulu viška**. Nije usamljen: sedam redova ima desetocifren „PIB“ koji počinje
+na `1000` (Elit impex, Gatarić, Inter-hermes, Veropoulos, Magna Pharmacija…), a
+jedan ima i tačku na kraju (`100002862.`). Šire: 2.252 reda ima „PIB“ koji je
+samo cifre a nije devetocifren.
+
+Šta **ne** vredi: `_analitika_dobavljaca` već prima broj računa i nikad ga ne
+koristi. Izgleda kao besplatna dobit, ali `TEKUCI` je popunjen na 4 % redova
+(1.696 od 45.105) i prljav — u njemu ima i telefona („064/555-7284 Goran“).
+
+Dogovoreno: sedam redova se ispravlja u ERP-u (rešava Kulu zauvek, bez koda), a
+aplikacija ne pegla brojeve sama — pogađanje identiteta dobavljača je tačno ono
+što ne smemo.
+
+Usput: „KNJIŽNO ODOBRENJE ZA POVRAT AVANSA“ i „Odobravamo otpis neispravne robe
+CJ301BX“ padali su u dijagnostici pod „nema ni barkod ni šifru dobavljača —
+čovek“, a nijedno nikad neće imati našu šifru. `avans` i `otpis` su dodati u
+uzorak finansijskih stavki.

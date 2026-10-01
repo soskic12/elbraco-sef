@@ -39,9 +39,14 @@ log = logging.getLogger(__name__)
 
 # Nazivi koji nisu artikal nego finansijska stavka - po njima se prepoznaje da
 # nasa sifra nikad nece ni postojati ("Odobrenje po Saglasnosti broj 277102/2026").
+#
+# `avans` i `otpis` su dodati 01.10., po dva zatecena odobrenja na 010:
+# "KNJIŽNO ODOBRENJE ZA POVRAT AVANSA" i "Odobravamo otpis neispravne robe
+# CJ301BX" - oba su zavrsila pod "nema ni barkod ni sifru dobavljaca - covek",
+# a nijedno nikad nece imati nasu sifru.
 _NIJE_ARTIKAL = re.compile(
     r"odobrenje po saglasnosti|saglasnost broj|troskov|troškov|transport|"
-    r"naknad|provizij|rabat|bonus|popust|kamat|uslug",
+    r"naknad|provizij|rabat|bonus|popust|kamat|uslug|avans|otpis",
     re.IGNORECASE,
 )
 
