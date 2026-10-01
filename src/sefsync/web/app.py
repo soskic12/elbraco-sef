@@ -1547,7 +1547,12 @@ def sifre_povezi(
         )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
         return _back(nazad, str(exc), False)
-    return _back(nazad, f"Šifra {erp_item_code.strip()} je povezana i zapamćena.")
+    sifra = erp_item_code.strip()
+    if pamti:
+        return _back(nazad, f"Šifra {sifra} je povezana i zapamćena za ovog dobavljača.")
+    # Na odobrenju se bez cekiranja veza NE pamti. Poruka je ranije tvrdila
+    # suprotno, pa je izgledalo kao da aplikacija ne reaguje.
+    return _back(nazad, f"Šifra {sifra} je povezana samo na ovoj fakturi.")
 
 
 @app.get("/sifre/predlog/{document_id}/{line_no}", response_class=HTMLResponse)

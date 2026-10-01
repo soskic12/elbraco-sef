@@ -1295,3 +1295,83 @@ def test_pdv_evidencija_nepoznat_dobavljac_bez_pdva():
         _ConnIstorija(), None, "088", predznak=1.0, ima_pdv=False
     )
     assert vrsta == K.TIP_BEZ_EPPDV
+
+
+def test_povezana_sifra_bez_pamcenja_ipak_vazi_za_tu_fakturu(db):
+    """Ilijanin slučaj: odobrenje, poveži šifru bez „zapamti“ — mora da prođe.
+
+    Na knjižnom odobrenju se veza pamti samo kad čovek izričito čekira, jer
+    dobavljači tamo šalju opšte oznake („USL00027“). Ali tada nije nastajalo
+    NIŠTA: šifra se upisivala na stavku koju `_nasa_sifra` nije čitala, pa je
+    faktura ostajala na „čeka šifru“ uz zelenu poruku da je sve povezano.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import (
+        BusinessUnit, Document, DocumentLine, DocumentType, ItemMapping, SefStatus,
+        UnitKind,
+    )
+    from sefsync.services.nacrti import povezi_sifru
+    from sqlalchemy import select
+
+    with db.session_scope() as session:
+        mag = BusinessUnit(code="MAG010", name="POVRAĆAJ", kind=UnitKind.WAREHOUSE,
+                           erp_code="010")
+        session.add(mag)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=90002975, document_number="90002975",
+            supplier_name="KIM-TEC d.o.o. Beograd",
+            supplier_vat="100000001", supplier_reg_no="12345678",
+            document_type=DocumentType.CREDIT_NOTE,
+            amount=36666.0, vat_amount=6111.0, sef_status=SefStatus.SEEN,
+            business_unit_id=mag.id, issue_date=dt.date(2026, 9, 28),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="VIVAX IMAGO LED TV-55S60WO",
+                                      quantity=1, line_amount=30555.0, vat_percent=20.0,
+                                      sellers_item_id="KT-55S60WO"))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Red:
+        _mapping = {"artikal": "90911", "naziv": "Vivax LED 55S60WO", "jm": "kom",
+                    "tarifa": "002"}
+
+        def __getitem__(self, i):
+            return 20.0
+
+    class Conn:
+        def execute(self, *a, **k):
+            self.upit = str(a[0]) if a else ""
+            return self
+
+        def first(self):
+            return Red() if "ARTIKLI" in self.upit or "PTARIFE" in self.upit else None
+
+        def scalar(self):
+            return None
+
+        def all(self):
+            return []
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    engine = type("E", (), {"connect": lambda self: Conn()})()
+
+    povezi_sifru(doc_id, 1, "90911", korisnik="ilijana", pamti=False, engine=engine)
+
+    with db.session_scope() as session:
+        assert session.scalar(select(ItemMapping)) is None, "veza se ne pamti, tako je i traženo"
+
+    nacrt = K.pripremi(doc_id, engine=engine)
+    assert not nacrt.nemapirane, "stavka i dalje čeka šifru, a čovek ju je rekao"
+    assert [s["ARTIKAL"] for s in nacrt.stavke] == ["90911"]

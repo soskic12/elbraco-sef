@@ -103,8 +103,20 @@
   <p>Aplikacija sama traži uređaj — preko broja fakture iz napomene ili preko
   saglasnosti na stavci — i nudi ti <b>predlog</b>. Predlog je predlog: proveri
   pa potvrdi.</p>
-  <p class="muted small">Ako predloga nema, poveži šifru ručno. Veza se pamti za
-  sve buduće fakture istog dobavljača.</p>
+  <p class="muted small">Ako predloga nema, poveži šifru ručno.</p>
+{% endcall %}
+
+{% call korak('„zapamti vezu za ovog dobavljača“ — kvačica uz šifru') %}
+  <p>Šifra koju upišeš <b>uvek</b> važi za tu fakturu — bez obzira na kvačicu.
+  Kvačica odlučuje samo da li se veza pamti i za <b>buduća</b> odobrenja istog
+  dobavljača.</p>
+  <p>Na odobrenjima je namerno prazna. Dobavljači tu umeju da pošalju opštu
+  oznaku umesto šifre artikla — EWE šalje „USL00027“ na 109 odobrenja,
+  Eurotehna „Porez 20%“ na 107 — pa bi zapamćena veza značila da svako sledeće
+  odobrenje tiho dobije uređaj od prošlog puta.</p>
+  <p class="muted small">Čekiraj je kad je šifra dobavljača stvarno šifra tog
+  uređaja. Poruka posle klika kaže šta se desilo: „povezana i zapamćena“ ili
+  „povezana samo na ovoj fakturi“.</p>
 {% endcall %}
 
 {% call korak('Obaveštenje o prethodnom porezu') %}

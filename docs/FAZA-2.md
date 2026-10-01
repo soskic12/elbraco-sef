@@ -2151,3 +2151,38 @@ uspešan upis — tada i treba da se vidi, jer se knjiži posle.
 
 Komanda za popravku ranijih kalkulacija nije pravljena: Bogdan ih je već ručno
 ispravio (Bane, 30.09.).
+
+## Povezivanje šifre na odobrenju nije radilo ništa (01.10.)
+
+Ilijana je na KIM-TEC odobrenju povezala Vivax (naša šifra 90911), dobila
+zelenu poruku „Šifra 90911 je povezana i zapamćena“ — i ostala na istom ekranu,
+sa „čeka šifru“ i bez dugmeta za upis.
+
+Lanac:
+
+1. Na knjižnom odobrenju veza se pamti **samo kad čovek čekira** „zapamti vezu“.
+   Tako je i traženo: EWE šalje „USL00027“ na 109 odobrenja, Eurotehna
+   „Porez 20%“ na 107 — zapamćena veza bi svakom sledećem odobrenju tiho dala
+   uređaj od prošlog puta.
+2. Kvačica je prazna po podrazumevanom, pa `pamti=False`.
+3. `povezi_sifru` tada upiše šifru na **stavku** (`DocumentLine.erp_item_code`,
+   izvor „rucno“) i ne napravi nijednu vezu.
+4. `_nasa_sifra` tu kolonu **nikad nije čitala** — gledala je samo
+   `item_mapping`. Osvežavanje nacrta vrati istu stavku među nemapirane.
+
+Dakle: bez kvačice povezivanje nije imalo nikakvo dejstvo, a poruka je tvrdila
+da jeste. Ista zamka je čekala i poslovođe — tamo je podrazumevano obrnuto
+(`ne_pamti`), pa se nije videla.
+
+Popravljeno na dva mesta:
+
+* `_nasa_sifra` sada **prvo** uzima ono što je čovek rekao za tu stavku
+  (`erp_mapping_source == "rucno"`). To je pouzdanije od svake naučene veze i
+  vredi i kad se veza ne pamti. Usput rešava i slučaj kad je prethodna veza
+  ugašena kao „kolebljiva“ — tada se nova nije ni pravila, pa ni ta faktura
+  nije prolazila.
+* Poruka razlikuje „povezana i zapamćena za ovog dobavljača“ od „povezana samo
+  na ovoj fakturi“.
+
+Test koji to drži: `test_povezana_sifra_bez_pamcenja_ipak_vazi_za_tu_fakturu`
+(pada na staroj verziji).

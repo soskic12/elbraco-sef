@@ -340,6 +340,17 @@ def sledeci_broj(conn: Connection, tabela: str, magacin: str) -> str:
 
 def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine) -> tuple[str | None, str]:
     """Vraca (sifra, odakle). Redosled po pouzdanosti - vidi docs/FAZA-2.md."""
+    # Covek je sifru rekao bas za OVU stavku. To je pouzdanije od svake veze i
+    # vredi i kad se veza ne pamti za ubuduce.
+    #
+    # Bez ovoga je povezivanje na knjiznom odobrenju bilo bez ikakvog dejstva:
+    # tamo se veza pamti samo kad covek cekira "zapamti vezu", a kad ne cekira
+    # nije nastajalo nista - sifra se upisivala na stavku koju niko nije citao.
+    # Ilijana je povezala Vivax 90911 na KIM-TEC odobrenju, dobila zelenu
+    # poruku i ostala na istom ekranu (01.10.).
+    if (linija.erp_mapping_source or "") == "rucno" and (linija.erp_item_code or "").strip():
+        return linija.erp_item_code.strip(), "ručno"
+
     if pib and linija.sellers_item_id:
         m = (
             session.query(ItemMapping)
