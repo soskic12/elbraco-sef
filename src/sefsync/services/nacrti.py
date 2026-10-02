@@ -15,7 +15,7 @@ import re
 import time
 from collections import Counter
 
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import and_, bindparam, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..db import session_scope
@@ -837,6 +837,155 @@ def povezi_sifru(
         except Exception as exc:  # noqa: BLE001 - jedan dokument ne sme da obori ostale
             log.warning("Nacrt za #%s nije osvezen: %s", drugi, exc)
     return osvezeni
+
+
+# Sta poslovodju ceka u ERP-u, po tome dokle je kalkulacija stigla.
+UPUTSTVO_ZA_ISPRAVKU = {
+    0: "Kalkulacija nije proknjižena — otvori je, promeni artikal na stavci i to je sve.",
+    1: "Kalkulacija je proknjižena — prvo je otknjiži, pa promeni artikal, pa ponovo "
+       "proknjiži. Zaliha se već pomerila.",
+    2: "Kalkulacija je proknjižena i zaključana — tako se ne može menjati unazad. "
+       "Javi kancelariji, ide ispravka.",
+}
+
+
+def ispravi_sifru(
+    document_id: int,
+    line_no: int,
+    erp_item_code: str,
+    *,
+    korisnik: str,
+    pamti: bool = True,
+    engine=None,
+) -> str:
+    """Sifra je bila pogresna, a kalkulacija je vec u ERP-u. Vraca poruku coveku.
+
+    App u ERP-u ne sme nista da menja - ima samo INSERT na pet tabela, i to je
+    ograda koju namerno drzimo. Zato ovde radi tri stvari koje sme:
+
+    * popravi **vezu** u sifarniku - to je najvaznije, jer dok veza nije
+      ispravna svaka sledeca faktura sa tim artiklom ide pogresno;
+    * procita iz ERP-a u kakvom je stanju kalkulacija (`PROKNJIZENO`) i
+      zabelezi **sta tacno treba ispraviti** - broj kalkulacije, stara i nova
+      sifra, i koliko to kosta poslovodju;
+    * javi jedinici, da ne zavisi od toga hoce li neko pogledati ekran.
+
+    Zapis stoji na dokumentu dok covek ne kaze da je ispravljeno.
+    """
+    from ..erp.kalkulacija import stanje_kalkulacije
+    from ..erp.connection import get_erp_engine
+
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None or red.stanje is not StanjeNacrta.UPISAN:
+            raise ValueError("Ova kalkulacija nije u ERP-u — šifra se menja običnim povezivanjem.")
+        linija = session.scalar(
+            select(DocumentLine).where(
+                DocumentLine.document_id == document_id, DocumentLine.line_no == line_no
+            )
+        )
+        if linija is None:
+            raise ValueError(f"Stavka {line_no} ne postoji na dokumentu #{document_id}.")
+        stara = (linija.erp_item_code or "").strip()
+        nova = (erp_item_code or "").strip()
+        if not nova:
+            raise ValueError("Šifra artikla je prazna.")
+        if nova == stara:
+            raise ValueError(f"Stavka već ima šifru {nova}.")
+        magacin, tabela, erp_broj = red.magacin, red.tabela, red.erp_broj
+
+    # Veza se popravlja istim putem kao i obicno povezivanje - jedan kod, ne dva.
+    povezi_sifru(document_id, line_no, nova, korisnik=korisnik, pamti=pamti, engine=engine)
+
+    stanje = None
+    if magacin and tabela and erp_broj:
+        try:
+            with (engine or get_erp_engine()).connect() as conn:
+                stanje = stanje_kalkulacije(conn, tabela, magacin, erp_broj)
+        except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan
+            log.warning("Stanje kalkulacije %s/%s nije procitano: %s", magacin, erp_broj, exc)
+
+    proknjizeno = (stanje or {}).get("proknjizeno")
+    uputstvo = UPUTSTVO_ZA_ISPRAVKU.get(
+        proknjizeno, "Nisam uspeo da pročitam stanje kalkulacije — proveri je u ERP-u."
+    )
+
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        imena = _imena_artikala(engine, [stara, nova])
+        red.ispravka = {
+            "stara": stara,
+            "nova": nova,
+            "naziv_stara": imena.get(stara, ""),
+            "naziv_nova": imena.get(nova, ""),
+            "kalkulacija": f"{magacin}/{erp_broj}",
+            "stavka": line_no,
+            "proknjizeno": proknjizeno,
+            "uputstvo": uputstvo,
+            "trazio": korisnik,
+            "u": utcnow().isoformat(timespec="minutes"),
+        }
+        red.ispravka_zatvorio = None
+        red.ispravka_zatvorena_u = None
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="sifra.ispravljena",
+                document_id=document_id,
+                detail=f"{magacin}/{erp_broj} stavka {line_no}: {stara or '-'} -> {nova}",
+            )
+        )
+
+    try:
+        from ..notify.dispatcher import Dispatcher
+
+        Dispatcher().notify_ispravka(document_id)
+    except Exception:  # noqa: BLE001 - mejl ne sme da obori ispravku
+        log.exception("Obaveštenje o ispravci šifre za #%s nije poslato", document_id)
+
+    return f"Šifra je ispravljena: {stara or '-'} → {nova}. {uputstvo}"
+
+
+def _imena_artikala(engine, sifre: list[str]) -> dict[str, str]:
+    """Nazivi iz ERP-ovog sifarnika, da poruka ne bude samo brojevi."""
+    from ..erp.connection import get_erp_engine
+
+    trazene = [s for s in sifre if s]
+    if not trazene:
+        return {}
+    try:
+        with (engine or get_erp_engine()).connect() as conn:
+            return {
+                r.a: r.n
+                for r in conn.execute(
+                    text("SELECT RTRIM(ARTIKAL) a, RTRIM(NAZIV) n FROM dbo.ARTIKLI "
+                         "WHERE RTRIM(SIFRAMAG)='099' AND RTRIM(ARTIKAL) IN :s").bindparams(
+                        bindparam("s", expanding=True)
+                    ),
+                    {"s": trazene},
+                )
+            }
+    except Exception as exc:  # noqa: BLE001 - naziv je ukras, ne uslov
+        log.info("Nazivi artikala nisu procitani: %s", exc)
+        return {}
+
+
+def zatvori_ispravku(document_id: int, korisnik: str) -> None:
+    """Covek je rekao da je u ERP-u ispravljeno - zapis se sklanja sa ekrana."""
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None or not red.ispravka:
+            return
+        red.ispravka_zatvorio = korisnik
+        red.ispravka_zatvorena_u = utcnow()
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="sifra.ispravka.zatvorena",
+                document_id=document_id,
+                detail=red.ispravka.get("kalkulacija", ""),
+            )
+        )
 
 
 def _cekaju_isti_artikal(document_id: int, line_no: int) -> list[int]:

@@ -2350,3 +2350,43 @@ Spisak se vidi komandom `opste-sifre`.
 Ostaje otvoreno: ako neko na odobrenju čekira „zapamti vezu“, veza po **nazivu**
 može da odigra istu ulogu kod EWE-a, čiji se nazivi ponavljaju („BEKO KNJIZNO
 ODOBRENJE 20%“). Nije se desilo, pa se ne dira unapred.
+
+## Ispravka pogrešno povezane šifre (02.10.)
+
+Dule pri povezivanju ume da upiše pogrešnu šifru. Sporadično je, ali kad se
+desi, kalkulacija je često već u ERP-u.
+
+**Šta aplikacija sme.** Provereno na produkciji: nalog `elbraco_dev_ro` ima
+`db_datareader` i **INSERT** na `ULKALKUL`, `PRULKALK`, `MKALKUL`, `MPRULK`,
+`PDVEVIDX` — **nema UPDATE ni DELETE**. To je ograda koju držimo namerno, pa
+„preknjiži po novom“ ne dolazi u obzir ni tehnički ni po dogovoru.
+
+Zato se radi ovo troje:
+
+1. **Veza u šifarniku se popravi.** To je glavna šteta: dok veza nije tačna,
+   svaka sledeća faktura sa tim artiklom ide pogrešno. Ide kroz isti
+   `povezi_sifru` kao i obično povezivanje — jedan kod, ne dva.
+2. **Pročita se `PROKNJIZENO` iz ERP-a** u tom trenutku i zabeleži se šta tačno
+   treba ispraviti: broj kalkulacije, stavka, stara i nova šifra sa nazivima.
+3. **Javi se jedinici** mejlom, a na dokumentu stoji crveni okvir dok čovek ne
+   klikne „Ispravljeno u ERP-u“.
+
+Poruka zavisi od stanja, jer se po tome razlikuje koga poslovođa mora da zove:
+
+| `PROKNJIZENO` | šta ga čeka |
+|---|---|
+| 0 | otvori kalkulaciju, promeni artikal, gotovo |
+| 1 | prvo otknjiži, pa promeni, pa ponovo proknjiži — zaliha se pomerila |
+| 2 | zaključana je baš da se ne menja unazad; ide ispravka preko kancelarije |
+
+Nacrt ostaje `UPISAN` — ponovno računanje ga i dalje ne vraća unazad.
+
+**Pretraga.** Dodat je tab **Pretraga** (`prikaz=svuda`) koji traži kroz sve,
+uključujući arhivu, i to i po **šifri artikla**, barkodu i nazivu stavke — ne
+samo po broju fakture i dobavljaču. Kad se ispravlja pogrešno povezana šifra,
+čovek zna šifru, a ne broj fakture; a takva faktura je odavno sklonjena sa
+ekrana.
+
+Razmatrano i odbijeno: tražiti UPDATE na `PRULKALK`/`MPRULK` da app sama
+ispravi bar nezaknjižene. Dobitak bi bio jedno polje koje poslovođa ionako
+otvara, a izgubilo bi se pravilo „app samo dodaje, nikad ne menja“.

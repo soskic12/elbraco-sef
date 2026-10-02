@@ -646,6 +646,15 @@ class NacrtKalkulacije(Base):
     # kalkulacija stoji u pogresnom magacinu. App je ne dira - samo javi.
     upozorenje: Mapped[str | None] = mapped_column(String(250), default=None)
 
+    # Sifra je ispravljena POSLE sto je kalkulacija vec otisla u ERP. App tamo
+    # ne sme nista da menja (ima samo INSERT), pa ovde stoji sta tacno treba
+    # ispraviti i u kakvom je stanju kalkulacija bila u tom trenutku:
+    # {stara, nova, naziv_stara, naziv_nova, kalkulacija, proknjizeno,
+    #  trazio, u}. Stoji dok covek ne kaze da je ispravljeno.
+    ispravka: Mapped[dict | None] = mapped_column(JSON, default=None)
+    ispravka_zatvorio: Mapped[str | None] = mapped_column(String(100), default=None)
+    ispravka_zatvorena_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
     document: Mapped[Document] = relationship()
 
     @property

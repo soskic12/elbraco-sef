@@ -1932,3 +1932,27 @@ def test_opsti_naziv_ne_odlucuje_sam(db):
 
     assert sifra is None
     assert "više šifara" in odakle
+
+
+def test_pretraga_nalazi_i_arhiviranu_fakturu_po_sifri_artikla(client, podaci, db):
+    prijavi(client, OPERATER)
+    """Dule traži fakturu na kojoj je pogrešno povezao šifru — zna šifru, ne broj.
+
+    Takva faktura je odavno sklonjena sa ekrana, pa pretraga mora i kroz arhivu.
+    """
+    from sefsync.models import Document, DocumentLine
+    from sqlalchemy import select
+
+    with db.session_scope() as session:
+        doc = session.scalar(select(Document))
+        doc.archived = True
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == doc.id)
+        )
+        linija.erp_item_code = "87423"
+        broj = doc.document_number
+
+    odgovor = client.get("/red?prikaz=svuda&q=87423")
+
+    assert odgovor.status_code == 200
+    assert broj in odgovor.text, "arhivirana faktura se ne nalazi po šifri artikla"

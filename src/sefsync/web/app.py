@@ -56,6 +56,7 @@ from ..models import (
     AuditLog,
     BusinessUnit,
     Document,
+    DocumentLine,
     DocumentType,
     MatchField,
     MatchOp,
@@ -297,6 +298,11 @@ def _queue_filter(query, prikaz: str):
     aktivni = Document.archived == False
     if prikaz == "arhiva":
         return query.where(Document.archived == True)
+    if prikaz == "svuda":
+        # Pretraga kroz sve, i arhivirano. Dule trazi fakturu na kojoj je pri
+        # povezivanju upisao pogresnu sifru - ona je tada vec odavno sklonjena
+        # sa ekrana, pa bi je po tabovima trazio nasumice (02.10.).
+        return query
     if prikaz == "nepregledano":
         # Ono sto je kolegama na portalu bio status "Nova" - samo sto oznaku
         # sada vodimo mi, pa preuzimanje UBL-a ne mora nikoga da remeti.
@@ -360,12 +366,27 @@ def queue(
             query = query.where(Document.document_type == DocumentType(tip))
         if q:
             needle = f"%{q.strip()}%"
+            # I po artiklu: kad se ispravlja pogresno povezana sifra, covek zna
+            # sifru artikla, ne broj fakture.
+            po_stavci = (
+                select(DocumentLine.document_id)
+                .where(
+                    or_(
+                        DocumentLine.erp_item_code.ilike(needle),
+                        DocumentLine.sellers_item_id.ilike(needle),
+                        DocumentLine.standard_item_id.ilike(needle),
+                        DocumentLine.name.ilike(needle),
+                    )
+                )
+                .scalar_subquery()
+            )
             query = query.where(
                 or_(
                     Document.document_number.ilike(needle),
                     Document.supplier_name.ilike(needle),
                     Document.supplier_vat.ilike(needle),
                     Document.delivery_address.ilike(needle),
+                    Document.id.in_(po_stavci),
                 )
             )
 
@@ -1556,6 +1577,47 @@ def sifre_povezi(
     # Na odobrenju se bez cekiranja veza NE pamti. Poruka je ranije tvrdila
     # suprotno, pa je izgledalo kao da aplikacija ne reaguje.
     return _back(nazad, f"Šifra {sifra} je povezana samo na ovoj fakturi.")
+
+
+@app.post("/dokument/{doc_id}/ispravi-sifru")
+def dokument_ispravi_sifru(
+    doc_id: int,
+    user: Operater,
+    line_no: int = Form(...),
+    erp_item_code: str = Form(...),
+    pamti: str = Form("1"),
+) -> RedirectResponse:
+    """Dule je pri povezivanju upisao pogrešnu šifru, a kalkulacija je otišla.
+
+    Aplikacija u ERP-u ne sme ništa da menja — ima samo INSERT. Popravlja vezu
+    u šifarniku (to zaustavlja dalju štetu), zabeleži šta tačno treba ispraviti
+    i javi jedinici. Sama kalkulacija ostaje na čoveku.
+    """
+    from ..services.nacrti import ispravi_sifru
+
+    try:
+        poruka = ispravi_sifru(
+            doc_id, line_no, erp_item_code, korisnik=user.login, pamti=bool(pamti)
+        )
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back(f"/dokument/{doc_id}", str(exc), False)
+    return _back(f"/dokument/{doc_id}", poruka)
+
+
+@app.post("/dokument/{doc_id}/ispravka-zatvori")
+def dokument_ispravka_zatvori(doc_id: int, user: Korisnik) -> RedirectResponse:
+    """Poslovođa je ispravio kalkulaciju u ERP-u — crveni okvir se sklanja."""
+    from ..services.nacrti import zatvori_ispravku
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+
+    zatvori_ispravku(doc_id, user.login)
+    return _back(f"/dokument/{doc_id}", "Zabeleženo da je ispravljeno u ERP-u.")
 
 
 @app.get("/sifre/predlog/{document_id}/{line_no}", response_class=HTMLResponse)

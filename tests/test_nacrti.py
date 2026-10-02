@@ -900,3 +900,149 @@ def test_dovrsi_upise_ne_pada_na_jednom_dokumentu(db, podaci, monkeypatch):
 
     monkeypatch.setattr(nacrti, "upisi_u_erp", puca)
     assert nacrti.dovrsi_upise() == {"nasao": 1, "upisao": 0, "nije": 1}
+
+
+class _ErpSaKalkulacijom:
+    """ERP u kom kalkulacija 002/00516 stoji i nije proknjižena."""
+
+    def __init__(self, proknjizeno=0):
+        self.proknjizeno = proknjizeno
+
+    def connect(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, upit, *a, **k):
+        self.upit = str(upit)
+        return self
+
+    def first(self):
+        if "PROKNJIZENO" in self.upit:
+            return type("R", (), {"p": self.proknjizeno})()
+        return None
+
+    def scalar(self):
+        return None
+
+    def all(self):
+        return []
+
+    def __iter__(self):
+        if "ARTIKLI" in getattr(self, "upit", ""):
+            return iter([type("R", (), {"a": "87422", "n": "Lexa LX 201 Spark"})(),
+                         type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro"})()])
+        return iter(())
+
+
+def _upisan_nacrt(db, doc_id, sifra="87422"):
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == doc_id)
+        )
+        linija.erp_item_code = sifra
+        linija.erp_mapping_source = "rucno"
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.UPISAN, magacin="002",
+            tabela="MKALKUL", erp_broj="00516", upisao="dusan", upisano_u=utcnow(),
+        ))
+
+
+def test_ispravka_sifre_posle_upisa(client, db, podaci, monkeypatch):
+    """Dule je upisao pogrešnu šifru, kalkulacija je već otišla u ERP.
+
+    App u ERP-u ne sme ništa da menja (ima samo INSERT), pa popravlja vezu i
+    zabeleži šta tačno čoveka čeka.
+    """
+    from sefsync.erp import connection as veza
+    from sefsync.notify import dispatcher as disp
+    from sefsync.services import nacrti
+
+    _upisan_nacrt(db, podaci)
+    erp = _ErpSaKalkulacijom(proknjizeno=0)
+    monkeypatch.setattr(veza, "get_erp_engine", lambda *a, **k: erp)
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    poslato = []
+    monkeypatch.setattr(disp.Dispatcher, "notify_ispravka",
+                        lambda self, doc_id: poslato.append(doc_id) or True)
+
+    odgovor = client.post(f"/dokument/{podaci}/ispravi-sifru",
+                          data={"line_no": 1, "erp_item_code": "87423"},
+                          follow_redirects=False)
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.stanje is StanjeNacrta.UPISAN, "nacrt se ne vraća unazad"
+        i = red.ispravka
+        assert i["stara"] == "87422" and i["nova"] == "87423"
+        assert i["kalkulacija"] == "002/00516" and i["stavka"] == 1
+        assert i["proknjizeno"] == 0 and "nije proknjižena" in i["uputstvo"]
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == podaci)
+        )
+        assert linija.erp_item_code == "87423", "veza mora da važi za ubuduće"
+    assert poslato == [podaci], "jedinica nije obaveštena"
+
+
+def test_ispravka_kaze_da_je_kalkulacija_zakljucana(client, db, podaci, monkeypatch):
+    """Kod PROKNJIZENO 2 nije dovoljno promeniti polje — poruka to mora da kaže."""
+    from sefsync.erp import connection as veza
+    from sefsync.notify import dispatcher as disp
+    from sefsync.services import nacrti
+
+    _upisan_nacrt(db, podaci)
+    monkeypatch.setattr(veza, "get_erp_engine",
+                        lambda *a, **k: _ErpSaKalkulacijom(proknjizeno=2))
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(disp.Dispatcher, "notify_ispravka", lambda self, doc_id: True)
+
+    client.post(f"/dokument/{podaci}/ispravi-sifru",
+                data={"line_no": 1, "erp_item_code": "87423"}, follow_redirects=False)
+
+    with db.session_scope() as session:
+        i = session.get(NacrtKalkulacije, podaci).ispravka
+        assert i["proknjizeno"] == 2 and "zaključana" in i["uputstvo"]
+
+
+def test_ispravka_se_zatvara_kad_je_uradjena(client, db, podaci, monkeypatch):
+    from sefsync.erp import connection as veza
+    from sefsync.notify import dispatcher as disp
+    from sefsync.services import nacrti
+
+    _upisan_nacrt(db, podaci)
+    monkeypatch.setattr(veza, "get_erp_engine", lambda *a, **k: _ErpSaKalkulacijom())
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(disp.Dispatcher, "notify_ispravka", lambda self, doc_id: True)
+    client.post(f"/dokument/{podaci}/ispravi-sifru",
+                data={"line_no": 1, "erp_item_code": "87423"}, follow_redirects=False)
+
+    odgovor = client.post(f"/dokument/{podaci}/ispravka-zatvori", follow_redirects=False)
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.ispravka_zatvorena_u is not None
+        assert red.ispravka_zatvorio == "bogdan"
+
+
+def test_ispravka_ne_radi_dok_kalkulacija_nije_u_erpu(client, db, podaci, monkeypatch):
+    """Dok nije upisana, šifra se menja običnim povezivanjem — ne ovim putem."""
+    from sefsync.services import nacrti
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    nacrti.osvezi(podaci)
+
+    odgovor = client.post(f"/dokument/{podaci}/ispravi-sifru",
+                          data={"line_no": 1, "erp_item_code": "87423"},
+                          follow_redirects=False)
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, podaci).ispravka is None

@@ -262,6 +262,79 @@ class Dispatcher:
                 )
         return uspeh
 
+    def notify_ispravka(self, doc_id: int) -> bool:
+        """Javlja jedinici da je šifra ispravljena, a kalkulacija je već u ERP-u.
+
+        App u ERP-u ne sme ništa da menja, pa poruka mora da kaže tačno šta
+        poslovođu čeka — a to zavisi od toga da li je kalkulacija proknjižena.
+        """
+        from ..models import NacrtKalkulacije
+
+        with session_scope() as session:
+            doc = session.get(Document, doc_id)
+            red = session.get(NacrtKalkulacije, doc_id)
+            if doc is None or red is None or not red.ispravka:
+                return False
+            i = red.ispravka
+            unit = doc.business_unit
+            unit_name = f"{unit.code} — {unit.name}" if unit else "?"
+            link = f"{self.settings.public_base_url.rstrip('/')}/dokument/{doc.id}"
+            staro = f"{i['stara'] or '-'} {i.get('naziv_stara') or ''}".strip()
+            novo_ = f"{i['nova']} {i.get('naziv_nova') or ''}".strip()
+            poruka = Message(
+                subject=f"Ispravka šifre: kalkulacija {i['kalkulacija']} ({unit.code if unit else '?'})",
+                body_text="\n".join([
+                    f"{i['trazio']} je ispravio/la šifru artikla na fakturi "
+                    f"{doc.document_number or doc.sef_invoice_id}.",
+                    "",
+                    f"Kalkulacija u ERP-u: {i['kalkulacija']}, stavka {i['stavka']}",
+                    f"Bilo:  {staro}",
+                    f"Treba: {novo_}",
+                    "",
+                    i["uputstvo"],
+                    "",
+                    "Aplikacija kalkulaciju u ERP-u ne menja sama.",
+                    link,
+                ]),
+                body_html=(
+                    f"<p><b>{escape(i['trazio'])}</b> je ispravio/la šifru artikla na fakturi "
+                    f"{escape(doc.document_number or '')}.</p>"
+                    f"<p>Kalkulacija <b>{escape(i['kalkulacija'])}</b>, stavka {i['stavka']}<br>"
+                    f"Bilo: {escape(staro)}<br>Treba: <b>{escape(novo_)}</b></p>"
+                    f"<p>{escape(i['uputstvo'])}</p>"
+                    f"<p class=\"muted\">Aplikacija kalkulaciju u ERP-u ne menja sama.</p>"
+                    f'<p><a href="{escape(link)}">Otvori dokument</a></p>'
+                ),
+                short_text=f"Ispravka šifre {i['kalkulacija']}: {i['stara'] or '-'} -> {i['nova']}",
+            )
+            emails = unit.email_list() if unit else self._fallback_emails()
+            if unit is not None and not emails:
+                emails = staff_emails_for_unit(unit.erp_code or unit.code)
+
+        proba = self.settings.notify_override_to.strip()
+        if proba:
+            poruka.subject = f"[PROBA {unit_name}] {poruka.subject}"
+            emails = [x.strip() for x in proba.split(",") if x.strip()]
+        if not emails:
+            log.warning("Ispravka šifre za #%s nema kome da se javi (%s)", doc_id, unit_name)
+            return False
+
+        ishodi = self.email.send(emails, poruka)
+        with session_scope() as session:
+            for ishod in ishodi:
+                session.add(
+                    Notification(
+                        document_id=doc_id,
+                        channel=NotifyChannel.EMAIL,
+                        target=ishod.target,
+                        status=NotifyStatus.SENT if ishod.ok else NotifyStatus.FAILED,
+                        error=ishod.error,
+                        attempts=1,
+                        sent_at=utcnow() if ishod.ok else None,
+                    )
+                )
+        return any(i.ok for i in ishodi)
+
     def _operator_emails(self, login: str | None) -> list[str]:
         from ..erp.staff import email_for_login
 

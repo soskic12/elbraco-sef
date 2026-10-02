@@ -1,0 +1,21 @@
+{# Sifra je ispravljena posle sto je kalkulacija otisla u ERP. App tamo nista ne
+   menja - ima samo INSERT - pa ovde stoji sta tacno coveka ceka. #}
+{% if n and n.ispravka and not n.ispravka_zatvorena_u %}
+  {% set i = n.ispravka %}
+  <div class="small" style="margin:6px 0;padding:8px 10px;border-left:3px solid #b91c1c;
+                            background:#fef2f2">
+    <b>Ispravi u ERP-u — kalkulacija {{ i.kalkulacija }}, stavka {{ i.stavka }}</b>
+    <div style="margin:4px 0">
+      bilo: <s>{{ i.stara or '—' }} {{ i.naziv_stara or '' }}</s><br>
+      treba: <b>{{ i.nova }} {{ i.naziv_nova or '' }}</b>
+    </div>
+    <div>{{ i.uputstvo }}</div>
+    <div class="muted" style="margin-top:4px">
+      Ispravio/la {{ i.trazio }}{% if i.u %}, {{ i.u.replace('T', ' ') }}{% endif %}.
+      Veza u šifarniku je već popravljena — ovo je samo kalkulacija koja je otišla ranije.
+    </div>
+    <form method="post" action="/dokument/{{ doc.id }}/ispravka-zatvori" style="margin-top:6px">
+      <button type="submit">Ispravljeno u ERP-u</button>
+    </form>
+  </div>
+{% endif %}

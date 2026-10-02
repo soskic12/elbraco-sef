@@ -254,6 +254,22 @@
   </ul>
 {% endcall %}
 
+{% call korak('Pogrešno povezana šifra — kako se ispravlja') %}
+  <p>Ako se ispostavi da je povezana pogrešna šifra, nađi fakturu u tabu
+  <b>Pretraga</b> — on traži kroz sve, i kroz arhivu, i to po broju fakture,
+  dobavljaču, <b>šifri artikla</b>, barkodu ili nazivu.</p>
+  <p>Na dokumentu, ispod oznake „u ERP-u“, stoji <b>„Pogrešna šifra artikla?“</b>.
+  Izabereš stavku, upišeš tačnu šifru i potvrdiš. Aplikacija tada:</p>
+  <ul class="small">
+    <li>popravi <b>vezu u šifarniku</b> — to je najvažnije, jer dok veza nije
+      tačna svaka sledeća faktura sa tim artiklom ide pogrešno;</li>
+    <li>pročita iz ERP-a da li je kalkulacija proknjižena;</li>
+    <li>pošalje <b>mejl jedinici</b> i ostavi crveni okvir sa tačnim uputstvom.</li>
+  </ul>
+  <p class="muted small">Samu kalkulaciju u ERP-u aplikacija ne dira — nema pravo
+  tamo išta da menja, i to je namerno. Nju ispravlja poslovođa.</p>
+{% endcall %}
+
 {% call korak('Prihvatanje i odbijanje na SEF-u') %}
   <p>Kad se kalkulacija uspešno upiše u ERP, a fakturi <b>ništa ne fali</b>,
   aplikacija je tada i prihvata na SEF-u. Prihvatanje je nepovratno — posle
@@ -397,6 +413,26 @@
   <p class="muted small">Upisuje se kao <b>nezaknjižena</b>, kao i svaka druga —
   knjiženje ostaje na čoveku. Fakture sa otvorenom prijavom manjka i one od pre
   prelaska se ne diraju.</p>
+{% endcall %}
+
+{% call korak('„Ispravi u ERP-u“ — crveni okvir sa šifrom') %}
+  <p>Dešava se da pri povezivanju bude upisana pogrešna šifra artikla, a
+  kalkulacija je u međuvremenu već otišla u ERP. Kad kancelarija to ispravi,
+  dobijaš <b>mejl</b> i crveni okvir na fakturi: broj kalkulacije, koja stavka,
+  šta je bilo i šta treba.</p>
+  <p>Aplikacija kalkulaciju u ERP-u <b>ne menja sama</b> — nema pravo da tamo
+  bilo šta prepravi. Šta tebe čeka zavisi od toga dokle je stigla:</p>
+  <table class="small">
+    <tr><td style="width:34%">nije proknjižena</td>
+        <td>otvori je, promeni artikal na stavci, gotovo</td></tr>
+    <tr><td>proknjižena</td>
+        <td>prvo otknjiži, pa promeni, pa ponovo proknjiži — zaliha se pomerila</td></tr>
+    <tr><td>proknjižena i zaključana</td>
+        <td>tako se ne menja unazad; javi kancelariji, ide ispravka</td></tr>
+  </table>
+  <p class="muted small">Kad završiš, klikni <span class="tag">Ispravljeno u ERP-u</span>
+  pa okvir nestaje. Veza u šifarniku je već popravljena, tako da naredne fakture
+  sa tim artiklom idu kako treba.</p>
 {% endcall %}
 
 {% call korak('Žute napomene ispod fakture') %}

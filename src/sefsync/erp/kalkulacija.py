@@ -374,6 +374,34 @@ def vrsta_pdv_evidencije(
     return TIP_BEZ_EPPDV, None
 
 
+def stanje_kalkulacije(conn: Connection, tabela: str, magacin: str, broj: str) -> dict | None:
+    """PROKNJIZENO i stavke kalkulacije koja je vec u ERP-u. Samo cita.
+
+    Treba kad se sifra artikla ispravi POSLE upisa: app u ERP-u ne sme nista da
+    menja (ima samo INSERT), pa coveku mora da kaze i sta da ispravi i koliko ga
+    to kosta - a to zavisi od toga da li je kalkulacija zaknjizena.
+    """
+    red = conn.execute(
+        text(f"SELECT TOP 1 PROKNJIZENO p FROM dbo.{tabela} "
+             "WHERE RTRIM(MAGACIN)=:m AND RTRIM(BROJ)=:b"),
+        {"m": magacin, "b": broj},
+    ).first()
+    if red is None:
+        return None
+    stavke = "MPRULK" if tabela == "MKALKUL" else "PRULKALK"
+    return {
+        "proknjizeno": int(red.p or 0),
+        "stavke": [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(f"SELECT RTRIM(ARTIKAL) artikal, RTRIM(NAZIV) naziv, KOLICINA kolicina "
+                     f"FROM dbo.{stavke} WHERE RTRIM(MAGACIN)=:m AND RTRIM(BROJ)=:b"),
+                {"m": magacin, "b": broj},
+            )
+        ],
+    }
+
+
 def _artikal(conn: Connection, sifra: str) -> dict | None:
     red = conn.execute(
         text(
