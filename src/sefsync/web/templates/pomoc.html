@@ -373,6 +373,18 @@
 {% endif %}
 
 {% if uloga != 'operater' %}
+{% call korak('Kalkulacija koja se upiše sama, naknadno') %}
+  <p>Kad potvrdiš prijem, aplikacija odmah pokuša da upiše kalkulaciju. Ako joj
+  tada nešto fali — najčešće stavka bez naše šifre — upis se odbije, a faktura
+  ostane primljena i bez kalkulacije.</p>
+  <p>Čim se to što je falilo reši (neko otvori ili poveže šifru), aplikacija
+  <b>sama dovrši taj upis</b>, u roku od petnaestak minuta. Ne moraš ništa da
+  klikćeš ponovo i ne moraš da paziš.</p>
+  <p class="muted small">Upisuje se kao <b>nezaknjižena</b>, kao i svaka druga —
+  knjiženje ostaje na čoveku. Fakture sa otvorenom prijavom manjka i one od pre
+  prelaska se ne diraju.</p>
+{% endcall %}
+
 {% call korak('Žute napomene ispod fakture') %}
   <p>Žuti okvir <b>Pogledaj pre knjiženja</b> ne zaustavlja ništa — kalkulacija
   jeste u ERP-u. Znači da je aplikacija nešto upisala kako najčešće bude, a

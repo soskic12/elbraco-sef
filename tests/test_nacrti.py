@@ -845,3 +845,58 @@ def test_prepoznaje_finansijske_stavke_po_nazivu():
     for naziv in ("VIVAX IMAGO LED TV-55S60WO", "LEXA BT ZVUCNIK LX-302 NITRO",
                   "MASINA ZA PRANJE VESA"):
         assert not uzorak.search(naziv), naziv
+
+
+def test_za_dovrsavanje_hvata_tihu_fakturu(db, podaci, monkeypatch):
+    """Roba primljena, nacrt spreman, u ERP-u ništa — to niko ne pokreće ponovo."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci)
+        doc.received_at = utcnow()
+        doc.received_by = "bojans"
+        session.add(NacrtKalkulacije(document_id=podaci, stanje=StanjeNacrta.SPREMAN,
+                                     magacin="003"))
+
+    assert [x[0] for x in nacrti.za_dovrsavanje()] == [podaci]
+
+
+def test_za_dovrsavanje_preskace_otvoren_manjak(db, podaci):
+    """Dok se manjak ne reši, kalkulacija ne ide — možda ostatak nikad ne dođe."""
+    from sefsync.models import Document, NacrtKalkulacije, PrijavaManjka, StanjeNacrta
+    from sefsync.services import nacrti
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci)
+        doc.received_at = utcnow()
+        session.add(NacrtKalkulacije(document_id=podaci, stanje=StanjeNacrta.SPREMAN,
+                                     magacin="003"))
+        from sefsync.models import OdlukaManjka
+
+        session.add(PrijavaManjka(
+            document_id=podaci, prijavio="bojans", odluka=OdlukaManjka.KASNIJE,
+            stavke=[{"line_no": 1, "naziv": "Frižider", "fakturisano": 2, "stiglo": 1}]))
+
+    assert nacrti.za_dovrsavanje() == []
+
+
+def test_dovrsi_upise_ne_pada_na_jednom_dokumentu(db, podaci, monkeypatch):
+    """Ciklus ne sme da stane zato što je jedan upis pukao."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+    from sefsync.models import utcnow
+
+    with db.session_scope() as session:
+        doc = session.get(Document, podaci)
+        doc.received_at = utcnow()
+        session.add(NacrtKalkulacije(document_id=podaci, stanje=StanjeNacrta.SPREMAN,
+                                     magacin="003"))
+
+    def puca(*a, **k):
+        raise RuntimeError("ERP nedostupan")
+
+    monkeypatch.setattr(nacrti, "upisi_u_erp", puca)
+    assert nacrti.dovrsi_upise() == {"nasao": 1, "upisao": 0, "nije": 1}

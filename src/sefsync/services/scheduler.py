@@ -52,6 +52,22 @@ class SyncWorker:
                         log.info("Odmrznuto nacrta: %(odmrznuto)s od %(pregledano)s", ishod)
                 except Exception:  # noqa: BLE001 - ERP ume da bude nedostupan
                     log.exception("Osvežavanje zapelih nacrta nije prošlo")
+
+                # Potvrda prijema pokusava upis odmah; ako nacrt tada nije bio
+                # spreman, upis se odbio i niko ga nije ponavljao. Faktura je
+                # tako tiho stajala dva dana (Vitel R-1382/26VP, 02.10.). Covek
+                # JESTE kliknuo "potvrdi prijem" - ovo dovrsava tu nameru.
+                try:
+                    from .nacrti import dovrsi_upise
+
+                    ishod = dovrsi_upise(
+                        limit=self.settings.dovrsi_upise_limit,
+                        produkcija=self.settings.erp_allow_production_write,
+                    )
+                    if ishod["nasao"]:
+                        log.info("Dovrseno upisa: %(upisao)s od %(nasao)s", ishod)
+                except Exception:  # noqa: BLE001 - ciklus ne sme da stane zbog ovoga
+                    log.exception("Dovršavanje zaostalih upisa nije prošlo")
             elapsed = time.monotonic() - started
             self._stop.wait(max(5.0, interval - elapsed))
         log.info("Radnik zaustavljen.")

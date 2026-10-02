@@ -367,6 +367,77 @@ def _upisi_stanje(document_id: int, stanje: StanjeNacrta) -> NacrtKalkulacije:
         return red
 
 
+# Ime koje stoji u dnevniku kad upis dovrsi aplikacija, a ne covek. Vidi se na
+# dokumentu, da se zna da to niko nije kliknuo u tom trenutku.
+KORISNIK_DOVRSAVANJA = "dovrsi-upise"
+
+
+def za_dovrsavanje(limit: int = 50) -> list[tuple[int, str, str, str, str]]:
+    """Fakture kojima je roba primljena, nacrt spreman, a kalkulacije u ERP-u nema.
+
+    Potvrda prijema pokusava upis odmah. Ako nacrt tada nije spreman - najcesce
+    zato sto stavka nema nasu sifru - upis se odbije, a kad se veza kasnije
+    otvori, nacrt postane spreman i **niko ne pokrece upis ponovo**. Faktura
+    tiho stoji: roba primljena, kalkulacija spremna, u ERP-u nista.
+
+    Nadjeno 30.09. na 26-15240-238911, pa opet 02.10. na Vitelovoj R-1382/26VP
+    (Dusan je jedanaest puta kliknuo "povezi sifru", svaki klik je gasio
+    prethodnu vezu, a prijem je potvrdjen u medjuvremenu).
+
+    Ne dira fakture od pre prelaska ni one sa otvorenim manjkom.
+    """
+    from ..models import PrijavaManjka
+
+    with session_scope() as session:
+        redovi = list(
+            session.execute(
+                select(NacrtKalkulacije, Document)
+                .join(Document, Document.id == NacrtKalkulacije.document_id)
+                .where(
+                    NacrtKalkulacije.stanje == StanjeNacrta.SPREMAN,
+                    Document.received_at.is_not(None),
+                    Document.archived == False,  # noqa: E712
+                )
+                .order_by(Document.received_at)
+            )
+        )
+        kandidati = []
+        for red, doc in redovi:
+            if doc.po_starom:
+                continue
+            manjak = session.get(PrijavaManjka, doc.id)
+            if manjak is not None and manjak.otvoren:
+                continue
+            kandidati.append((doc.id, doc.document_number or "?", doc.supplier_name or "",
+                              red.magacin or "?", doc.received_by or "?"))
+    return kandidati[:limit]
+
+
+def dovrsi_upise(*, limit: int = 20, produkcija: bool = False) -> dict:
+    """Upisuje zaostale kalkulacije. Vraca brojace, ne dize izuzetak.
+
+    Zove se i iz ciklusa: covek JESTE kliknuo "potvrdi prijem", pa je ovo
+    dovrsavanje njegove ranije namere, a ne nova odluka.
+    """
+    brojac = {"nasao": 0, "upisao": 0, "nije": 0}
+    for doc_id, broj, *_ in za_dovrsavanje(limit):
+        brojac["nasao"] += 1
+        try:
+            ok, poruka = upisi_u_erp(
+                doc_id, korisnik=KORISNIK_DOVRSAVANJA, produkcija=produkcija
+            )
+        except Exception as exc:  # noqa: BLE001 - jedan dokument ne sme da obori ciklus
+            log.warning("Dovrsavanje upisa za #%s nije proslo: %s", doc_id, exc)
+            brojac["nije"] += 1
+            continue
+        if ok:
+            brojac["upisao"] += 1
+            log.info("Dovrsen upis za %s: %s", broj, poruka[:120])
+        else:
+            brojac["nije"] += 1
+    return brojac
+
+
 def osvezi_zapele(*, limit: int = 200, engine=None) -> dict:
     """Preracunava samo nacrte koji cekaju coveka, i to na strani ERP-a.
 

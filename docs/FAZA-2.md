@@ -2271,3 +2271,31 @@ pokušaja (0,1–0,4 s).
 `purchase_pdf` sada čeka — do 14 pokušaja na pola sekunde (7 s) — i diže grešku
 sa SEF-ovom porukom ako PDF nikad ne stigne. Ruta uz to nikad ne šalje
 pregledaču nešto što ne počinje na `%PDF-`.
+
+### Faktura koja tiho stoji između prijema i šifre (02.10.)
+
+Vitelova R-1382/26VP za Odžake: prosleđena 30.09. u 06:48, prijem potvrđen u
+10:42, nacrt `spreman`, a u ERP-u ništa — dva dana, bez ijednog traga na ekranu.
+
+Dnevnik dokumenta pokazuje uzrok crno na belo: **jedanaest redova**
+`mapiranje.kolebljivo 100335406/-: 87422 -> 87423; veza ugašena`, između 08:07 i
+10:39. Crtica u `100335406/-` je prazan ključ — Vitel ne šalje ni svoju šifru ni
+EAN, pa su sve njegove stavke delile ključ `(PIB, prazno, prazno)` i svaki
+Dušanov klik je gasio prethodnu vezu. U 10:42, kad je prijem potvrđen, nacrt nije
+bio spreman, pa je upis odbijen. Kasnije je nacrt postao spreman — i tu je stao.
+
+Isto se našlo 30.09. na 26-15240-238911, zbog čega je i napisana komanda
+`dovrsi-upise`. Ali komanda je bila **ručna**, pa se rupa vraćala.
+
+Od 02.10. isti posao radi i petnaestominutni ciklus (`dovrsi_upise`, najviše 20
+po prolazu). Argument da sme automatski: čovek **jeste** kliknuo „potvrdi
+prijem“ — ovo dovršava tu nameru, ne donosi novu odluku. Preskaču se fakture od
+pre prelaska i one sa otvorenim manjkom, kalkulacija ulazi nezaknjižena, a jedan
+pali upis ne obara ciklus.
+
+Spisak se i dalje može videti pre upisa: `dovrsi-upise` bez `--stvarno`.
+
+Kad je komanda puštena, zatečene su bile **dve** — R-1382/26VP i RKA26-01429.
+Obe su ušle ispravno; sparivanje LEXA šifara potvrđeno nabavnom cenom, koja je u
+celoj istoriji jednoznačna (87422 = 4.490 u 21 kalkulaciji, 87423 = 6.900 u 18,
+87424 = 17.900 u 12), a upisano je 87422 po 4.490 i 87423 po 6.900.
