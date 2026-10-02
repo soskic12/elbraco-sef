@@ -2299,3 +2299,54 @@ Kad je komanda puštena, zatečene su bile **dve** — R-1382/26VP i RKA26-01429
 Obe su ušle ispravno; sparivanje LEXA šifara potvrđeno nabavnom cenom, koja je u
 celoj istoriji jednoznačna (87422 = 4.490 u 21 kalkulaciji, 87423 = 6.900 u 18,
 87424 = 17.900 u 12), a upisano je 87422 po 4.490 i 87423 po 6.900.
+
+## „Uvek isti frižider“ na Ilijaninim odobrenjima (02.10.)
+
+Ilijana je prijavila da aplikacija na različita Eurotehnina odobrenja stavlja
+istu stavku. Uhvaćeno na delu: kalkulacija 010/00618 za **661FN-2026** imala je
+u 13:20 artikal **92846 Gorenje RF 414 EPS4** (PROKNJ 0), a dvadesetak minuta
+kasnije **92841 Gorenje R 4142 PS** (PROKNJ 1) — Ilijana ju je ispravila i
+proknjižila. Napomena na 661FN kaže „Odobreno za frizider **R4142PS**“, a 92846
+je artikal sa **613FN-2026** od 16.09.
+
+**Predlog iz napomene nije kriv.** Odigran nad pravim ERP-om za svih 14
+Eurotehninih odobrenja od juna: 9 ima broj računa u napomeni i **svih 9 pogađa
+tačan uređaj** (po iznosu, u dinar), 5 nema i ispravno ne predlaže ništa.
+
+Kriv je **redosled**. `_nasa_sifra` prvo pita vezu po šifri dobavljača, a
+Eurotehna na svakom odobrenju šalje istu „šifru artikla“ — `Porez 20%`. Jedna
+veza za nju razreši stavku, nacrt postane `spreman`, i predlog iz napomene se
+**nikad ne izračuna** — jer se računa samo za stavke koje su ostale bez šifre.
+
+U ERP-u nema štete samo zato što Ilijana svaku ispravi rukom; svih devet
+upisanih se slaže sa napomenom.
+
+### Pravilo: šifra pod kojom stoji mnogo naziva nije šifra
+
+Mereno na 28.310 stavki panela, parovi (dobavljač + šifra) koji se javljaju na
+odobrenjima — njih 553:
+
+| prag | šifara | stavki odobrenja | od toga ima vezu |
+|---|---:|---:|---:|
+| više od 1 naziva | 58 | 656 | **35** |
+| **3+ naziva** | **13** | **425** | **0** |
+| 4+ naziva | 11 | 421 | 0 |
+
+Prag **3+** je izabran jer ne staje na put nijednoj vezi koja danas radi, a
+hvata sve sporne: `Porez 20%` (100 naziva, 107 odobrenja), Comtrade `5142` (30),
+`R0001` (27 naziva, 90 odobrenja), `R0006` (19), CSM `002` (17), EWE `USL00027`
+(13 naziva, 109 odobrenja). Šifre sa tačno jednim nazivom — njih 495, sa 234
+veze — ostaju netaknute.
+
+Pravilo važi **samo na knjižnim odobrenjima**; na fakturama je šifra ipak šifra.
+
+**Grana po nazivu se ne dira.** Tu asimetrija: šifra pod kojom stoji mnogo
+naziva je nalepnica, ali naziv koji se ponavlja je samo roba koja se često vraća
+— „LED TV 55PUS7810 PHILIPS“ stoji na 45 dokumenata i to je jedan artikal.
+Blokiranje po nazivu bi oborilo 240 veza koje rade.
+
+Spisak se vidi komandom `opste-sifre`.
+
+Ostaje otvoreno: ako neko na odobrenju čekira „zapamti vezu“, veza po **nazivu**
+može da odigra istu ulogu kod EWE-a, čiji se nazivi ponavljaju („BEKO KNJIZNO
+ODOBRENJE 20%“). Nije se desilo, pa se ne dira unapred.

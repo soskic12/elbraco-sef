@@ -119,6 +119,20 @@
   „povezana samo na ovoj fakturi“.</p>
 {% endcall %}
 
+{% call korak('Zašto odobrenje traži šifru iako je dobavljač „poslao“') %}
+  <p>Na knjižnom odobrenju dobavljač u polje za šifru artikla često upiše oznaku
+  vrste dokumenta, a ne artikal — Eurotehna uvek <b>„Porez 20%“</b>, EWE
+  <b>„USL00027“</b>, Comtrade <b>„R0001“</b>. Ista oznaka stoji na svakom
+  njihovom odobrenju, za različite uređaje.</p>
+  <p>Zato aplikacija takvu „šifru“ <b>ne prihvata kao šifru</b>. Stavka ostaje da
+  čeka, i tada se računa <b>predlog iz napomene</b> — uređaj se nađe preko broja
+  računa koji odobrenje ispravlja. Ti predlog potvrdiš.</p>
+  <p class="muted small">Ranije je bilo obrnuto: jedna jednom zapamćena veza za
+  „Porez 20%“ stavljala je isti frižider na svako sledeće Eurotehnino odobrenje,
+  a predlog iz napomene se nije ni računao — jer se računa tek kad stavka ostane
+  bez šifre. Na običnim fakturama se ništa ne menja.</p>
+{% endcall %}
+
 {% call korak('Obaveštenje o prethodnom porezu') %}
   <p>Kad se knjižno odobrenje <b>prihvati na SEF-u</b>, aplikacija sama pošalje
   dobavljaču obaveštenje o prethodnom porezu. Ti ne radiš ništa posebno.</p>

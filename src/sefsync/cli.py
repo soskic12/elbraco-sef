@@ -1126,6 +1126,63 @@ def cmd_dovrsi_upise(
     typer.secho(f"Upisano: {uspelo} od {len(kandidati)}.", fg="green")
 
 
+@app.command("opste-sifre")
+def cmd_opste_sifre() -> None:
+    """Šifre dobavljača koje su zapravo oznaka vrste dokumenta, ne artikal.
+
+    Na knjižnom odobrenju dobavljač ume da pošalje istu „šifru artikla“ na svaki
+    dokument — Eurotehna „Porez 20%“, EWE „USL00027“, Comtrade „R0001“. Jedna
+    veza za takvu šifru štampa isti artikal na svako sledeće odobrenje.
+
+    Ispisuje šta aplikacija smatra oznakom i da li za to postoji veza.
+    """
+    _boot()
+    from collections import defaultdict
+
+    from sqlalchemy import select as _select
+
+    from .erp.kalkulacija import OZNAKA_OD_NAZIVA
+    from .models import Document, DocumentLine, DocumentType, ItemMapping
+    from .textutil import normalize
+
+    with session_scope() as session:
+        veze = {
+            (m.supplier_vat, (m.supplier_item_id or "").strip()): m.erp_item_code
+            for m in session.scalars(
+                _select(ItemMapping).where(ItemMapping.active == True)  # noqa: E712
+            )
+            if m.supplier_item_id
+        }
+        podaci: dict = defaultdict(lambda: {"nazivi": set(), "ko": 0, "ime": ""})
+        for pib, vrsta, ime, sifra, naziv in session.execute(
+            _select(Document.supplier_vat, Document.document_type, Document.supplier_name,
+                    DocumentLine.sellers_item_id, DocumentLine.name)
+            .join(DocumentLine, DocumentLine.document_id == Document.id)
+        ):
+            if not pib or not (sifra or "").strip():
+                continue
+            red = podaci[(pib, sifra.strip())]
+            red["nazivi"].add(normalize(naziv or ""))
+            red["ime"] = ime or ""
+            if vrsta is DocumentType.CREDIT_NOTE:
+                red["ko"] += 1
+
+    oznake = {k: v for k, v in podaci.items()
+              if v["ko"] and len(v["nazivi"]) >= OZNAKA_OD_NAZIVA}
+    typer.echo(f"Oznaka (šifra pod kojom stoji {OZNAKA_OD_NAZIVA}+ naziva): {len(oznake)}")
+    typer.echo("")
+    for (pib, sifra), red in sorted(oznake.items(), key=lambda x: -len(x[1]["nazivi"])):
+        veza = veze.get((pib, sifra))
+        typer.secho(
+            f"   {red['ime'][:26]:<28} {sifra[:16]:<18} naziva {len(red['nazivi']):>3}  "
+            f"odobrenja {red['ko']:>3}  "
+            + (f"VEZA -> {veza}  (više se neće koristiti na odobrenjima)" if veza else ""),
+            fg="yellow" if veza else None,
+        )
+    typer.echo("")
+    typer.echo("Na običnim fakturama se ništa ne menja — tamo je šifra ipak šifra.")
+
+
 @app.command("ozivi-veze")
 def cmd_ozivi_veze(
     stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),

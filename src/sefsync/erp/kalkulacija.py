@@ -21,7 +21,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.engine import Connection, Engine
 
@@ -418,7 +418,55 @@ def sledeci_broj(conn: Connection, tabela: str, magacin: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine) -> tuple[str | None, str]:
+# Koliko razlicitih naziva mora da stoji pod istom "sifrom dobavljaca" da bi se
+# ona proglasila oznakom, a ne sifrom artikla.
+#
+# Mereno 02.10. na 28.310 stavki: od 553 para (dobavljac + sifra) koji se
+# javljaju na odobrenjima, prag "vise od dva naziva" izdvaja 13 sifara i 425
+# stavki - a nijedna od njih danas nema vezu, pa se nicemu sto radi ne staje na
+# put. Prag "vise od jednog" bi dirao 35 postojecih veza i to bez potrebe.
+OZNAKA_OD_NAZIVA = 3
+
+
+def _sifra_je_oznaka(session, pib: str, sifra: str) -> bool:
+    """Da li dobavljac tom "sifrom" oznacava vise razlicitih stvari.
+
+    Na knjiznom odobrenju sifra dobavljaca cesto nije sifra artikla nego
+    nalepnica za vrstu dokumenta: Eurotehna salje `Porez 20%` na svih 107
+    odobrenja i pod njom stoji 100 razlicitih naziva, EWE `USL00027` na 109
+    (13 naziva), Comtrade `R0001` na 90 (27 naziva).
+
+    Jedna jedina veza za takvu "sifru" stampa isti artikal na svako sledece
+    odobrenje tog dobavljaca. Tako je 661FN-2026 dobilo frizider sa 613FN-2026,
+    iako u napomeni pise drugi model - a predlog iz napomene, koji pogadja
+    9 od 9, nije ni racunat, jer se racuna tek kad stavka ostane bez sifre.
+
+    Obrnuto ne vazi: naziv koji se ponavlja je sasvim normalan ("LED TV
+    55PUS7810 PHILIPS" stoji na 45 dokumenata i to je jedan artikal), pa se
+    grana po nazivu ne dira.
+    """
+    nazivi = {
+        normalize(naziv or "")
+        for (naziv,) in session.execute(
+            select(DocumentLine.name)
+            .join(Document, Document.id == DocumentLine.document_id)
+            .where(Document.supplier_vat == pib,
+                   DocumentLine.sellers_item_id == sifra)
+            .distinct()
+        )
+        if naziv
+    }
+    return len(nazivi) >= OZNAKA_OD_NAZIVA
+
+
+def _nasa_sifra(
+    session,
+    conn: Connection,
+    pib: str | None,
+    linija: DocumentLine,
+    *,
+    odobrenje: bool = False,
+) -> tuple[str | None, str]:
     """Vraca (sifra, odakle). Redosled po pouzdanosti - vidi docs/FAZA-2.md."""
     # Covek je sifru rekao bas za OVU stavku. To je pouzdanije od svake veze i
     # vredi i kad se veza ne pamti za ubuduce.
@@ -431,7 +479,9 @@ def _nasa_sifra(session, conn: Connection, pib: str | None, linija: DocumentLine
     if (linija.erp_mapping_source or "") == "rucno" and (linija.erp_item_code or "").strip():
         return linija.erp_item_code.strip(), "ručno"
 
-    if pib and linija.sellers_item_id:
+    if pib and linija.sellers_item_id and not (
+        odobrenje and _sifra_je_oznaka(session, pib, linija.sellers_item_id.strip())
+    ):
         m = (
             session.query(ItemMapping)
             .filter(
@@ -643,7 +693,9 @@ def pripremi(
                 # Covek je rekao da to nije artikal - ne trazi se sifra i ne ulazi
                 # u kalkulaciju. Vidi se na strani dokumenta, uz stavku.
                 continue
-            sifra, odakle = _nasa_sifra(session, conn, doc.supplier_vat, linija)
+            sifra, odakle = _nasa_sifra(
+                session, conn, doc.supplier_vat, linija, odobrenje=predznak < 0
+            )
             if sifra is None:
                 # Ne recenica nego podaci: ekran na kom se otvara sifra treba
                 # tacno ovo - naziv, barkod, sifru dobavljaca, kolicinu i cenu.

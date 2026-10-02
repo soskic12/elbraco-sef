@@ -325,3 +325,87 @@ def test_ne_pamti_ostavlja_sifarnik_netaknut(db, monkeypatch):
 
     with db.session_scope() as session:
         assert session.scalar(select(ItemMapping)) is None
+
+
+def _odobrenje_sa_stavkom(db, broj: str, sifra_dob: str, naziv: str) -> int:
+    """Knjižno odobrenje istog dobavljača, sa zadatom „šifrom“ i nazivom."""
+    from sefsync.models import (BusinessUnit, Document, DocumentLine, DocumentType,
+                                SefStatus, UnitKind)
+
+    with db.session_scope() as session:
+        pj = session.scalar(select(BusinessUnit).where(BusinessUnit.code == "MAG010"))
+        if pj is None:
+            pj = BusinessUnit(code="MAG010", name="POVRAĆAJ", kind=UnitKind.WAREHOUSE,
+                              erp_code="010")
+            session.add(pj)
+            session.flush()
+        doc = Document(
+            sef_invoice_id=abs(hash(broj)) % 10**6, document_number=broj,
+            supplier_name="Eurotehna", supplier_vat="100000142",
+            document_type=DocumentType.CREDIT_NOTE, amount=-1000.0,
+            sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+        )
+        doc.lines.append(DocumentLine(line_no=1, name=naziv, sellers_item_id=sifra_dob,
+                                      quantity=-1.0, price=1000.0))
+        session.add(doc)
+        session.flush()
+        return doc.id
+
+
+def test_sifra_pod_kojom_stoji_mnogo_naziva_je_oznaka(db):
+    """„Porez 20%“ nije šifra artikla nego nalepnica za vrstu dokumenta.
+
+    Mereno: Eurotehna šalje `Porez 20%` na svih 107 odobrenja i pod njom stoji
+    100 različitih naziva; EWE `USL00027` na 109, Comtrade `R0001` na 90.
+    """
+    from sefsync.erp.kalkulacija import _sifra_je_oznaka
+
+    for i, naziv in enumerate(("Odobrenje po Saglasnosti broj 1/2026",
+                               "Odobrenje po Saglasnosti broj 2/2026",
+                               "Kvartalni rabat Q3")):
+        _odobrenje_sa_stavkom(db, f"KO-{i}", "Porez 20%", naziv)
+
+    with db.session_scope() as session:
+        assert _sifra_je_oznaka(session, "100000142", "Porez 20%")
+
+
+def test_sifra_sa_jednim_nazivom_ostaje_sifra(db):
+    """Prava šifra artikla nosi uvek isti naziv — nju ne diramo."""
+    from sefsync.erp.kalkulacija import _sifra_je_oznaka
+
+    for i in range(4):
+        _odobrenje_sa_stavkom(db, f"KO-R{i}", "Y30847", "Philips LED TV 55PUS7810")
+
+    with db.session_scope() as session:
+        assert not _sifra_je_oznaka(session, "100000142", "Y30847")
+
+
+def test_oznaka_ne_razresava_stavku_odobrenja(db, monkeypatch):
+    """Veza za „Porez 20%“ ne sme da štampa isti artikal na svako odobrenje.
+
+    661FN-2026 je tako dobilo frižider sa 613FN-2026, iako napomena kaže drugi
+    model — a predlog iz napomene nije ni računat, jer se računa tek kad stavka
+    ostane bez šifre (02.10.).
+    """
+    from sefsync.erp.kalkulacija import _nasa_sifra
+    from sefsync.models import Document, DocumentLine, ItemMapping
+
+    for i, naziv in enumerate(("Odobrenje po Saglasnosti broj 1/2026",
+                               "Odobrenje po Saglasnosti broj 2/2026",
+                               "Naknadno odobren rabat")):
+        doc_id = _odobrenje_sa_stavkom(db, f"KO-X{i}", "Porez 20%", naziv)
+
+    with db.session_scope() as session:
+        session.add(ItemMapping(supplier_vat="100000142", supplier_item_id="Porez 20%",
+                                erp_item_code="92846", active=True))
+
+    with db.session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == doc_id)
+        )
+        sifra, _ = _nasa_sifra(session, None, "100000142", linija, odobrenje=True)
+        assert sifra is None, "odobrenje je dobilo artikal sa tuđeg dokumenta"
+
+        # Na običnoj fakturi se ništa ne menja — tamo je šifra ipak šifra.
+        sifra, odakle = _nasa_sifra(session, None, "100000142", linija, odobrenje=False)
+        assert sifra == "92846" and odakle == "mapiranje"
