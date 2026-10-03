@@ -766,6 +766,71 @@ def otvori_sifru(
     return f"Otvorena šifra {sifra} i povezana sa stavkom. {opis}"
 
 
+def otvori_komitenta(
+    document_id: int,
+    *,
+    naziv: str,
+    korisnik: str,
+    pun_naziv: str = "",
+    adresa: str = "",
+    mesto: str = "",
+    posta: str = "",
+    pib: str = "",
+    maticni: str = "",
+    racun: str = "",
+    email: str = "",
+    engine=None,
+) -> str:
+    """Otvara dobavljaca u ERP-ovom sifarniku i odmah preracuna nacrt.
+
+    Dobavljac koga nema u `NAZIVI` zaustavlja kalkulaciju potpuno - nema sta da
+    se poveze ni popravi dok ga neko ne otvori. Mereno 03.10.: tri od 198
+    dobavljaca u istoriji panela.
+
+    App ne pogadja ime: predlog se pravi po pravilu procitanom iz sifarnika, a
+    covek ga potvrdi ili prepravi. Upisuje se jedan red, u jednoj transakciji.
+    """
+    from ..config import get_settings
+    from ..erp.komitent import PredlogKomitenta, predlozi, upisi as upisi_komitenta
+
+    predlog = predlozi(document_id, engine=engine)
+    if predlog.postoji:
+        vec = predlog.slicni[0]
+        raise ValueError(
+            f"Komitent već postoji: {vec['analitika']} „{vec['naziv']}“ "
+            f"({vec['kako']}) — ne otvaraj novog."
+        )
+    if not predlog.analitika:
+        raise ValueError("Nema slobodne šifre — odrediti je ručno u ERP-u.")
+
+    predlog.naziv = (naziv or predlog.naziv).strip()[:30]
+    predlog.pun_naziv = (pun_naziv or predlog.pun_naziv).strip()
+    predlog.adresa = (adresa or predlog.adresa).strip()
+    predlog.mesto = (mesto or predlog.mesto).strip()
+    predlog.posta = (posta or predlog.posta).strip()
+    predlog.pib = (pib or predlog.pib).strip()
+    predlog.maticni = (maticni or predlog.maticni).strip()
+    predlog.racun = (racun or predlog.racun).strip()
+    predlog.email = (email or predlog.email).strip()
+    if not predlog.naziv:
+        raise ValueError("Naziv komitenta je prazan.")
+
+    opis = upisi_komitenta(predlog, produkcija=get_settings().erp_allow_production_write)
+
+    with session_scope() as session:
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="komitent.otvoren",
+                document_id=document_id,
+                detail=opis[:250],
+            )
+        )
+
+    osvezi(document_id, engine=engine)
+    return f"Otvoren komitent {predlog.analitika} „{predlog.naziv}“. {opis}"
+
+
 def _proveri_sifru(sifra: str, engine=None) -> None:
     """Postoji li ta sifra u ERP-ovom sifarniku. Omaska se hvata odmah.
 

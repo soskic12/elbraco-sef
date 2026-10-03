@@ -165,6 +165,9 @@
         {% else %}
           <span class="tag err">zaustavljena</span>
           <div class="muted small">{{ (nacrt.problemi or [])|join('; ') }}</div>
+          {% if user.is_operator and 'NAZIVI' in (nacrt.problemi or [])|join(' ') %}
+            <a class="small" href="/dokument/{{ doc.id }}/komitent">otvori komitenta u šifarniku →</a>
+          {% endif %}
         {% endif %}
       </dd>
       {% endif %}

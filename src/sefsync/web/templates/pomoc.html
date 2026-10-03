@@ -254,6 +254,23 @@
   </ul>
 {% endcall %}
 
+{% call korak('Otvaranje novog komitenta') %}
+  <p>Kad kalkulacija stoji zato što <b>dobavljača nema u šifarniku</b>, ispod
+  razloga stoji veza <b>„otvori komitenta u šifarniku“</b>. Ekran ponudi sve sa
+  fakture: naziv, PIB, matični, adresu, mesto, poštu, račun i mejl.</p>
+  <p>Naziv je jedino što aplikacija mora da skrati — <b>u šifarnik staje 30
+  znakova</b>, a sa SEF-a stiže pun pravni naziv. Pravilo je pročitano iz samog
+  šifarnika: <b>brend prvo, pa skraćeni oblik</b> — „Vitel doo“, „Vodokanal JKP“
+  — bez opisnog dela („preduzeće za proizvodnju i trgovinu“) i bez mesta u
+  nazivu. Tačke se ne pišu. Predlog pogodi otprilike svaki drugi put, pa ga
+  <b>uvek proveri</b>; pun naziv ostaje zapisan ceo u polju APRNAZIV.</p>
+  <p>Pre otvaranja aplikacija traži da firma već ne postoji — po matičnom broju
+  i PIB-u (to je dokaz), pa po imenu i mestu (to je samo sumnja). Ako je nađe po
+  broju, <b>ne da</b> da se otvori novi.</p>
+  <p class="muted small">Upisuje se jedan red. Čim prođe, kalkulacija se
+  preračuna i obično odmah prolazi.</p>
+{% endcall %}
+
 {% call korak('Otvaranje nove šifre artikla') %}
   <p>Na tabu <b>Šifre</b>, uz stavku koja nema našu šifru, stoji veza
   <b>„otvori šifru“</b>. Ekran pokaže sve što se sa fakture zna i predloži prvu

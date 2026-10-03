@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Novi komitent{% endblock %}
+{% block content %}
+<h1>Novi komitent u šifarniku</h1>
+
+<div class="card">
+  <div class="row" style="align-items:baseline">
+    <b>{{ predlog.pun_naziv or '—' }}</b>
+    <span class="spacer"></span>
+    <span class="muted small">faktura
+      <a href="/dokument/{{ predlog.document_id }}">{{ broj }}</a></span>
+  </div>
+</div>
+
+{% for n in predlog.napomene %}
+  <div class="card small" style="border-left:4px solid #f59e0b">{{ n }}</div>
+{% endfor %}
+
+{% if predlog.slicni %}
+<div class="card" style="border-left:4px solid #b91c1c">
+  <h2 style="margin-top:0">
+    {% if predlog.postoji %}Ovaj komitent već postoji{% else %}Postoji komitent sličnog imena{% endif %}
+  </h2>
+  <p class="small" style="margin-top:0">
+    {% if predlog.postoji %}
+      Nađen je po broju — to je dokaz, ne sličnost. Ne otvaraj novog.
+    {% else %}
+      Proveri da istu firmu ne otvaraš drugi put pod drugom šifrom.
+    {% endif %}
+  </p>
+  <table class="small">
+    <tr><th>šifra</th><th>naziv</th><th>mesto</th><th>PIB</th><th>matični</th><th>po čemu</th></tr>
+    {% for s in predlog.slicni %}
+    <tr{% if s.po_broju %} style="background:#fef2f2"{% endif %}>
+      <td><b>{{ s.analitika }}</b></td>
+      <td>{{ s.naziv }}</td>
+      <td>{{ s.mesto or '—' }}</td>
+      <td>{{ s.pib or '—' }}</td>
+      <td>{{ s.maticni or '—' }}</td>
+      <td>{{ s.kako }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if predlog.analitika and not predlog.postoji %}
+<div class="card">
+  <h2 style="margin-top:0">Otvori komitenta {{ predlog.analitika }}</h2>
+  <form method="post" action="/komitent/otvori">
+    <input type="hidden" name="document_id" value="{{ predlog.document_id }}">
+    <div class="row">
+      <div class="field" style="flex:2"><label>Naziv (najviše 30 znakova)</label>
+        <input name="naziv" maxlength="30" value="{{ predlog.naziv }}" required></div>
+      <div class="field"><label>PIB</label>
+        <input name="pib" maxlength="22" value="{{ predlog.pib }}"></div>
+      <div class="field"><label>Matični broj</label>
+        <input name="maticni" maxlength="9" value="{{ predlog.maticni }}"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Adresa</label>
+        <input name="adresa" maxlength="30" value="{{ predlog.adresa }}"></div>
+      <div class="field"><label>Mesto</label>
+        <input name="mesto" maxlength="30" value="{{ predlog.mesto }}"></div>
+      <div class="field"><label>Pošta</label>
+        <input name="posta" maxlength="6" value="{{ predlog.posta }}"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Tekući račun</label>
+        <input name="racun" maxlength="20" value="{{ predlog.racun }}"></div>
+      <div class="field" style="flex:2"><label>E-pošta</label>
+        <input name="email" maxlength="49" value="{{ predlog.email }}"></div>
+    </div>
+    <input type="hidden" name="pun_naziv" value="{{ predlog.pun_naziv }}">
+    <p class="small muted" style="margin:6px 0">
+      Pun pravni naziv sa fakture ide u <b>APRNAZIV</b> i ostaje zapisan ceo —
+      ovo gore je kratko ime koje se vidi u radu. Pravilo je: <b>brend, pa oblik</b>
+      („Vitel doo“, „Vodokanal JKP“), bez opisnog dela i bez mesta u nazivu.
+    </p>
+    <button type="submit">Otvori komitenta i preračunaj kalkulaciju</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card small muted">
+  Upisuje se <b>jedan red</b> u <code>NAZIVI</code>. Aplikacija ništa drugo u
+  šifarniku ne dira, a kad upis prođe, kalkulacija se odmah preračuna.
+</div>
+{% endblock %}

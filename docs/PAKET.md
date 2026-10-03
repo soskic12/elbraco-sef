@@ -146,6 +146,39 @@ Kad ERP ćuti, provera se preskače — ona je pomoć, ne uslov.
 
 ---
 
+## 11. Otvaranje nove šifre artikla iz aplikacije
+
+Oko **60 mesečno**, do sada ručni posao. Ekran **Šifre** → „otvori šifru“.
+Upisuje `ARTIKLI` (099 + 11 magacina) i `ARTPROD` po prodajnim mestima **sa
+cenom**, u jednoj transakciji.
+
+* **Barkod je obavezan** i ne izmišlja se. Baza ga traži jedinstvenim
+  (`UQ(SIFRAMAG, BARCODE)`). To što ga nema na fakturi ne znači da ga artikal
+  nema — za to postoji slikanje. Šifra umesto barkoda ide samo kad čovek
+  izričito kaže da ga nema.
+* **Maloprodajna cena je uslov**, veća od nule. Predlaže se samo kad je kod tog
+  dobavljača marža uska (bar 20 stavki, raspon 25–75 ≤ 10 p.p.), zaokruženo na
+  100; inače polje ostaje prazno uz objašnjenje.
+* **`DARTIKLI` se ne dira** — puni je noćni posao na serveru.
+
+**Traži dozvole:** `GRANT INSERT ON dbo.ARTIKLI`, `dbo.ARTPROD`.
+
+## 12. Otvaranje novog komitenta iz aplikacije
+
+Dobavljač koga nema u `NAZIVI` potpuno zaustavlja kalkulaciju (3 od 198 u
+istoriji). Na dokumentu, ispod razloga, veza „otvori komitenta u šifarniku“.
+
+* Naziv se skraćuje na 30 znakova po pravilu iz samog šifarnika (brend, pa
+  oblik, bez tačaka) — **47 % tačno, 44 % skoro**, pa ide na potvrdu; pun naziv
+  ostaje u `APRNAZIV`.
+* Duplikat: matični i PIB su dokaz (nađen po broju → ne dozvoljava se
+  otvaranje), ime i mesto su samo sumnja.
+* Upisuje se jedan red; `ANALITIKA` se proverava u trenutku upisa.
+
+**Traži dozvolu:** `GRANT INSERT ON dbo.NAZIVI`.
+
+---
+
 ## Šta ostaje otvoreno
 
 * **Razdvojiti ERP nalog.** Panel piše kao `elbraco_dev_ro`, isti nalog kojim se

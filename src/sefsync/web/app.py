@@ -1646,6 +1646,49 @@ def sifre_predlog(
     )
 
 
+@app.get("/dokument/{doc_id}/komitent", response_class=HTMLResponse)
+def komitent_predlog(request: Request, doc_id: int, user: Operater) -> HTMLResponse:
+    """Sve sto se sa fakture zna o dobavljacu koga nema u sifarniku."""
+    from ..erp.komitent import predlozi
+
+    predlog = predlozi(doc_id)
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        broj = doc.document_number if doc else ""
+    return templates.TemplateResponse(
+        request, "predlog_komitenta.html",
+        {"predlog": predlog, "broj": broj, "user": user},
+    )
+
+
+@app.post("/komitent/otvori")
+def komitent_otvori(
+    user: Operater,
+    document_id: int = Form(...),
+    naziv: str = Form(...),
+    pun_naziv: str = Form(""),
+    adresa: str = Form(""),
+    mesto: str = Form(""),
+    posta: str = Form(""),
+    pib: str = Form(""),
+    maticni: str = Form(""),
+    racun: str = Form(""),
+    email: str = Form(""),
+) -> RedirectResponse:
+    """Otvara dobavljaca u NAZIVI i preracuna kalkulaciju."""
+    from ..services.nacrti import otvori_komitenta
+
+    try:
+        poruka = otvori_komitenta(
+            document_id, naziv=naziv, korisnik=user.login, pun_naziv=pun_naziv,
+            adresa=adresa, mesto=mesto, posta=posta, pib=pib, maticni=maticni,
+            racun=racun, email=email,
+        )
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back(f"/dokument/{document_id}/komitent", str(exc), False)
+    return _back(f"/dokument/{document_id}", poruka)
+
+
 @app.post("/sifre/otvori")
 def sifre_otvori(
     user: Operater,

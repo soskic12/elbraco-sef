@@ -2505,3 +2505,51 @@ cene i marže** — za novi Lexa zvučnik videti „87422 Lexa LX 201: 4.490 →
 Prag „20 stavki i 10 p.p.“ je procena, nije izmeren na ishodu. Dogovor (Bane,
 03.10.): kad bude vremena, napraviće se šema maržiranja po brendu i kategoriji
 pa će predlog gledati nju.
+
+## Otvaranje novog komitenta iz aplikacije (03.10.)
+
+Dobavljač koga nema u `NAZIVI` zaustavlja kalkulaciju potpuno — nema šta da se
+poveže ni popravi dok ga neko ne otvori. Redak ali potpun zastoj: **3 od 198**
+dobavljača u istoriji panela.
+
+### Naziv — jedino što app mora da skrati
+
+`NAZIV1` je **varchar(30)**, a sa SEF-a stiže pun pravni naziv. Pravilo je
+pročitano iz šifarnika, na 195 parova (pun naziv ↔ postojeći `NAZIV1`): **brend
+prvo, pa skraćeni pravni oblik**, bez opisnog dela i bez mesta; ćirilica se
+preslovljava; kod javnih preduzeća oblik ide na kraj.
+
+```
+PREDUZEĆE ZA SERVIS I TRGOVINU VITEL DOO NIŠ   → Vitel doo
+EKSER PROIZVODNJA EXPORT-IMPORT I TRGOVINA DOO → Ekser doo
+ЈАВНО КОМУНАЛНО ПРЕДУЗЕЋЕ ВОДОКАНАЛ СОМБОР     → Vodokanal JKP
+```
+
+**Tačke se ne pišu.** Istorijski ih ima (`d.o.o.` 676 puta prema `doo` 1.441),
+ali su to greške operatera kroz godine i ne ponavljaju se (Bane, 03.10.).
+
+Izmereno na tih 195: **47 % pogodi tačno**, 44 % pogodi brend a razlikuje se
+oblik ili jedna reč, 9 % promaši. Promašaji su ono što nijedna heuristika ne
+može — „POŠTA SRBIJE…“ je u šifarniku „JP PTT Saobracaja“, a javno preduzeće za
+garaže je „Parking servis JKP“. Zato predlog ide **na potvrdu**, a pun naziv
+ostaje ceo u `APRNAZIV` (255).
+
+Usput nađena tri buga u prvoj verziji heuristike, svaki vidljiv tek na pravim
+podacima: jednoslovni ostaci tačkastih oblika završavali su u imenu („Raiffeisen
+banka **A** ad“), zagrade su se uklanjale posle `normalize` koja ih je već
+pretvorila u razmake („Procredit bank **novi** ad“), i sve reči su išle velikim
+početnim slovom umesto samo prva.
+
+### Provera da već ne postoji
+
+Prvo brojevi, jer su dokaz: `MATBROJ`, pa `ZIRORACUN` (koji uprkos imenu drži
+PIB). Kod fizičkih lica tamo stoji **JMBG od 13 cifara**, pa se PIB od devet ne
+poredi sa njim — inače bi uparivalo pogrešne ljude. Tek onda ime i mesto, i to
+samo kao sumnja. Nađen po broju → otvaranje se **ne dozvoljava**.
+
+### Upis
+
+Jedan red u `NAZIVI`, jedna transakcija. `ANALITIKA` je pet cifara iz slobodnog
+bloka (54.882 slobodnih mesta, 110 rupa dužine bar 100) i proverava se **u
+trenutku upisa**. `SH_KOM` dobija `.` kao i svuda. Posle uspeha nacrt se
+preračuna i kalkulacija obično odmah prolazi.
