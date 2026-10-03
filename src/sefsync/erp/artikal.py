@@ -9,7 +9,12 @@ Sta ide gde:
     ARTIKLI    maticni red (SIFRAMAG '099') + red po robnom magacinu - imenovani
                spisak, vidi MAGACINI nize
     ARTPROD    red po prodajnom mestu koje nije usluzno (cita se iz dbo.PRODAV)
-    DARTIKLI   tacno jedan red po artiklu (dopuna: opis, slike, uvoznik)
+    DARTIKLI   **ne pisemo mi.** Nocni posao na serveru svaku novu sifru iz
+               jedinstvenog sifarnika sam otvori i u DARTIKLI, a Dule sutradan
+               dopuni zemlju porekla. Tabela nema nijedan indeks (proverio
+               03.10.) - dupli red se ne bi ni prijavio kao greska nego bi tiho
+               ostao, pa bi se artikal duplirao u svemu sto iz nje cita. Dok se
+               taj posao ne pogleda, mi je ne diramo (Bane, 03.10.).
 
 ERP i sam kopira artikal iz 099 u lokalni cenovnik kad korisnik krene da radi
 kalkulaciju a sifre tamo nema. Mi upisujemo unapred u sva robna mesta, da
@@ -34,7 +39,8 @@ from sqlalchemy.engine import Connection, Engine
 
 from ..db import session_scope
 from ..models import Document, DocumentLine
-from .connection import get_erp_engine
+from ..textutil import normalize
+from .connection import erp_engine_za_upis, get_erp_engine
 
 log = logging.getLogger(__name__)
 
@@ -89,11 +95,37 @@ class PredlogArtikla:
     magacini: list[str] = field(default_factory=list)
     prodajna_mesta: list[str] = field(default_factory=list)
     napomene: list[str] = field(default_factory=list)
+    # Artikli ciji naziv lici - jedina provera kad EAN-a nema.
+    slicni: list[dict] = field(default_factory=list)
+    # Maloprodajna cena je uslov, ne ukras: bez nje kalkulacija u maloprodaji
+    # staje sa "artikal nema cenu u objektu".
+    cena_mp: float | None = None
+    # Covek je izricito rekao da artikal nema barkod - tek tada se upisuje
+    # sifra umesto barkoda, kako stoji kod 7.005 postojecih artikala.
+    bez_barkoda: bool = False
 
     @property
     def broj_redova(self) -> int:
-        """Koliko redova bi nastalo: ARTIKLI + ARTPROD + jedan DARTIKLI."""
-        return len(self.magacini) + len(self.prodajna_mesta) + 1
+        """Koliko redova bi nastalo: ARTIKLI po magacinu + ARTPROD po mestu."""
+        return len(self.magacini) + len(self.prodajna_mesta)
+
+    @property
+    def barkod_za_upis(self) -> str:
+        """Barkod koji ide u bazu; kad ga artikal nema, to je sama sifra."""
+        if self.barkod:
+            return self.barkod
+        return (self.sifra or self.predlozena_sifra or "") if self.bez_barkoda else ""
+
+    @property
+    def spreman(self) -> bool:
+        """Sme li da se upise. Barkod i cena su uslov, ne preporuka."""
+        return bool(
+            (self.sifra or self.predlozena_sifra)
+            and self.naziv
+            and self.barkod_za_upis
+            and self.cena_mp
+            and self.cena_mp > 0
+        )
 
 
 def _zauzete(conn: Connection) -> set[int]:
@@ -186,6 +218,34 @@ def _mesta(conn: Connection) -> tuple[list[str], list[str]]:
     return list(MAGACINI), mesta
 
 
+def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[dict]:
+    """Artikli ciji naziv lici - da se ista stvar ne otvori drugi put.
+
+    Trazi se po najduzoj reci iz naziva, pa se poredi skup reci. Poredjenje u
+    ERP-u ne razlikuje ni velika slova ni kvacice.
+    """
+    reci = [r for r in normalize(naziv).split() if len(r) > 2]
+    if not reci:
+        return []
+    najduza = max(reci, key=len)
+    trazene = set(reci)
+    nadjeni = []
+    for r in conn.execute(
+        text("SELECT TOP 200 RTRIM(ARTIKAL) a, RTRIM(NAZIV) n, RTRIM(ISNULL(BARCODE,'')) b "
+             f"FROM dbo.ARTIKLI WHERE RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}' AND NAZIV LIKE :u"),
+        {"u": f"%{najduza}%"},
+    ):
+        njegove = {x for x in normalize(r.n).split() if len(x) > 2}
+        if not njegove:
+            continue
+        poklapanje = len(trazene & njegove) / len(trazene | njegove)
+        if poklapanje >= 0.5:
+            nadjeni.append({"artikal": r.a, "naziv": r.n, "barkod": r.b,
+                            "poklapanje": round(poklapanje, 2)})
+    nadjeni.sort(key=lambda x: -x["poklapanje"])
+    return nadjeni[:najvise]
+
+
 def predlozi(
     document_id: int, line_no: int, *, engine: Engine | None = None
 ) -> PredlogArtikla:
@@ -218,8 +278,13 @@ def predlozi(
             predlog.napomene.append(f"PDV {stopa} % nema svoju tarifu — predloženo 20 %.")
 
         if not predlog.barkod:
+            # "Nema EAN na fakturi" NIJE isto sto i "artikal nema barkod".
+            # Zato i postoji slikanje ambalaze. Barkod se ne izmislja: baza ga
+            # trazi jedinstvenim po magacinu (UQ na SIFRAMAG+BARCODE), pa bi
+            # prazan odmah pao ili zauzeo tudje mesto.
             predlog.napomene.append(
-                "Faktura nema EAN — poslovođa treba da pošalje sliku ambalaže."
+                "Faktura nema EAN — upiši barkod sa slike ambalaže. "
+                "Samo ako artikal zaista nema barkod, označi to izričito."
             )
         if not predlog.naziv:
             predlog.napomene.append("Stavka nema naziv na fakturi.")
@@ -238,6 +303,15 @@ def predlozi(
                     f"ne otvarati novu, nego povezati."
                 )
 
+        # Kad EAN-a nema, jedina provera je naziv. Mereno 03.10.: u 099 ima
+        # 43.531 artikal i 43.432 razlicita naziva, pa je laznih uzbuna malo.
+        if predlog.sifra is None and predlog.naziv:
+            predlog.slicni = slicni_artikli(conn, predlog.naziv)
+            if predlog.slicni:
+                predlog.napomene.append(
+                    "Postoji artikal sličnog naziva — proveri da ne otvaraš drugi put."
+                )
+
         if predlog.sifra is None:
             predlog.predlozena_sifra = slobodna_sifra(conn)
             if predlog.predlozena_sifra is None:
@@ -250,15 +324,30 @@ def predlozi(
 
 
 def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
-    """Redovi koje bi trebalo upisati, po tabelama. Bez sifre se ne moze."""
+    """Redovi koje bi trebalo upisati, po tabelama.
+
+    `DARTIKLI` namerno nije tu - nju puni nocni posao na serveru, vidi vrh
+    modula.
+    """
     sifra = predlog.sifra or predlog.predlozena_sifra
     if not sifra:
         raise ValueError("Šifra artikla nije određena.")
+    barkod = predlog.barkod_za_upis
+    if not barkod:
+        raise ValueError(
+            "Barkod nije poznat. Upiši ga sa slike ambalaže, ili izričito označi "
+            "da artikal nema barkod."
+        )
+    if not predlog.cena_mp or predlog.cena_mp <= 0:
+        raise ValueError(
+            "Maloprodajna cena mora da se unese — bez nje kalkulacija u "
+            "maloprodaji staje sa „artikal nema cenu u objektu“."
+        )
 
     osnova = {
         "ARTIKAL": sifra,
-        "NAZIV": predlog.naziv,
-        "BARCODE": predlog.barkod,
+        "NAZIV": predlog.naziv[:30],
+        "BARCODE": barkod,
         "JEDMERE": predlog.jedmere,
         "TARIFA": predlog.tarifa,
         **STALNO_ARTIKLI,
@@ -269,27 +358,19 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
             "SIFRAPRO": m,
             "SIFRAMAG": MATICNI_MAGACIN,
             "ARTIKAL": sifra,
-            "NAZIV": predlog.naziv,
-            "BARCODE": predlog.barkod,
+            "NAZIV": predlog.naziv[:30],
+            "BARCODE": barkod,
             "JEDMERE": predlog.jedmere,
             "TARIFA": predlog.tarifa,
+            "CENAMALO": round(float(predlog.cena_mp), 2),
+            "NABCENA": round(float(predlog.nabavna_cena or 0), 2),
             "DECCENA": 2,
             "DECKOLIC": 2,
             "PROIZVODJAC": ".",
         }
         for m in predlog.prodajna_mesta
     ]
-    dartikli = [
-        {
-            "SIFRAMAG": MATICNI_MAGACIN,
-            "ARTIKAL": sifra,
-            "NAZIV": predlog.naziv,
-            "BARCODE": predlog.barkod,
-            "PROIZVODJAC": ".",
-            "CENA": predlog.nabavna_cena or 0.0,
-        }
-    ]
-    return {"ARTIKLI": artikli, "ARTPROD": artprod, "DARTIKLI": dartikli}
+    return {"ARTIKLI": artikli, "ARTPROD": artprod}
 
 
 def kao_sql(predlog: PredlogArtikla) -> str:
@@ -309,3 +390,52 @@ def kao_sql(predlog: PredlogArtikla) -> str:
             vrednosti = ", ".join(vrednost(v) for v in red.values())
             delovi.append(f"INSERT INTO dbo.{tabela} ({kolone}) VALUES ({vrednosti});")
     return "\n".join(delovi)
+
+
+def upisi(predlog: PredlogArtikla, *, produkcija: bool = False) -> str:
+    """Otvara sifru u ERP-u. Vraca opis onoga sto je upisano.
+
+    Jedna transakcija: ili sve ili nista. Prvo jedinstveni sifarnik (099), pa
+    lokalni cenovnici - bez njih kalkulacija ne bi mogla da se napravi, a
+    ARTPROD bez `CENAMALO` staje sa "artikal nema cenu u objektu".
+
+    Sifra se proverava **u trenutku upisa**, ne samo kad je predlog pravljen:
+    izmedju jednog i drugog moze da prodje i pola sata, a sifru u medjuvremenu
+    uzme neko drugi. Isto vazi za barkod - baza ga trazi jedinstvenim po
+    magacinu (UQ na SIFRAMAG+BARCODE).
+    """
+    if not predlog.spreman:
+        raise ValueError("Predlog nije potpun — fale šifra, naziv, barkod ili cena.")
+
+    redovi_po_tabeli = redovi(predlog)
+    sifra = predlog.sifra or predlog.predlozena_sifra
+    barkod = predlog.barkod_za_upis
+    engine, baza = erp_engine_za_upis(produkcija)
+
+    with engine.begin() as conn:
+        if zauzeta(conn, sifra):
+            raise ValueError(f"Šifra {sifra} je u međuvremenu zauzeta — osveži predlog.")
+        zauzet = conn.execute(
+            text("SELECT TOP 1 RTRIM(ARTIKAL) a FROM dbo.ARTIKLI "
+                 "WHERE RTRIM(SIFRAMAG)=:m AND RTRIM(ISNULL(BARCODE,''))=:b"),
+            {"m": MATICNI_MAGACIN, "b": barkod},
+        ).first()
+        if zauzet is not None:
+            raise ValueError(
+                f"Barkod {barkod} već nosi šifra {zauzet.a} — ne otvaraj novu, nego poveži."
+            )
+
+        upisano = 0
+        for tabela, redovi_tabele in redovi_po_tabeli.items():
+            for red in redovi_tabele:
+                kolone = ", ".join(red)
+                mesta = ", ".join(f":{k}" for k in red)
+                conn.execute(text(f"INSERT INTO dbo.{tabela} ({kolone}) VALUES ({mesta})"), red)
+                upisano += 1
+
+    opis = (f"{baza}: artikal {sifra} „{predlog.naziv[:30]}“, barkod {barkod}, "
+            f"MP cena {predlog.cena_mp:,.2f} — {upisano} redova "
+            f"({len(redovi_po_tabeli['ARTIKLI'])} magacina, "
+            f"{len(redovi_po_tabeli['ARTPROD'])} prodajnih mesta)")
+    log.info("Otvorena šifra: %s", opis)
+    return opis

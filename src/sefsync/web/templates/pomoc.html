@@ -254,6 +254,30 @@
   </ul>
 {% endcall %}
 
+{% call korak('Otvaranje nove šifre artikla') %}
+  <p>Na tabu <b>Šifre</b>, uz stavku koja nema našu šifru, stoji veza
+  <b>„otvori šifru“</b>. Ekran pokaže sve što se sa fakture zna i predloži prvu
+  slobodnu šifru iz dovoljno velikog bloka.</p>
+  <p>Pre otvaranja aplikacija <b>proveri da artikal već ne postoji</b> — po
+  barkodu, a kad barkoda nema, po nazivu. Ako nađe nešto slično, ponudi ti da
+  to povežeš umesto da otvaraš novu šifru. Odluka je tvoja.</p>
+  <table class="small">
+    <tr><td style="width:24%"><b>Barkod</b></td>
+        <td>obavezan je. To što ga nema na fakturi <b>ne znači</b> da ga artikal
+        nema — za to služi slikanje ambalaže. Tek ako artikal zaista nema barkod,
+        izričito to označiš i upiše se šifra umesto njega.</td></tr>
+    <tr><td><b>Maloprodajna cena</b></td>
+        <td>obavezna i veća od nule. Šifra bez cene prođe u šifarniku, ali
+        kalkulacija u maloprodaji posle staje sa „artikal nema cenu u objektu“.</td></tr>
+  </table>
+  <p>Klik upisuje u <b>jednoj transakciji</b>: jedinstveni šifarnik (099) i
+  lokalni cenovnici po magacinima i prodajnim mestima. Ako bilo šta padne, ne
+  ostaje ništa. Odmah posle toga stavka se poveže i kalkulacija se preračuna.</p>
+  <p class="muted small">Dopuna artikla (<b>DARTIKLI</b>) se ne upisuje odavde —
+  noćni posao na serveru je otvori sam, a zemlja porekla se dopuni sutradan,
+  kao i do sada.</p>
+{% endcall %}
+
 {% call korak('Pogrešno povezana šifra — kako se ispravlja') %}
   <p>Ako se ispostavi da je povezana pogrešna šifra, nađi fakturu u tabu
   <b>Pretraga</b> — on traži kroz sve, i kroz arhivu, i to po broju fakture,

@@ -1646,6 +1646,33 @@ def sifre_predlog(
     )
 
 
+@app.post("/sifre/otvori")
+def sifre_otvori(
+    user: Operater,
+    document_id: int = Form(...),
+    line_no: int = Form(...),
+    naziv: str = Form(...),
+    cena_mp: float = Form(...),
+    barkod: str = Form(""),
+    bez_barkoda: str = Form(""),
+    jedmere: str = Form(""),
+    tarifa: str = Form(""),
+) -> RedirectResponse:
+    """Otvara novu šifru artikla u ERP-u i odmah je veže za stavku."""
+    from ..services.nacrti import otvori_sifru
+
+    nazad = f"/sifre/predlog/{document_id}/{line_no}"
+    try:
+        poruka = otvori_sifru(
+            document_id, line_no, naziv=naziv, barkod=barkod, cena_mp=cena_mp,
+            korisnik=user.login, bez_barkoda=bool(bez_barkoda),
+            jedmere=jedmere or None, tarifa=tarifa or None,
+        )
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back(nazad, str(exc), False)
+    return _back("/sifre", poruka)
+
+
 @app.post("/sifre/nije-artikal")
 def sifre_nije_artikal(
     user: Operater,

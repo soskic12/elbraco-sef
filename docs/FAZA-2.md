@@ -2418,3 +2418,54 @@ Dve popravke:
 
 Nemapirana stavka sada nosi i polje `razlog`, pa se na tabu Šifre vidi zašto
 čeka, a ne samo da čeka.
+
+## Otvaranje nove šifre artikla iz aplikacije (03.10.)
+
+Do sada: poslovođe slikaju ambalažu, Dušan otvara šifru u ERP-u, javi u grupu.
+Oko **60 novih artikala mesečno**. Sada se otvara iz panela, jednim klikom.
+
+### Šta se upisuje, a šta namerno ne
+
+| tabela | šta |
+|---|---|
+| `ARTIKLI` | matični red (099) + red po robnom magacinu — 11 magacina |
+| `ARTPROD` | red po prodajnom mestu, **sa `CENAMALO`** |
+| `DARTIKLI` | **ne diramo** |
+
+`DARTIKLI` puni **noćni posao na serveru**: svaku novu šifru iz jedinstvenog
+šifarnika sam otvori i u dopuni, a Dule sutradan upiše zemlju porekla (Bane,
+03.10.). Tabela **nema nijedan indeks** — dupli red se ne bi ni prijavio kao
+greška nego bi tiho ostao, pa bi se artikal duplirao u svemu što iz nje čita.
+Dok se taj posao ne pogleda, ne upisujemo u nju.
+
+### Barkod je obavezan, i ne izmišlja se
+
+Baza ga traži jedinstvenim: `UQ(SIFRAMAG, BARCODE)` na `ARTIKLI` i
+`UQ(SIFRAPRO, BARCODE)` na `ARTPROD`. Zato su sva 43.531 artikla u 099 i
+popunjena, i svih 43.531 barkoda je različito.
+
+Prva verzija je htela da upiše šifru umesto barkoda kad fakture nema EAN. To je
+pogrešno: **„nema EAN na fakturi“ nije isto što i „artikal nema barkod“** (Bane,
+03.10.) — za to i postoji slikanje ambalaže. Zato se barkod traži, a šifra se
+upisuje umesto njega **samo kad čovek izričito kaže** da artikal nema barkod;
+tako stoji kod 7.005 postojećih artikala.
+
+### Maloprodajna cena je uslov
+
+Bez `ARTPROD.CENAMALO` kalkulacija u maloprodaji staje sa „artikal nema cenu u
+objektu“ — taj zastoj smo već imali. Cena je jedinstvena za sva prodajna mesta,
+mora biti veća od nule, i **Dule vodi računa koju upisuje** (Bane, 03.10.).
+
+### Provera da već ne postoji
+
+Po barkodu (tačno), pa po nazivu kad barkoda nema. Mereno: u 099 ima 43.531
+artikal i **43.432 različita naziva**, pa je lažnih uzbuna malo. Poklapanje se
+meri preko skupa reči (≥ 50 %), a ekran ponudi da se slična šifra poveže umesto
+da se otvara nova. Ne blokira — upozorava.
+
+### Pravila upisa
+
+Jedna transakcija, oko 25 redova; ili sve ili ništa. Šifra i barkod se proveravaju
+**u trenutku upisa**, ne samo kad je predlog pravljen — između može da prođe i
+pola sata. Posle uspeha: stavka se poveže, nacrt preračuna, trag u dnevnik
+(`artikal.otvoren`).

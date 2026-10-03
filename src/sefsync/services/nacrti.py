@@ -702,6 +702,70 @@ def _zabelezi_upis(
         )
 
 
+def otvori_sifru(
+    document_id: int,
+    line_no: int,
+    *,
+    naziv: str,
+    barkod: str,
+    cena_mp: float,
+    korisnik: str,
+    bez_barkoda: bool = False,
+    jedmere: str | None = None,
+    tarifa: str | None = None,
+    engine=None,
+) -> str:
+    """Otvara novu sifru artikla u ERP-u i odmah je veze za stavku.
+
+    Do sada je to bio rucni posao: poslovodje slikaju ambalazu, Dusan otvara
+    sifru u ERP-u i javi u grupu. Ovde se upisuje u jednoj transakciji - ili
+    sve ili nista - pa se stavka poveze i nacrt preracuna.
+
+    Maloprodajna cena je uslov. Sifra bez cene prolazi u sifarniku, a
+    kalkulacija u maloprodaji posle staje sa "artikal nema cenu u objektu" -
+    to smo vec imali kao zastoj.
+
+    `DARTIKLI` se ne dira: nju puni nocni posao na serveru.
+    """
+    from ..config import get_settings
+    from ..erp.artikal import predlozi, upisi as upisi_artikal
+
+    predlog = predlozi(document_id, line_no, engine=engine)
+    if predlog.sifra:
+        raise ValueError(
+            f"Taj barkod već ima šifru {predlog.sifra} — ne otvaraj novu, nego poveži."
+        )
+    if not predlog.predlozena_sifra:
+        raise ValueError("Nema slobodnog bloka šifara — šifru odrediti ručno u ERP-u.")
+
+    predlog.naziv = (naziv or predlog.naziv).strip()[:30]
+    predlog.barkod = (barkod or "").strip()
+    predlog.bez_barkoda = bool(bez_barkoda) and not predlog.barkod
+    predlog.cena_mp = float(cena_mp or 0)
+    if jedmere:
+        predlog.jedmere = jedmere.strip()[:3]
+    if tarifa:
+        predlog.tarifa = tarifa.strip()[:3]
+
+    opis = upisi_artikal(predlog, produkcija=get_settings().erp_allow_production_write)
+    sifra = predlog.predlozena_sifra
+
+    with session_scope() as session:
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="artikal.otvoren",
+                document_id=document_id,
+                detail=opis[:250],
+            )
+        )
+
+    # Veza se pamti kao i svako drugo povezivanje - sifra je upravo nastala
+    # zbog ove stavke, pa dvosmislice nema.
+    povezi_sifru(document_id, line_no, sifra, korisnik=korisnik, engine=engine)
+    return f"Otvorena šifra {sifra} i povezana sa stavkom. {opis}"
+
+
 def _proveri_sifru(sifra: str, engine=None) -> None:
     """Postoji li ta sifra u ERP-ovom sifarniku. Omaska se hvata odmah.
 

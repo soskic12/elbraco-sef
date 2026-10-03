@@ -206,6 +206,9 @@ class _Rezultat:
     def first(self):
         return self._redovi[0] if self._redovi else None
 
+    def __iter__(self):
+        return iter(self._redovi)
+
 
 def test_predlog_uzima_sve_sto_faktura_zna(db, podaci):
     from sefsync.erp.artikal import predlozi
@@ -221,7 +224,7 @@ def test_predlog_uzima_sve_sto_faktura_zna(db, podaci):
 
     assert predlog.magacini == list(MAGACINI)
     assert predlog.prodajna_mesta == ["001", "002"]
-    assert predlog.broj_redova == len(MAGACINI) + 2 + 1
+    assert predlog.broj_redova == len(MAGACINI) + 2
 
 
 def test_poznat_barkod_ne_otvara_novu_sifru(db, podaci):
@@ -271,13 +274,15 @@ def test_sql_nosi_izmerene_stalne_vrednosti(db, podaci):
 
     predlog = predlozi(podaci, 1, engine=LazniErp())
     predlog.predlozena_sifra = "86100"
+    predlog.cena_mp = 59_900.0          # cena je uslov, ne ukras
     sql = kao_sql(predlog)
 
     from sefsync.erp.artikal import MAGACINI
 
     assert sql.count("INSERT INTO dbo.ARTIKLI") == len(MAGACINI)
     assert sql.count("INSERT INTO dbo.ARTPROD") == 2
-    assert sql.count("INSERT INTO dbo.DARTIKLI") == 1
+    # DARTIKLI puni nocni posao na serveru - mi je ne diramo (03.10.)
+    assert "DARTIKLI" not in sql
     assert "'86100'" in sql
     assert "DECKOLIC" in sql and "PROIZVODJAC" in sql
 
@@ -1048,3 +1053,95 @@ def test_ispravka_ne_radi_dok_kalkulacija_nije_u_erpu(client, db, podaci, monkey
     assert odgovor.status_code == 303
     with db.session_scope() as session:
         assert session.get(NacrtKalkulacije, podaci).ispravka is None
+
+
+class _ErpZaOtvaranje:
+    """ERP u kom šifra 86100 nije zauzeta i barkod je slobodan."""
+
+    def __init__(self):
+        self.upisano = []
+        self.posle_commita = False
+
+    def connect(self):
+        return self
+
+    def begin(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, upit, parametri=None, *a, **k):
+        self.upit = str(upit)
+        if self.upit.strip().upper().startswith("INSERT"):
+            self.upisano.append((self.upit, parametri))
+        return _Rezultat(self._odgovor())
+
+    def _odgovor(self):
+        u = self.upit
+        if "PRODAV" in u:
+            return [type("R", (), {"s": "001"})(), type("R", (), {"s": "002"})()]
+        if "DB_NAME" in u:
+            return [("ELBSX_2026",)]
+        return []
+
+    def first(self):
+        return _Rezultat(self._odgovor()).first()
+
+    def scalar(self):
+        return "ELBSX_2026" if "DB_NAME" in getattr(self, "upit", "") else None
+
+
+def test_otvaranje_sifre_trazi_cenu_i_barkod(db, podaci):
+    """Šifra bez cene prođe u šifarniku, a kalkulacija posle staje — zato uslov."""
+    import pytest
+
+    from sefsync.erp.artikal import PredlogArtikla, redovi
+
+    p = PredlogArtikla(document_id=podaci, line_no=1, predlozena_sifra="86100",
+                       naziv="Frižider", barkod="8606012345678",
+                       magacini=["099"], prodajna_mesta=["001"])
+    with pytest.raises(ValueError, match="cena"):
+        redovi(p)
+
+    p.cena_mp = 59900.0
+    red = redovi(p)["ARTPROD"][0]
+    assert red["CENAMALO"] == 59900.0
+
+    p.barkod = ""
+    with pytest.raises(ValueError, match="[Bb]arkod"):
+        redovi(p)
+
+    # Tek kad čovek izričito kaže da barkoda nema, upisuje se šifra umesto njega.
+    p.bez_barkoda = True
+    assert redovi(p)["ARTIKLI"][0]["BARCODE"] == "86100"
+
+
+def test_otvaranje_ne_pise_u_dartikli(db, podaci):
+    """DARTIKLI puni noćni posao na serveru — dupli red tamo ne bi ni pukao."""
+    from sefsync.erp.artikal import PredlogArtikla, redovi
+
+    p = PredlogArtikla(document_id=podaci, line_no=1, predlozena_sifra="86100",
+                       naziv="Frižider", barkod="860", cena_mp=100.0,
+                       magacini=["099"], prodajna_mesta=["001"])
+
+    assert set(redovi(p)) == {"ARTIKLI", "ARTPROD"}
+
+
+def test_slicni_artikli_upozoravaju_na_duplikat(db):
+    """Kad EAN-a nema, naziv je jedina provera da se isto ne otvori dvaput."""
+    from sefsync.erp.artikal import slicni_artikli
+
+    class Conn:
+        def execute(self, *a, **k):
+            return [
+                type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860"})(),
+                type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861"})(),
+            ]
+
+    nadjeni = slicni_artikli(Conn(), "LEXA BT ZVUCNIK LX-302 NITRO")
+
+    assert [x["artikal"] for x in nadjeni] == ["87423"]

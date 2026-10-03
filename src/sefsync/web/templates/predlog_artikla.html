@@ -44,9 +44,67 @@
   <div class="small">
     <div><b>ARTIKLI</b> ({{ predlog.magacini|length }}): {{ predlog.magacini|join(', ') }}</div>
     <div><b>ARTPROD</b> ({{ predlog.prodajna_mesta|length }}): {{ predlog.prodajna_mesta|join(', ') }}</div>
-    <div><b>DARTIKLI</b>: 1 red (dopuna artikla)</div>
+    <div class="muted"><b>DARTIKLI</b>: ne upisujemo — noćni posao na serveru
+      otvori dopunu sam, a zemlja porekla se dopuni sutradan.</div>
   </div>
 </div>
+
+{% if predlog.slicni %}
+<div class="card" style="border-left:4px solid #b91c1c">
+  <h2 style="margin-top:0">Postoji artikal sličnog naziva</h2>
+  <p class="small" style="margin-top:0">Proveri da isti artikal ne otvaraš drugi put.
+    Ako je neki od ovih taj, nemoj otvarati novu šifru nego je poveži.</p>
+  <table class="small">
+    <tr><th>šifra</th><th>naziv</th><th>barkod</th><th></th></tr>
+    {% for s in predlog.slicni %}
+    <tr>
+      <td><b>{{ s.artikal }}</b></td>
+      <td>{{ s.naziv }}</td>
+      <td>{{ s.barkod or '—' }}</td>
+      <td>
+        <form class="inline" method="post" action="/sifre/povezi">
+          <input type="hidden" name="document_id" value="{{ predlog.document_id }}">
+          <input type="hidden" name="line_no" value="{{ predlog.line_no }}">
+          <input type="hidden" name="erp_item_code" value="{{ s.artikal }}">
+          <button class="ghost small" type="submit">to je taj — poveži</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if predlog.predlozena_sifra %}
+<div class="card">
+  <h2 style="margin-top:0">Otvori šifru</h2>
+  <form method="post" action="/sifre/otvori">
+    <input type="hidden" name="document_id" value="{{ predlog.document_id }}">
+    <input type="hidden" name="line_no" value="{{ predlog.line_no }}">
+    <div class="row">
+      <div class="field" style="flex:2"><label>Naziv (najviše 30 znakova)</label>
+        <input name="naziv" maxlength="30" value="{{ predlog.naziv[:30] }}" required></div>
+      <div class="field"><label>Barkod</label>
+        <input name="barkod" maxlength="13" value="{{ predlog.barkod }}"
+               placeholder="sa ambalaže"></div>
+      <div class="field"><label>Jedinica</label>
+        <input name="jedmere" maxlength="3" value="{{ predlog.jedmere }}"></div>
+      <div class="field"><label>Tarifa</label>
+        <input name="tarifa" maxlength="3" value="{{ predlog.tarifa }}"></div>
+      <div class="field"><label>Maloprodajna cena</label>
+        <input name="cena_mp" type="number" step="0.01" min="0.01" required></div>
+    </div>
+    <label class="small"><input type="checkbox" name="bez_barkoda" value="1">
+      ovaj artikal <b>zaista nema</b> barkod — upiši šifru umesto njega</label>
+    <p class="small muted" style="margin:6px 0">
+      Barkod je obavezan i baza ga traži jedinstvenim. To što ga nema na fakturi
+      <b>ne znači</b> da ga artikal nema — zato i postoji slikanje ambalaže.
+      Cena mora biti veća od nule: bez nje kalkulacija u maloprodaji staje.
+    </p>
+    <button type="submit">Otvori šifru {{ predlog.predlozena_sifra }} i poveži</button>
+  </form>
+</div>
+{% endif %}
 
 {% if sql %}
 <div class="card">
@@ -54,10 +112,4 @@
   <pre class="small" style="overflow-x:auto;max-height:320px">{{ sql }}</pre>
 </div>
 {% endif %}
-
-<div class="card small muted">
-  Aplikacija još <b>ne upisuje</b> u šifarnik — nalog nema to pravo, i tako je namerno.
-  Šifru otvara Dušan u ERP-u, pa je ovde upiše u polje „Naša šifra"; veza se onda pamti
-  za sve buduće fakture tog dobavljača.
-</div>
 {% endblock %}
