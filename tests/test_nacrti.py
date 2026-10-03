@@ -191,7 +191,11 @@ class LazniErp:
             )
         if "PRODAV" in tekst:                       # prodajna mesta bez usluznih
             return [_Red(s="001"), _Red(s="002")]
-        return [_Red(m="001"), _Red(m="099")]
+        if "NAZIVI" in tekst:                       # analitika dobavljaca
+            return _Rezultat([])
+        if "MPRULK" in tekst or "ARTPROD" in tekst:  # istorija marze / cene
+            return _Rezultat([])
+        return _Rezultat([_Red(m="001"), _Red(m="099")])
 
 
 class _Red:
@@ -1136,7 +1140,9 @@ def test_slicni_artikli_upozoravaju_na_duplikat(db):
     from sefsync.erp.artikal import slicni_artikli
 
     class Conn:
-        def execute(self, *a, **k):
+        def execute(self, upit, *a, **k):
+            if "ARTPROD" in str(upit):
+                return _Rezultat([type("R", (), {"mp": 12400.0, "nab": 6900.0})()])
             return [
                 type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860"})(),
                 type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861"})(),
@@ -1145,3 +1151,49 @@ def test_slicni_artikli_upozoravaju_na_duplikat(db):
     nadjeni = slicni_artikli(Conn(), "LEXA BT ZVUCNIK LX-302 NITRO")
 
     assert [x["artikal"] for x in nadjeni] == ["87423"]
+
+
+class _ErpSaMarzom:
+    """ERP u kom dobavljač ima zadate marže u istoriji."""
+
+    def __init__(self, marze):
+        self.marze = marze
+
+    def execute(self, upit, *a, **k):
+        if "MPRULK" in str(upit):
+            return _Rezultat([
+                type("R", (), {"nab": 100.0, "mp": 100.0 * (1 + m) * 1.2, "st": 20.0})()
+                for m in self.marze
+            ])
+        return _Rezultat([])
+
+
+def test_cena_se_predlaze_samo_kad_je_marza_uska():
+    """Vimport ide 31–33 % — tu predlog ima smisla."""
+    from sefsync.erp.artikal import predlog_cene
+
+    marze = [0.31, 0.32, 0.32, 0.32, 0.33] * 8          # 40 stavki, usko
+    p = predlog_cene(_ErpSaMarzom(marze), "00123", 4490.0, 20.0)
+
+    assert p["cena"] == round(4490 * 1.32 * 1.2 / 100) * 100
+    assert p["cena"] % 100 == 0, "maloprodajne cene su zaokružene na 100"
+    assert "medijana marže" in p["razlog"]
+
+
+def test_cena_se_ne_predlaze_kad_je_marza_siroka():
+    """Coffee Center ide 69–134 % — pogrešan broj je gori od praznog polja."""
+    from sefsync.erp.artikal import predlog_cene
+
+    marze = [0.69, 0.80, 0.91, 1.10, 1.34] * 8
+    p = predlog_cene(_ErpSaMarzom(marze), "00123", 4490.0, 20.0)
+
+    assert p["cena"] is None
+    assert "ne predlažem" in p["razlog"]
+
+
+def test_cena_se_ne_predlaze_bez_dovoljno_istorije():
+    from sefsync.erp.artikal import predlog_cene
+
+    p = predlog_cene(_ErpSaMarzom([0.4] * 5), "00123", 4490.0, 20.0)
+
+    assert p["cena"] is None and "svega 5" in p["razlog"]

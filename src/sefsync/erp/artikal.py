@@ -100,6 +100,8 @@ class PredlogArtikla:
     # Maloprodajna cena je uslov, ne ukras: bez nje kalkulacija u maloprodaji
     # staje sa "artikal nema cenu u objektu".
     cena_mp: float | None = None
+    # Odakle je cena predlozena (ili zasto nije) - da covek vidi na cemu stoji.
+    cena_predlog: dict | None = None
     # Covek je izricito rekao da artikal nema barkod - tek tada se upisuje
     # sifra umesto barkoda, kako stoji kod 7.005 postojecih artikala.
     bez_barkoda: bool = False
@@ -240,10 +242,78 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
             continue
         poklapanje = len(trazene & njegove) / len(trazene | njegove)
         if poklapanje >= 0.5:
-            nadjeni.append({"artikal": r.a, "naziv": r.n, "barkod": r.b,
-                            "poklapanje": round(poklapanje, 2)})
+            cene = conn.execute(
+                text("SELECT TOP 1 CENAMALO mp, NABCENA nab FROM dbo.ARTPROD "
+                     "WHERE RTRIM(ARTIKAL)=:a AND CENAMALO > 0"),
+                {"a": r.a},
+            ).first()
+            nadjeni.append({
+                "artikal": r.a, "naziv": r.n, "barkod": r.b,
+                "poklapanje": round(poklapanje, 2),
+                "cena_mp": float(cene.mp) if cene else None,
+                "nabavna": float(cene.nab) if cene and cene.nab else None,
+            })
     nadjeni.sort(key=lambda x: -x["poklapanje"])
     return nadjeni[:najvise]
+
+
+# Predlog maloprodajne cene se daje samo kad je kod tog dobavljaca marza uska.
+#
+# Mereno 03.10. na 21.851 maloprodajnoj stavki: globalna medijana je 45 %, ali
+# srednjih 50 % slucajeva ide od 34 % do 58 %, a po kategorijama od 33 % do 95 %.
+# Po dobavljacu je kod nekih vrlo usko (Vimport 31-33 %, Candy 33-39 %, CSM
+# 36-43 %), kod drugih nije (Coffee Center 69-134 %, Linkom 61-86 %), a Roaming
+# Electronics ima **negativnu** medijanu - prodaje ispod nabavne.
+#
+# Zato: predlog samo kad je usko. Pogresan broj u polju je gori od praznog, jer
+# covek prihvati ono sto vidi.
+PRAG_STAVKI = 20          # koliko stavki dobavljac mora da ima u istoriji
+PRAG_RASPONA = 0.10       # 25-75 percentil mora da stane u 10 procentnih poena
+ZAOKRUZI_NA = 100         # 86 % maloprodajnih cena je zaokruzeno na 100 dinara
+
+
+def predlog_cene(
+    conn: Connection, dobavljac: str | None, nabavna: float | None, stopa: float
+) -> dict | None:
+    """Maloprodajna cena po tome kako taj dobavljac obicno ide. None kad nije sigurno.
+
+    Vraca i brojke od kojih je nastao, da covek vidi na cemu stoji, i razlog kad
+    predloga nema.
+    """
+    if not dobavljac or not nabavna or nabavna <= 0:
+        return None
+
+    marze = []
+    for r in conn.execute(
+        text("SELECT s.NAB_CENA nab, s.MALACENA mp, s.STOPA st FROM dbo.MPRULK s "
+             "JOIN dbo.MKALKUL z ON z.MAGACIN=s.MAGACIN AND z.BROJ=s.BROJ "
+             "WHERE RTRIM(z.DOBAVLJAC)=:d AND s.NAB_CENA > 0 AND s.MALACENA > 0"),
+        {"d": dobavljac},
+    ):
+        m = (float(r.mp) / (1 + float(r.st or 20) / 100.0)) / float(r.nab) - 1
+        if -0.5 < m < 5:
+            marze.append(m)
+
+    if len(marze) < PRAG_STAVKI:
+        return {"cena": None, "n": len(marze),
+                "razlog": f"kod ovog dobavljača ima svega {len(marze)} ranijih stavki "
+                          f"— nemam na čemu da zasnujem predlog"}
+
+    marze.sort()
+    p25 = marze[len(marze) // 4]
+    p50 = marze[len(marze) // 2]
+    p75 = marze[(len(marze) * 3) // 4]
+    if p75 - p25 > PRAG_RASPONA:
+        return {"cena": None, "n": len(marze), "p25": p25, "p75": p75,
+                "razlog": f"kod ovog dobavljača marža ide od {p25:.0%} do {p75:.0%} "
+                          f"— ne predlažem, upiši sam"}
+
+    cena = float(nabavna) * (1 + p50) * (1 + stopa / 100.0)
+    return {
+        "cena": round(cena / ZAOKRUZI_NA) * ZAOKRUZI_NA or ZAOKRUZI_NA,
+        "n": len(marze), "p25": p25, "p50": p50, "p75": p75,
+        "razlog": f"medijana marže {p50:.0%} ({p25:.0%}–{p75:.0%} na {len(marze)} stavki)",
+    }
 
 
 def predlozi(
@@ -318,6 +388,17 @@ def predlozi(
                 predlog.napomene.append(
                     "Nema slobodnog bloka šifara ispod 100.000 — šifru odrediti ručno."
                 )
+
+        from .kalkulacija import _analitika_dobavljaca
+
+        dobavljac = _analitika_dobavljaca(
+            conn, doc.supplier_reg_no, doc.supplier_vat, doc.payment_account
+        )
+        predlog.cena_predlog = predlog_cene(
+            conn, dobavljac, predlog.nabavna_cena, predlog.pdv_stopa
+        )
+        if predlog.cena_predlog and predlog.cena_predlog.get("cena"):
+            predlog.cena_mp = predlog.cena_predlog["cena"]
 
         predlog.magacini, predlog.prodajna_mesta = _mesta(conn)
         return predlog

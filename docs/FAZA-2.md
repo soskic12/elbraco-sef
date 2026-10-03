@@ -2469,3 +2469,39 @@ Jedna transakcija, oko 25 redova; ili sve ili ništa. Šifra i barkod se provera
 **u trenutku upisa**, ne samo kad je predlog pravljen — između može da prođe i
 pola sata. Posle uspeha: stavka se poveže, nacrt preračuna, trag u dnevnik
 (`artikal.otvoren`).
+
+### Predlog maloprodajne cene (03.10.)
+
+Mereno na 21.851 maloprodajnoj stavki. **Globalna marža ne valja kao oslonac:**
+medijana 45 %, ali srednjih 50 % ide od 34 % do 58 %, a po kategorijama od 33 %
+(SHKAT 862) do 95 % (403).
+
+Po dobavljaču je kod nekih vrlo usko, kod drugih nije:
+
+| dobavljač | medijana | 25–75 % |
+|---|---:|---|
+| Vimport | 32 % | 31–33 |
+| Candy Hoover | 34 % | 33–39 |
+| CSM 2017 | 39 % | 36–43 |
+| BSH | 45 % | 42–49 |
+| CTC unit | 68 % | 52–92 |
+| Coffee Center | 91 % | 69–134 |
+| **Roaming Electronics** | **−11 %** | −17–2 |
+
+Od 33 dobavljača sa 30+ stavki, **13 ih ima raspon 25–75 unutar 10 p.p.**
+Roaming je poučan: prodaje ispod nabavne (telefoni uz pretplatu), pa bi globalna
+marža tu promašila za pola.
+
+Zato: **predlog samo kad je usko** — bar 20 stavki i raspon ≤ 10 p.p. Tada
+`nabavna × (1 + medijana) × (1 + PDV)`, **zaokruženo na 100** (86 % postojećih
+maloprodajnih cena je zaokruženo na 100, 11 % na 10). Inače polje ostaje prazno
+i piše zašto: *„kod ovog dobavljača marža ide od 69 % do 134 % — ne predlažem“*.
+Pogrešan broj u polju je gori od praznog, jer čovek prihvati ono što vidi.
+
+Uz to se, pored sličnih artikala iz provere duplikata, prikazuju i **njihove
+cene i marže** — za novi Lexa zvučnik videti „87422 Lexa LX 201: 4.490 → 7.900
+(46 %)“ vredi više od formule.
+
+Prag „20 stavki i 10 p.p.“ je procena, nije izmeren na ishodu. Dogovor (Bane,
+03.10.): kad bude vremena, napraviće se šema maržiranja po brendu i kategoriji
+pa će predlog gledati nju.
