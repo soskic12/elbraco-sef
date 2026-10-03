@@ -409,3 +409,63 @@ def test_oznaka_ne_razresava_stavku_odobrenja(db, monkeypatch):
         # Na običnoj fakturi se ništa ne menja — tamo je šifra ipak šifra.
         sifra, odakle = _nasa_sifra(session, None, "100000142", linija, odobrenje=False)
         assert sifra == "92846" and odakle == "mapiranje"
+
+
+def test_nepostojeca_sifra_se_odbija_odmah(db, monkeypatch):
+    """Omaška u kucanju se hvata pri povezivanju, ne tek pri računanju nacrta.
+
+    87622 ne postoji (postoje 87620 i 87621). Ranije se tiho upisala na stavku,
+    a nacrt je posle toga bio „zaustavljen“ — a tamo se forma za povezivanje ne
+    nudi, pa se faktura nije imala kako odglaviti (3753VP-2026, 03.10.).
+    """
+    import pytest
+
+    from sefsync.services import nacrti
+
+    class PrazanSifarnik:
+        def connect(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+    doc = _dokument_sa_stavkom(db, "CSM-9", "PONYE30", "CSM ponye 30")
+
+    with pytest.raises(ValueError, match="87622"):
+        nacrti.povezi_sifru(doc, 1, "87622", korisnik="dusan", engine=PrazanSifarnik())
+
+
+def test_nedostupan_erp_ne_blokira_povezivanje(db, monkeypatch):
+    """Provera je pomoć, ne uslov — kad ERP ćuti, čoveku se ne staje na put."""
+    from sefsync.services import nacrti
+
+    class PaliERP:
+        def connect(self):
+            raise RuntimeError("ERP nedostupan")
+
+    class Nacrt:
+        magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
+        problemi, nemapirane, napomene = [], [], []
+        spreman = True
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())
+    doc = _dokument_sa_stavkom(db, "CSM-10", "PONYE31", "CSM ponye 31")
+
+    nacrti.povezi_sifru(doc, 1, "87621", korisnik="dusan", engine=PaliERP())
+
+    with db.session_scope() as session:
+        from sefsync.models import DocumentLine
+
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == doc)
+        )
+        assert linija.erp_item_code == "87621"

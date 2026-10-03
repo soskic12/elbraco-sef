@@ -2390,3 +2390,27 @@ ekrana.
 Razmatrano i odbijeno: tražiti UPDATE na `PRULKALK`/`MPRULK` da app sama
 ispravi bar nezaknjižene. Dobitak bi bio jedno polje koje poslovođa ionako
 otvara, a izgubilo bi se pravilo „app samo dodaje, nikad ne menja“.
+
+### Šifra koje nema u šifarniku zaglavila je fakturu (03.10.)
+
+Eurotehnina 3753VP-2026 (MAG021, 59.194,80) stajala je kao **zaustavljena**:
+*„stavka 1: šifra 87622 ne postoji u ARTIKLI/099“*. Šifre 87622 nema nigde u
+šifarniku — postoje 87620 (Samsung S26FE) i 87621 (Beha PV 12 WiFi), dakle
+omaška u kucanju.
+
+Zaglavljenje je bilo u tome što se pod stanjem „zaustavljeno“ **forma za
+povezivanje ne nudi** — ni na tabu Šifre, ni na dokumentu. Čovek vidi šta ne
+valja i nema čime da to popravi.
+
+Dve popravke:
+
+* **Šifra koje nema u šifarniku više ne zaustavlja nacrt** nego stavku vraća
+  među one koje čekaju šifru, uz razlog („šifra 87622 ne postoji u šifarniku“).
+  To i jeste tačan opis stanja: stavka nema upotrebljivu šifru. Forma se tada
+  nudi kao i za svaku drugu nemapiranu stavku.
+* **Omaška se hvata pri povezivanju**, a ne tek pri računanju nacrta:
+  `povezi_sifru` proveri da li šifra postoji u `ARTIKLI/099` i odbije je sa
+  porukom. Kad ERP nije dostupan, provera se preskače — ona je pomoć, ne uslov.
+
+Nemapirana stavka sada nosi i polje `razlog`, pa se na tabu Šifre vidi zašto
+čeka, a ne samo da čeka.

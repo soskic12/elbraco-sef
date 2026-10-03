@@ -1458,3 +1458,71 @@ def test_predlog_dobavljaca_ne_siri_ime():
 
     conn = _ConnNazivi([("00709", "Komunalac Vrbas", "Vrbas", "", "")])
     assert predlog_dobavljaca(conn, "JKP KOMUNALAC, KULA", "82080", "100662387") is None
+
+
+def test_sifra_koje_nema_u_sifarniku_ceka_coveka_a_ne_zaustavlja(db):
+    """Nacrt ne sme da se „zaustavi“ zbog šifre koje nema — tu se ne nudi forma.
+
+    Faktura 3753VP-2026 je tako stajala: stavka je imala šifru 87622, nje u
+    šifarniku nema, nacrt je bio „zaustavljen“ i niko nije mogao da preveže.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import (BusinessUnit, Document, DocumentLine, SefStatus,
+                                UnitKind)
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="MAG021", name="CMO SOMBOR", kind=UnitKind.WAREHOUSE,
+                          erp_code="021")
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=479495667, document_number="3753VP-2026",
+            supplier_name="Eurotehna", supplier_vat="101634740",
+            supplier_reg_no="08749990", amount=59194.80, vat_amount=9865.80,
+            sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+            issue_date=dt.date(2026, 10, 1),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Frižider", quantity=1,
+                                      line_amount=49329.0, vat_percent=20.0,
+                                      erp_item_code="87622",
+                                      erp_mapping_source="rucno"))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        """ERP u kom šifre 87622 nema."""
+
+        def execute(self, *a, **k):
+            self.upit = str(a[0]) if a else ""
+            return self
+
+        def first(self):
+            if "PTARIFE" in self.upit:
+                return (20.0,)
+            if "NAZIVI" in self.upit:
+                return type("R", (), {"a": "00142"})()
+            return None          # ARTIKLI: nema je
+
+        def scalar(self):
+            return None
+
+        def all(self):
+            return []
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+
+    assert not nacrt.problemi, f"nacrt je zaustavljen: {nacrt.problemi}"
+    assert [s["line_no"] for s in nacrt.nemapirane] == [1]
+    assert "87622" in nacrt.nemapirane[0]["razlog"]

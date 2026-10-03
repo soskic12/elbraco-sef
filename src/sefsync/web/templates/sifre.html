@@ -59,7 +59,8 @@
     {% for s in nacrt.nemapirane %}
     <tr>
       <td>{{ s.line_no }}</td>
-      <td>{{ s.naziv }}</td>
+      <td>{{ s.naziv }}
+        {% if s.razlog %}<div class="small" style="color:#b45309">{{ s.razlog }}</div>{% endif %}</td>
       <td>
         {% set njene = slike.get((nacrt.document_id, s.line_no), []) %}
         {% if njene %}

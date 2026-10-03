@@ -737,12 +737,30 @@ def pripremi(
                         "cena": linija.price,
                         "jedinica": linija.unit_code or "",
                         "predlog": predlog,
+                        "razlog": odakle if odakle != "nepoznat" else "",
                     }
                 )
                 continue
             art = _artikal(conn, sifra)
             if art is None:
-                nacrt.problemi.append(f"stavka {linija.line_no}: šifra {sifra} ne postoji u ARTIKLI/099")
+                # Sifra postoji na stavci, ali je u sifarniku nema - omaska u
+                # kucanju (87622 umesto 87621) ili artikal koji nikad nije
+                # otvoren. To nije zastoj nego stavka bez upotrebljive sifre:
+                # pod "zaustavljeno" se forma za povezivanje ne nudi, pa se
+                # faktura nije imala kako odglaviti (3753VP-2026, 03.10.).
+                nacrt.nemapirane.append(
+                    {
+                        "line_no": linija.line_no,
+                        "naziv": linija.name or "",
+                        "sifra_dobavljaca": linija.sellers_item_id or "",
+                        "ean": linija.standard_item_id or "",
+                        "kolicina": linija.quantity,
+                        "cena": linija.price,
+                        "jedinica": linija.unit_code or "",
+                        "predlog": predlog,
+                        "razlog": f"šifra {sifra} ne postoji u šifarniku",
+                    }
+                )
                 continue
 
             tarifa = (art["tarifa"] or "002").strip()

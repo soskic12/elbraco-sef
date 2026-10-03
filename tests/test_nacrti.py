@@ -924,6 +924,8 @@ class _ErpSaKalkulacijom:
     def first(self):
         if "PROKNJIZENO" in self.upit:
             return type("R", (), {"p": self.proknjizeno})()
+        if "ARTIKLI" in self.upit:
+            return (1,)          # šifra postoji u šifarniku
         return None
 
     def scalar(self):

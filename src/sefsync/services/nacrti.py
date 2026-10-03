@@ -702,6 +702,33 @@ def _zabelezi_upis(
         )
 
 
+def _proveri_sifru(sifra: str, engine=None) -> None:
+    """Postoji li ta sifra u ERP-ovom sifarniku. Omaska se hvata odmah.
+
+    Bez ovoga se pogresna sifra tiho upise na stavku i vrati tek pri racunanju
+    nacrta, kao "zaustavljeno" - a tamo se forma za povezivanje ne nudi, pa
+    faktura ostane zaglavljena (87622 umesto 87621, 03.10.).
+
+    Kad ERP nije dostupan, ne stoji se coveku na putu - provera se preskace.
+    """
+    from ..erp.connection import get_erp_engine
+
+    try:
+        with (engine or get_erp_engine()).connect() as conn:
+            postoji = conn.execute(
+                text("SELECT TOP 1 1 FROM dbo.ARTIKLI "
+                     "WHERE RTRIM(ARTIKAL)=:a AND RTRIM(SIFRAMAG)='099'"),
+                {"a": sifra},
+            ).first()
+    except Exception as exc:  # noqa: BLE001 - provera je pomoc, ne uslov
+        log.info("Šifra %s nije proverena u ERP-u: %s", sifra, exc)
+        return
+    if not postoji:
+        raise ValueError(
+            f"Šifra {sifra} ne postoji u šifarniku artikala — proveri da nije omaška."
+        )
+
+
 def povezi_sifru(
     document_id: int,
     line_no: int,
@@ -729,6 +756,7 @@ def povezi_sifru(
     sifra = (erp_item_code or "").strip()
     if not sifra:
         raise ValueError("Šifra artikla je prazna.")
+    _proveri_sifru(sifra, engine)
 
     with session_scope() as session:
         linija = session.scalar(
