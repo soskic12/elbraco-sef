@@ -1,3 +1,7 @@
+> **Šta je u paketu koji čeka postavljanje:** [PAKET.md](PAKET.md) — deset
+> izmena od 30.09. do 03.10., sa razlogom i sa onim što treba pogledati posle
+> postavljanja. Ovaj dnevnik je duži i ide hronološki.
+
 # Faza 2 — ulazna kalkulacija iz e-fakture
 
 Nalazi merenja na stvarnim podacima (SEF baza panela + ERP `ELBS_2026`),
