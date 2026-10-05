@@ -1034,8 +1034,14 @@ def ispravi_sifru(
 
     with session_scope() as session:
         red = session.get(NacrtKalkulacije, document_id)
+        # Dok kalkulacija nije u ERP-u, ispravka je obicno povezivanje: veza se
+        # promeni, nacrt preracuna i time je gotovo. Nema sta da se javlja
+        # jedinici, jer u ERP-u jos nista ne stoji.
         if red is None or red.stanje is not StanjeNacrta.UPISAN:
-            raise ValueError("Ova kalkulacija nije u ERP-u — šifra se menja običnim povezivanjem.")
+            povezi_sifru(document_id, line_no, erp_item_code,
+                         korisnik=korisnik, pamti=pamti, engine=engine)
+            return (f"Šifra je promenjena na {erp_item_code.strip()}. "
+                    "Kalkulacija još nije u ERP-u, pa se nacrt samo preračunao.")
         linija = session.scalar(
             select(DocumentLine).where(
                 DocumentLine.document_id == document_id, DocumentLine.line_no == line_no

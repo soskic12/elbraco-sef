@@ -135,27 +135,6 @@
           <div class="muted small">{{ nacrt.upisao }}{% if nacrt.upisano_u %},
             {{ nacrt.upisano_u.strftime('%d.%m.%Y %H:%M') }}{% endif %}{% if nacrt.erp_napomena %}
             — {{ nacrt.erp_napomena }}{% endif %}</div>
-          {% if user.is_operator and doc.lines %}
-            <details style="margin-top:6px">
-              <summary class="small">Pogrešna šifra artikla?</summary>
-              <form class="row small" method="post"
-                    action="/dokument/{{ doc.id }}/ispravi-sifru" style="margin-top:6px">
-                <div class="field"><label>Stavka</label>
-                  <select name="line_no" required>
-                    {% for l in doc.lines %}
-                      <option value="{{ l.line_no }}">{{ l.line_no }}. {{ l.name[:40] }}
-                        {% if l.erp_item_code %}({{ l.erp_item_code }}){% endif %}</option>
-                    {% endfor %}
-                  </select></div>
-                <div class="field"><label>Tačna šifra</label>
-                  <input name="erp_item_code" placeholder="npr. 87423" required></div>
-                <div class="field"><label>&nbsp;</label>
-                  <button type="submit">Ispravi</button></div>
-              </form>
-              <div class="muted small">Aplikacija kalkulaciju u ERP-u ne menja — popravlja vezu
-                u šifarniku i javlja jedinici šta da ispravi.</div>
-            </details>
-          {% endif %}
         {% elif nacrt.stanje.value == 'spreman' %}
           <span class="tag">spremna{% if nacrt.magacin %} · {{ nacrt.tabela }} {{ nacrt.magacin }}{% endif %}</span>
         {% elif nacrt.stanje.value == 'ceka_sifru' %}
@@ -168,6 +147,38 @@
           {% if user.is_operator and 'NAZIVI' in (nacrt.problemi or [])|join(' ') %}
             <a class="small" href="/dokument/{{ doc.id }}/komitent">otvori komitenta u šifarniku →</a>
           {% endif %}
+        {% endif %}
+
+        {# Pogresno povezana sifra se ispravlja bez obzira dokle je kalkulacija
+           stigla. Ranije se forma nudila samo kad je vec u ERP-u, pa stavka
+           koja ima sifru a nije upisana nije imala gde da se promeni: na tabu
+           Sifre je nema (ima sifru), a ovde se forma nije pokazivala. #}
+        {% if user.is_operator and doc.lines and nacrt.stanje.value != 'ne_treba' %}
+          <details style="margin-top:8px">
+            <summary class="small">Pogrešna šifra artikla?</summary>
+            <form class="row small" method="post"
+                  action="/dokument/{{ doc.id }}/ispravi-sifru" style="margin-top:6px">
+              <div class="field" style="flex:2"><label>Stavka</label>
+                <select name="line_no" required>
+                  {% for l in doc.lines %}
+                    <option value="{{ l.line_no }}">{{ l.line_no }}. {{ l.name[:40] }}
+                      {% if l.erp_item_code %}— sada {{ l.erp_item_code }}{% endif %}</option>
+                  {% endfor %}
+                </select></div>
+              <div class="field"><label>Tačna šifra</label>
+                <input name="erp_item_code" placeholder="npr. 87423" required></div>
+              <div class="field"><label>&nbsp;</label>
+                <button type="submit">Ispravi</button></div>
+            </form>
+            <div class="muted small">
+              {% if nacrt.stanje.value == 'upisan' %}
+                Kalkulacija je već u ERP-u — aplikacija je tamo ne menja. Popravlja vezu
+                u šifarniku i javlja jedinici šta da ispravi.
+              {% else %}
+                Kalkulacija još nije u ERP-u — veza se popravi i nacrt se preračuna.
+              {% endif %}
+            </div>
+          </details>
         {% endif %}
       </dd>
       {% endif %}

@@ -1222,3 +1222,53 @@ def test_ispis_sql_a_radi_kad_je_predlog_potpun():
                        magacini=["099"], prodajna_mesta=["001"])
 
     assert "INSERT INTO dbo.ARTIKLI" in kao_sql(p)
+
+
+def test_ispravka_pre_upisa_je_obicno_povezivanje(client, db, podaci, monkeypatch):
+    """Dule pogreši šifru pre nego što kalkulacija ode u ERP.
+
+    Takva stavka ima šifru, pa je nema na tabu Šifre; forma na dokumentu se
+    ranije nudila samo kad je kalkulacija već upisana — i nije imao gde da je
+    promeni (Bane, 05.10.).
+    """
+    from sefsync.models import DocumentLine, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+
+    with db.session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == podaci)
+        )
+        linija.erp_item_code = "87422"
+        linija.erp_mapping_source = "rucno"
+        session.add(NacrtKalkulacije(document_id=podaci, stanje=StanjeNacrta.SPREMAN,
+                                     magacin="002"))
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: LazniNacrt())
+    monkeypatch.setattr(
+        nacrti, "_proveri_sifru", lambda *a, **k: None)   # ERP nije u igri
+
+    odgovor = client.post(f"/dokument/{podaci}/ispravi-sifru",
+                          data={"line_no": 1, "erp_item_code": "87423"},
+                          follow_redirects=False)
+
+    assert odgovor.status_code == 303
+    with db.session_scope() as session:
+        linija = session.scalar(
+            select(DocumentLine).where(DocumentLine.document_id == podaci)
+        )
+        assert linija.erp_item_code == "87423"
+        red = session.get(NacrtKalkulacije, podaci)
+        assert red.ispravka is None, "nema šta da se ispravlja u ERP-u"
+
+
+def test_dokument_nudi_ispravku_i_pre_upisa(client, db, podaci, monkeypatch):
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(document_id=podaci, stanje=StanjeNacrta.SPREMAN,
+                                     magacin="002"))
+
+    tekst = client.get(f"/dokument/{podaci}").text
+
+    assert "Pogrešna šifra artikla?" in tekst

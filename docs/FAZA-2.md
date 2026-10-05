@@ -2584,3 +2584,21 @@ Popravljeno: `kao_sql` vraća prazno umesto izuzetka kad predlog nije potpun, a
 strana u tom slučaju nudi **dugme „Poveži šifru X“** — što je i jedina ispravna
 radnja. Provereno na svim varijantama (sa EAN-om koji postoji, sa EAN-om koga
 nema, bez EAN-a).
+
+### Ispravka šifre nije smela da zavisi od toga dokle je kalkulacija stigla (05.10.)
+
+Forma „Pogrešna šifra artikla?“ nudila se **samo kad je kalkulacija već u
+ERP-u**. Ispostavilo se da je to najuži mogući slučaj: ako Dule pogreši šifru
+pre nego što kalkulacija ode, takva stavka **ima** šifru — pa je nema na tabu
+Šifre — a na dokumentu se forma nije pokazivala. Nigde se nije mogla promeniti.
+
+Sada forma stoji u redu „Kalkulacija“ za svako stanje osim „ne ide kroz
+kalkulaciju“, a šta se dešava zavisi od stanja:
+
+* **nije u ERP-u** → obično povezivanje: veza se popravi, nacrt se preračuna, i
+  time je gotovo — nema kome da se javlja, jer u ERP-u još ništa ne stoji;
+* **jeste u ERP-u** → kao i do sada: veza, čitanje `PROKNJIZENO`, crveni okvir i
+  mejl jedinici.
+
+Uz svaku stavku u izboru piše koju šifru trenutno ima, da se greška vidi pre
+nego što se kuca nova.
