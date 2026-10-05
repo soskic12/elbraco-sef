@@ -463,6 +463,10 @@ class IngestService:
             doc.sum_without_vat = float(ubl.tax_exclusive_amount)
         if doc.vat_amount is None and ubl.tax_amount is not None:
             doc.vat_amount = float(ubl.tax_amount)
+        if ubl.taxable_amount_rsd is not None:
+            doc.sum_without_vat_rsd = float(ubl.taxable_amount_rsd)
+        if ubl.tax_amount_rsd is not None:
+            doc.vat_amount_rsd = float(ubl.tax_amount_rsd)
 
         doc.delivery_name = shorten(ubl.delivery_name or ubl.delivery_location_id, 300)
         doc.delivery_address = shorten(ubl.delivery_address, 300)

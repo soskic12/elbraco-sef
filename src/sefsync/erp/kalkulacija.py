@@ -656,6 +656,29 @@ def pripremi(
         # Knjizno odobrenje ulazi minusom - kolicine i iznosi su negativni.
         predznak = -1.0 if (doc.document_type and "credit" in str(doc.document_type.value).lower()) else 1.0
 
+        # Faktura u stranoj valuti: u ERP ide u dinarima.
+        #
+        # Mereno 05.10.: ERP sve takve drzi preracunate (DEVIZNO=0, KURS=0), a
+        # svih 15 deviznih faktura od 01.07. nosi dinarski obracun u sebi -
+        # drugi blok `TaxTotal` sa `currencyID="RSD"`. Bez ovoga je 1.350,60 EUR
+        # odlazilo u ERP kao 1.350,60 dinara (Raiffeisen K110/2026-3087535).
+        kurs = 1.0
+        valuta = (doc.currency or "RSD").strip().upper()
+        if valuta and valuta != "RSD":
+            osnovica_rsd = doc.sum_without_vat_rsd
+            osnovica_val = doc.sum_without_vat or doc.amount
+            if osnovica_rsd and osnovica_val:
+                kurs = float(osnovica_rsd) / float(osnovica_val)
+                nacrt.napomene.append(
+                    f"Faktura je u {valuta} — preračunato u dinare po kursu "
+                    f"{kurs:.4f} sa same fakture."
+                )
+            else:
+                nacrt.problemi.append(
+                    f"Faktura je u {valuta}, a nema dinarski obračun — "
+                    "iznos bi otišao u ERP kao da su dinari. Unesi je ručno."
+                )
+
         # Kalkulacija na magacinu 088 nema stavke. Nije stvar izbora nego pravilo
         # ERP-a: mereno 16.09., svih 3.016 zaglavlja na 088 nema nijedan red u
         # PRULKALK, a ROBNO_ZADUZ je u svima 0. Bez ovoga generator trazi sifru
@@ -770,9 +793,9 @@ def pripremi(
 
             # Mereno na 4.425 stavki sa rabatom: FAK_CENA je bruto cena,
             # NAB_CENA neto, IZN_RABATA rabat po komadu, VREDNOST neto x kolicina.
-            bruto = float(linija.price or 0)
+            bruto = float(linija.price or 0) * kurs
             neto = (
-                round(float(linija.line_amount) / kol_abs, 4)
+                round(float(linija.line_amount) * kurs / kol_abs, 4)
                 if linija.line_amount is not None and kol_abs
                 else bruto
             )
@@ -843,12 +866,15 @@ def pripremi(
             # stopama se ipak racuna iz stavki dokumenta - usluzna faktura ume da
             # nosi i 10 % i 20 % (struja, komunalije), a ERP to drzi u odvojenim
             # poljima.
-            pdv_ukupno = float(doc.vat_amount or 0) * predznak
-            za_naplatu = round(float(doc.amount or 0) * predznak, 2)
+            pdv_ukupno = float(
+                doc.vat_amount_rsd if kurs != 1.0 and doc.vat_amount_rsd is not None
+                else (doc.vat_amount or 0)
+            ) * predznak
+            za_naplatu = round(float(doc.amount or 0) * kurs * predznak, 2)
             for linija in doc.lines:
                 if linija.vat_percent is None or linija.line_amount is None:
                     continue
-                osn = round(float(linija.line_amount) * predznak, 2)
+                osn = round(float(linija.line_amount) * kurs * predznak, 2)
                 _dodaj(float(linija.vat_percent), osn,
                        round(osn * float(linija.vat_percent) / 100.0, 2))
             if not po_stopi:

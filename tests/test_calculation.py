@@ -1526,3 +1526,100 @@ def test_sifra_koje_nema_u_sifarniku_ceka_coveka_a_ne_zaustavlja(db):
     assert not nacrt.problemi, f"nacrt je zaustavljen: {nacrt.problemi}"
     assert [s["line_no"] for s in nacrt.nemapirane] == [1]
     assert "87622" in nacrt.nemapirane[0]["razlog"]
+
+
+def _devizni_dokument(db, *, valuta="EUR", osnovica=1350.60, osnovica_rsd=158718.06,
+                      pdv=0.0, pdv_rsd=0.0):
+    import datetime as dt
+
+    from sqlalchemy import select
+
+    from sefsync.models import (BusinessUnit, Document, DocumentLine, SefStatus,
+                                UnitKind)
+
+    with db.session_scope() as session:
+        pj = session.scalar(select(BusinessUnit).where(BusinessUnit.code == "OFFICE"))
+        if pj is None:
+            pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+            session.add(pj)
+            session.flush()
+        doc = Document(
+            sef_invoice_id=479192832, document_number="K110/2026-3087535",
+            supplier_name="RAIFFEISEN BANKA A.D.", supplier_vat="100000299",
+            supplier_reg_no="17335600", currency=valuta,
+            amount=osnovica + pdv, sum_without_vat=osnovica, vat_amount=pdv,
+            sum_without_vat_rsd=osnovica_rsd, vat_amount_rsd=pdv_rsd,
+            sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+            issue_date=dt.date(2026, 10, 1),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Obračunata kamata", quantity=1,
+                                      line_amount=osnovica, vat_percent=0.0))
+        session.add(doc)
+        session.flush()
+        return doc.id
+
+
+class _ConnBezArtikala:
+    def execute(self, *a, **k):
+        self.upit = str(a[0]) if a else ""
+        return self
+
+    def first(self):
+        if "NAZIVI" in self.upit:
+            return type("R", (), {"a": "00299"})()
+        if "PTARIFE" in self.upit:
+            return (20.0,)
+        return None
+
+    def scalar(self):
+        return None
+
+    def all(self):
+        return []
+
+    def __iter__(self):
+        return iter(())
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_faktura_u_evrima_ide_u_erp_u_dinarima(db):
+    """1.350,60 EUR je išlo u ERP kao 1.350,60 dinara (Raiffeisen, 05.10.).
+
+    ERP sve devizne fakture drži preračunate; mereno na 15 takvih, svaka nosi
+    dinarski obračun u sebi.
+    """
+    from sefsync.erp import kalkulacija as K
+
+    doc_id = _devizni_dokument(db)
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: _ConnBezArtikala()})())
+
+    assert not nacrt.problemi
+    assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 158718.06
+    assert any("preračunato u dinare" in n for n in nacrt.napomene)
+
+
+def test_devizna_faktura_bez_dinarskog_obracuna_se_zaustavlja(db):
+    """Bez dinarskog obračuna iznos se ne pogađa — kalkulacija staje."""
+    from sefsync.erp import kalkulacija as K
+
+    doc_id = _devizni_dokument(db, osnovica_rsd=None, pdv_rsd=None)
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: _ConnBezArtikala()})())
+
+    assert any("nema dinarski obračun" in p for p in nacrt.problemi)
+
+
+def test_dinarska_faktura_se_ne_dira(db):
+    from sefsync.erp import kalkulacija as K
+
+    doc_id = _devizni_dokument(db, valuta="RSD", osnovica=1000.0, osnovica_rsd=None,
+                               pdv=200.0, pdv_rsd=None)
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: _ConnBezArtikala()})())
+
+    assert not nacrt.problemi
+    assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 1200.0
+    assert not nacrt.napomene

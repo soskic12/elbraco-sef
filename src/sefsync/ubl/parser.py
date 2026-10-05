@@ -166,6 +166,13 @@ class UblDocument:
     tax_amount: Decimal | None = None
     tax_subtotals: list[TaxSubtotal] = field(default_factory=list)
 
+    # Faktura u stranoj valuti nosi i obracun u dinarima - drugi blok `TaxTotal`
+    # ciji iznosi imaju `currencyID="RSD"`. Bez toga bi 1.350,60 EUR u ERP
+    # otislo kao 1.350,60 dinara (Raiffeisen K110/2026-3087535, 05.10.).
+    # Mereno: svih 15 deviznih faktura od 01.07. nosi te iznose.
+    taxable_amount_rsd: Decimal | None = None
+    tax_amount_rsd: Decimal | None = None
+
     lines: list[UblLine] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
 
@@ -514,6 +521,19 @@ def parse_ubl(data: bytes | str) -> UblDocument:
         doc.prepaid_amount = _dec(totals, "PrepaidAmount")
         doc.rounding_amount = _dec(totals, "PayableRoundingAmount")
         doc.payable_amount = _dec(totals, "PayableAmount")
+
+    # Deviznih faktura ima dva `TaxTotal`: prvi u valuti fakture, drugi u
+    # dinarima. `_find` uzima prvi, pa se dinarski mora potraziti po atributu.
+    for blok in _find_all(root, "TaxTotal"):
+        if _attr(blok, "TaxAmount", "currencyID") != "RSD":
+            continue
+        doc.tax_amount_rsd = _dec(blok, "TaxAmount")
+        osnovice = [
+            _dec(sub, "TaxableAmount") for sub in _find_all(blok, "TaxSubtotal")
+        ]
+        prave = [x for x in osnovice if x is not None]
+        if prave:
+            doc.taxable_amount_rsd = sum(prave)
 
     tax_total = _find(root, "TaxTotal")
     if tax_total is not None:

@@ -245,6 +245,10 @@ class Document(Base):
     vat_amount: Mapped[float | None] = mapped_column(Float, default=None)
     rounding_amount: Mapped[float | None] = mapped_column(Float, default=None)
     currency: Mapped[str | None] = mapped_column(String(3), default="RSD")
+    # Faktura u stranoj valuti nosi i obracun u dinarima. Kalkulacija ide u
+    # dinarima - bez ovoga bi 1.350,60 EUR otislo u ERP kao 1.350,60 dinara.
+    sum_without_vat_rsd: Mapped[float | None] = mapped_column(Float, default=None)
+    vat_amount_rsd: Mapped[float | None] = mapped_column(Float, default=None)
 
     issue_date: Mapped[date | None] = mapped_column(Date, default=None)
     delivery_date: Mapped[date | None] = mapped_column(Date, default=None)

@@ -481,6 +481,16 @@
   sa tim artiklom idu kako treba.</p>
 {% endcall %}
 
+{% call korak('Faktura u evrima') %}
+  <p>Banke i Booking šalju fakture u <b>EUR</b>. U ERP kalkulacija ide
+  <b>u dinarima</b>, kao i do sada kad se radilo ručno — aplikacija uzme
+  dinarski obračun koji faktura nosi u sebi i preračuna po kursu sa te iste
+  fakture. Ispod kalkulacije stoji žuta napomena sa kursom.</p>
+  <p class="muted small">Ako faktura u stranoj valuti nema dinarski obračun,
+  kalkulacija se <b>zaustavlja</b> i piše zašto. Aplikacija kurs ne pogađa —
+  takvu fakturu unesi ručno.</p>
+{% endcall %}
+
 {% call korak('Žute napomene ispod fakture') %}
   <p>Žuti okvir <b>Pogledaj pre knjiženja</b> ne zaustavlja ništa — kalkulacija
   jeste u ERP-u. Znači da je aplikacija nešto upisala kako najčešće bude, a

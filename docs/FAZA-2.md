@@ -2602,3 +2602,38 @@ kalkulaciju“, a šta se dešava zavisi od stanja:
 
 Uz svaku stavku u izboru piše koju šifru trenutno ima, da se greška vidi pre
 nego što se kuca nova.
+
+## Faktura u stranoj valuti (05.10.)
+
+Raiffeisen K110/2026-3087535 glasi na **1.350,60 EUR**, a aplikacija je taj broj
+upisivala kao **1.350,60 dinara** — promašaj od 117 puta.
+
+**Šta ERP očekuje.** Sve devizne fakture u njemu stoje **preračunate u dinare**,
+sa `DEVIZNO = 0` i `KURS = 0` — kolone za devizu se ne koriste. Tako ih ljudi
+unose odavno.
+
+**Odakle dinarski iznos.** Devizna faktura nosi **dva bloka `TaxTotal`**: prvi u
+valuti fakture, drugi sa `currencyID="RSD"`. Parser je uzimao prvi (`_find`
+vraća prvi pogodak), pa se dinarski nikad nije ni pročitao. Mereno: **svih 15**
+deviznih faktura od 01.07. nosi taj blok.
+
+Kurs se ne pretpostavlja nego računa iz same fakture — `osnovica_RSD /
+osnovica_EUR`. Provereno na svih 15, svaka daje tačno ono što je u ERP-u:
+
+| faktura | u valuti | kurs | u ERP |
+|---|---:|---:|---:|
+| K110/2026-3087535 | 1.350,60 | 117,5167 | 158.718,06 |
+| KR1384360/26 | 1.599,40 | 117,4991 | 187.928,06 |
+| 1662909780RS (Booking, sa PDV-om) | 298,99 | 117,3531 | 42.103,94 |
+
+Kad devizna faktura **nema** dinarski obračun, kalkulacija se zaustavlja uz
+objašnjenje. Kurs se ne pogađa.
+
+U panelu ima **103 fakture u EUR** prema 7.624 dinarskih.
+
+### Jedna tuđa greška nađena usput
+
+`088/02163` za `KDP83038249` (OTP) nosi **265,26 dinara**, a faktura je 265,26
+**EUR** ≈ 31.000 dinara. Upisao je čovek 01.07., kroz ERP-ov sopstveni uvoz,
+PROKNJIZENO 2 — dakle proknjiženo i zaključano. Sve ostale KDP kalkulacije su u
+desetinama hiljada. Nije naše, ali jeste pogrešno.
