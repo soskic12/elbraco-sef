@@ -2553,3 +2553,17 @@ Jedan red u `NAZIVI`, jedna transakcija. `ANALITIKA` je pet cifara iz slobodnog
 bloka (54.882 slobodnih mesta, 110 rupa dužine bar 100) i proverava se **u
 trenutku upisa**. `SH_KOM` dobija `.` kao i svuda. Posle uspeha nacrt se
 preračuna i kalkulacija obično odmah prolazi.
+
+### Dugmeta nije bilo zato što se zvalo drugačije (05.10.)
+
+Nina i Dule nisu našli „otvori šifru“. Veza je sve vreme stajala u tabu
+**Šifre**, ali pod starim imenom **„predlog artikla“** — iz vremena kad je ta
+strana samo prikazivala šta bi se upisalo i ispisivala SQL za ručno izvršavanje.
+Sad ta strana otvara šifru, pa je i ime moralo da prati: zove se **„otvori
+šifru“** i izgleda kao dugme, a ne kao sitna veza između dve forme.
+
+Greška je moja i tipična: pomoć sam napisao po onome što program **radi**, a
+ekran je i dalje govorio ono što je nekad **bio**. Test sada drži i ime i vezu.
+
+Usput, razlog zašto stavka čeka šifru („šifra 87622 ne postoji u šifarniku“)
+sada se vidi i na Ilijaninom ekranu, ne samo na tabu Šifre.

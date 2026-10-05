@@ -107,7 +107,9 @@
             {{ '%.2f'|format(s.predlog.nabavna) }} — {{ s.predlog.kako }}</span>
         </div>
         {% endif %}
-        <a class="small" href="/sifre/predlog/{{ nacrt.document_id }}/{{ s.line_no }}">predlog&nbsp;artikla</a>
+        <a class="ghost small" style="display:inline-block;margin:2px 0"
+           href="/sifre/predlog/{{ nacrt.document_id }}/{{ s.line_no }}"
+           title="Ako ovog artikla nema u šifarniku — otvori mu šifru">otvori šifru</a>
         <form class="inline" method="post" action="/sifre/nije-artikal"
               onsubmit="return confirm('Ova stavka nije artikal i neće ući u kalkulaciju?')">
           <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">

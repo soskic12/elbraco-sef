@@ -1956,3 +1956,27 @@ def test_pretraga_nalazi_i_arhiviranu_fakturu_po_sifri_artikla(client, podaci, d
 
     assert odgovor.status_code == 200
     assert broj in odgovor.text, "arhivirana faktura se ne nalazi po šifri artikla"
+
+
+def test_sifre_nude_otvaranje_nove_sifre(client, db, podaci, monkeypatch):
+    """Dule i Nina moraju da vide gde se otvara šifra, i da se tako zove.
+
+    Veza je postojala, ali pod imenom „predlog artikla“ — pa je niko nije
+    prepoznao kao dugme za otvaranje (Bane, 05.10.).
+    """
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti
+
+    doc_id = podaci["doc"]
+    prijavi(client, OPERATER)
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.CEKA_SIFRU, magacin="002",
+            nemapirane=[{"line_no": 1, "naziv": "Frižider", "sifra_dobavljaca": "EW-1",
+                         "ean": "", "kolicina": 1.0, "cena": 10.0, "jedinica": "kom"}],
+        ))
+
+    tekst = client.get("/sifre").text
+
+    assert "otvori šifru" in tekst
+    assert f"/sifre/predlog/{doc_id}/1" in tekst

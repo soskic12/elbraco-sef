@@ -72,6 +72,7 @@
     <tr>
       <td>{{ s.line_no }}</td>
       <td>{{ s.naziv }}
+        {% if s.razlog %}<div class="small" style="color:#b45309">{{ s.razlog }}</div>{% endif %}
         {% if s.predlog %}
         <div class="small" style="margin-top:4px;padding:4px 6px;border-left:3px solid #2a7;
                                   background:rgba(34,119,68,.07)">
