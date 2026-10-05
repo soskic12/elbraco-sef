@@ -1628,7 +1628,7 @@ def sifre_predlog(
     from ..erp.artikal import kao_sql, predlozi
 
     predlog = predlozi(document_id, line_no)
-    sql = kao_sql(predlog) if predlog.sifra else None
+    sql = kao_sql(predlog) or None
     with session_scope() as session:
         doc = session.get(Document, document_id)
         broj = doc.document_number if doc else ""

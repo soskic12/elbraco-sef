@@ -455,7 +455,17 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
 
 
 def kao_sql(predlog: PredlogArtikla) -> str:
-    """INSERT naredbe, da se pre upisa moze pogledati sta bi se desilo."""
+    """INSERT naredbe, da se pre upisa moze pogledati sta bi se desilo.
+
+    Prikaz ne sme da obori stranu. `redovi` je strog - trazi barkod i cenu, jer
+    cuva upis - ali dok covek jos nije uneo cenu nema sta da se prikaze, pa se
+    vraca prazno umesto izuzetka. Puklo je upravo na stavci ciji barkod vec ima
+    sifru: tu se sifra ne otvara, a strana je ipak trazila ispis (05.10.).
+    """
+    try:
+        redovi(predlog)
+    except ValueError:
+        return ""
 
     def vrednost(v) -> str:
         if v is None:

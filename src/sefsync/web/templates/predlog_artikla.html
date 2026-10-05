@@ -81,6 +81,20 @@
 </div>
 {% endif %}
 
+{% if predlog.sifra %}
+<div class="card" style="border-left:4px solid #166534">
+  <h2 style="margin-top:0">Ovaj artikal već ima šifru</h2>
+  <p class="small" style="margin-top:0">Barkod <b>{{ predlog.barkod }}</b> vodi na šifru
+    <b>{{ predlog.sifra }}</b>. Nova se ne otvara — stavku treba povezati.</p>
+  <form method="post" action="/sifre/povezi">
+    <input type="hidden" name="document_id" value="{{ predlog.document_id }}">
+    <input type="hidden" name="line_no" value="{{ predlog.line_no }}">
+    <input type="hidden" name="erp_item_code" value="{{ predlog.sifra }}">
+    <button type="submit">Poveži šifru {{ predlog.sifra }}</button>
+  </form>
+</div>
+{% endif %}
+
 {% if predlog.predlozena_sifra %}
 <div class="card">
   <h2 style="margin-top:0">Otvori šifru</h2>

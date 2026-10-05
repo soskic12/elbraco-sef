@@ -2567,3 +2567,20 @@ ekran je i dalje govorio ono što je nekad **bio**. Test sada drži i ime i vezu
 
 Usput, razlog zašto stavka čeka šifru („šifra 87622 ne postoji u šifarniku“)
 sada se vidi i na Ilijaninom ekranu, ne samo na tabu Šifre.
+
+### Strana predloga pucala je baš na stavci koju treba samo povezati (05.10.)
+
+„Predlog artikla“ je vraćao Internal Server Error. Uzrok je moja regresija od
+03.10.: `redovi()` je namerno postao strog — traži barkod i maloprodajnu cenu,
+jer čuva upis — ali **prikaz** je i dalje zvao `kao_sql`, koji ide kroz `redovi`.
+Dok cena nije uneta, to je izuzetak, pa je pucala cela strana.
+
+Najgore je bilo gde puca: kad barkod stavke **već ima šifru**, ruta je ipak
+tražila ispis SQL-a, iako se tu ništa ne otvara. Lokalno se nije videlo jer
+dokument na kom sam probao nema nijednu stavku sa EAN-om — probao sam jednu
+varijantu i zaključio da radi.
+
+Popravljeno: `kao_sql` vraća prazno umesto izuzetka kad predlog nije potpun, a
+strana u tom slučaju nudi **dugme „Poveži šifru X“** — što je i jedina ispravna
+radnja. Provereno na svim varijantama (sa EAN-om koji postoji, sa EAN-om koga
+nema, bez EAN-a).

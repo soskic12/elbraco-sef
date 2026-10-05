@@ -1197,3 +1197,28 @@ def test_cena_se_ne_predlaze_bez_dovoljno_istorije():
     p = predlog_cene(_ErpSaMarzom([0.4] * 5), "00123", 4490.0, 20.0)
 
     assert p["cena"] is None and "svega 5" in p["razlog"]
+
+
+def test_strana_predloga_ne_puca_kad_sifra_vec_postoji():
+    """Barkod koji već ima šifru: tu se ništa ne otvara, pa nema ni šta da se ispiše.
+
+    `redovi` je strog jer čuva upis — traži barkod i cenu. Prikaz ne sme da
+    pada zbog toga; strana je tako vraćala Internal Server Error baš na stavci
+    koju treba samo povezati (05.10.).
+    """
+    from sefsync.erp.artikal import PredlogArtikla, kao_sql
+
+    p = PredlogArtikla(document_id=1, line_no=1, sifra="87423", naziv="Lexa LX 302",
+                       barkod="8606012345678", magacini=["099"], prodajna_mesta=["001"])
+
+    assert kao_sql(p) == ""
+
+
+def test_ispis_sql_a_radi_kad_je_predlog_potpun():
+    from sefsync.erp.artikal import PredlogArtikla, kao_sql
+
+    p = PredlogArtikla(document_id=1, line_no=1, predlozena_sifra="86100",
+                       naziv="Frižider", barkod="860", cena_mp=59900.0,
+                       magacini=["099"], prodajna_mesta=["001"])
+
+    assert "INSERT INTO dbo.ARTIKLI" in kao_sql(p)
