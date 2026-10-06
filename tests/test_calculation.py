@@ -1623,3 +1623,39 @@ def test_dinarska_faktura_se_ne_dira(db):
     assert not nacrt.problemi
     assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 1200.0
     assert not nacrt.napomene
+
+
+def test_devizna_faktura_cita_obracun_iz_sacuvanog_ubl_a(db, tmp_path):
+    """Polja se pune pri uvozu — starije fakture ih nemaju, ali XML je na disku.
+
+    Banca Intesa KR1384362/26 je stala sa „nema dinarskog obračuna“, iako
+    obračun stoji u fajlu (06.10.).
+    """
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import Document
+
+    xml = tmp_path / "kr1384362.xml"
+    xml.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"'
+        ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"'
+        ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        '<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'
+        '<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>'
+        '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">1058.96</cbc:TaxableAmount>'
+        '<cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount></cac:TaxSubtotal></cac:TaxTotal>'
+        '<cac:TaxTotal><cbc:TaxAmount currencyID="RSD">0.00</cbc:TaxAmount>'
+        '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="RSD">124426.85</cbc:TaxableAmount>'
+        '<cbc:TaxAmount currencyID="RSD">0.00</cbc:TaxAmount></cac:TaxSubtotal></cac:TaxTotal>'
+        "</Invoice>",
+        encoding="utf-8",
+    )
+
+    doc_id = _devizni_dokument(db, osnovica=1058.96, osnovica_rsd=None, pdv_rsd=None)
+    with db.session_scope() as session:
+        session.get(Document, doc_id).ubl_path = str(xml)
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: _ConnBezArtikala()})())
+
+    assert not nacrt.problemi
+    assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 124426.85

@@ -295,6 +295,43 @@ def predlog_dobavljaca(
     return f"Možda je {k.a} {k.nz}{mesto}{rep}."
 
 
+def dinarski_obracun(doc: Document) -> tuple[float | None, float | None]:
+    """Osnovica i PDV u dinarima za deviznu fakturu. Cita i iz sacuvanog UBL-a.
+
+    Polja se pune pri uvozu, pa ih dokumenti koji su stigli pre te izmene nemaju
+    - a oni su na disku vec od prvog dana. Bez ovoga bi svaka starija devizna
+    faktura stala sa "nema dinarskog obracuna", iako obracun stoji u XML-u
+    (Banca Intesa KR1384362/26, 06.10.).
+    """
+    if doc.sum_without_vat_rsd is not None:
+        return doc.sum_without_vat_rsd, doc.vat_amount_rsd
+
+    putanja = (doc.ubl_path or "").strip()
+    if not putanja:
+        return None, None
+    try:
+        from pathlib import Path
+
+        from ..ubl.parser import parse_ubl
+
+        datoteka = Path(putanja)
+        if not datoteka.exists():
+            return None, None
+        ubl = parse_ubl(datoteka.read_bytes())
+    except Exception as exc:  # noqa: BLE001 - citanje fajla ne sme da obori nacrt
+        log.info("UBL za #%s nije procitan: %s", doc.id, exc)
+        return None, None
+
+    if ubl.taxable_amount_rsd is None:
+        return None, None
+    osnovica = float(ubl.taxable_amount_rsd)
+    pdv = float(ubl.tax_amount_rsd) if ubl.tax_amount_rsd is not None else None
+    # Zapise se da se sledeci put ne cita fajl.
+    doc.sum_without_vat_rsd = osnovica
+    doc.vat_amount_rsd = pdv
+    return osnovica, pdv
+
+
 def vrsta_pdv_evidencije(
     conn: Connection,
     dobavljac: str | None,
@@ -663,9 +700,10 @@ def pripremi(
         # drugi blok `TaxTotal` sa `currencyID="RSD"`. Bez ovoga je 1.350,60 EUR
         # odlazilo u ERP kao 1.350,60 dinara (Raiffeisen K110/2026-3087535).
         kurs = 1.0
+        pdv_rsd = None
         valuta = (doc.currency or "RSD").strip().upper()
         if valuta and valuta != "RSD":
-            osnovica_rsd = doc.sum_without_vat_rsd
+            osnovica_rsd, pdv_rsd = dinarski_obracun(doc)
             osnovica_val = doc.sum_without_vat or doc.amount
             if osnovica_rsd and osnovica_val:
                 kurs = float(osnovica_rsd) / float(osnovica_val)
@@ -867,7 +905,7 @@ def pripremi(
             # nosi i 10 % i 20 % (struja, komunalije), a ERP to drzi u odvojenim
             # poljima.
             pdv_ukupno = float(
-                doc.vat_amount_rsd if kurs != 1.0 and doc.vat_amount_rsd is not None
+                pdv_rsd if kurs != 1.0 and pdv_rsd is not None
                 else (doc.vat_amount or 0)
             ) * predznak
             za_naplatu = round(float(doc.amount or 0) * kurs * predznak, 2)

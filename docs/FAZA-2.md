@@ -2663,3 +2663,14 @@ Verovatno se za period traže druga polja.
 obaveštenja dobavljaču, a to je nepovratno. Umesto toga je dodato dugme
 **„Pošalji obaveštenje ponovo“** (operater, na dokumentu) — jedan klik i
 SEF-ova poruka se vidi doslovno, pa se popravlja tačno.
+
+### Devizni obračun je bio na disku, a app ga nije tražila (06.10.)
+
+Banca Intesa KR1384362/26 stala je sa „nema dinarskog obračuna“, iako obračun
+stoji u XML-u — 124.426,85. Uzrok: nova polja (`sum_without_vat_rsd`,
+`vat_amount_rsd`) pune se **pri uvozu**, pa ih dokumenti koji su stigli pre te
+izmene nemaju. Popravka je važila samo za ono što tek stigne.
+
+Komanda `osvezi-ubl` bi ih popunila, ali tok ne sme da zavisi od toga da li se
+neko setio da je pusti. Sada, kad polja nema, nacrt pročita **sačuvani UBL sa
+diska** i usput upiše vrednost, pa se fajl sledeći put ne čita.
