@@ -1646,6 +1646,20 @@ def sifre_predlog(
     )
 
 
+@app.post("/dokument/{doc_id}/obavestenje")
+def dokument_obavestenje(doc_id: int, user: Operater) -> RedirectResponse:
+    """Ponovo salje obavestenje o prethodnom porezu.
+
+    Redovno ide samo uz prihvatanje na SEF-u. Kad tada padne, do sada nije bilo
+    nacina da se pokusa ponovo iz panela - a SEF-ovo objasnjenje se videlo tek
+    posle slanja (06.10.).
+    """
+    from ..services.obavestenje import posalji
+
+    ok, poruka = posalji(doc_id, korisnik=user.login)
+    return _back(f"/dokument/{doc_id}", poruka, ok)
+
+
 @app.get("/dokument/{doc_id}/komitent", response_class=HTMLResponse)
 def komitent_predlog(request: Request, doc_id: int, user: Operater) -> HTMLResponse:
     """Sve sto se sa fakture zna o dobavljacu koga nema u sifarniku."""

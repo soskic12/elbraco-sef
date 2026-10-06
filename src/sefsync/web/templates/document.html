@@ -81,9 +81,15 @@
             {%- if obavestenje.iznos_pdv %} · PDV {{ '%.2f'|format(obavestenje.iznos_pdv) }}{% endif %}</div>
         {% else %}
           <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
-            <b>Obaveštenje nije poslato.</b> Prihvatanje na SEF-u jeste prošlo, pa ovo
-            treba uraditi ručno na portalu, dugmetom „Kreiraj obaveštenje o prethodnom porezu“.
-            <div class="muted">{{ (obavestenje.greska or '')[:160] }}</div>
+            <b>Obaveštenje nije poslato.</b> Prihvatanje na SEF-u jeste prošlo.
+            Probaj ponovo; ako opet ne prođe, uradi to na portalu dugmetom
+            „Kreiraj obaveštenje o prethodnom porezu“.
+            <div class="muted" style="margin:4px 0">{{ (obavestenje.greska or '')[:400] }}</div>
+            {% if user.is_operator %}
+              <form method="post" action="/dokument/{{ doc.id }}/obavestenje">
+                <button type="submit">Pošalji obaveštenje ponovo</button>
+              </form>
+            {% endif %}
           </div>
         {% endif %}
       </dd>

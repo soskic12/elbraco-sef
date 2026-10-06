@@ -128,3 +128,31 @@ def test_pdf_odustane_i_kaze_zasto(monkeypatch):
 
     with pytest.raises(SefError, match="nema ga"):
         klijent.purchase_pdf(1)
+
+
+def test_greska_nosi_sefovo_objasnjenje():
+    """„SEF greška 400“ bez tela odgovora ne govori ništa.
+
+    Obaveštenje o prethodnom porezu je tako palo i na ekranu je pisalo samo da
+    je greška 400 — pa se nije imalo šta uraditi s tim (06.10.).
+    """
+    import httpx
+    import pytest
+
+    from sefsync.sef.client import SefClient, SefError
+
+    telo = '{"message":"RelatedDocumentNumber is not allowed for period reference"}'
+
+    def odgovori(zahtev: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, text=telo)
+
+    klijent = SefClient.__new__(SefClient)
+    klijent._client = httpx.Client(transport=httpx.MockTransport(odgovori),
+                                   base_url="https://primer")
+
+    with pytest.raises(SefError) as greska:
+        klijent._request("POST", "/api/nesto")
+
+    assert "RelatedDocumentNumber" in str(greska.value), "telo odgovora mora da se vidi"
+    assert greska.value.status_code == 400
+    assert greska.value.body == telo

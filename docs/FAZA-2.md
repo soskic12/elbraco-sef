@@ -2637,3 +2637,29 @@ U panelu ima **103 fakture u EUR** prema 7.624 dinarskih.
 **EUR** ≈ 31.000 dinara. Upisao je čovek 01.07., kroz ERP-ov sopstveni uvoz,
 PROKNJIZENO 2 — dakle proknjiženo i zaključano. Sve ostale KDP kalkulacije su u
 desetinama hiljada. Nije naše, ali jeste pogrešno.
+
+## Obaveštenje o prethodnom porezu palo sa 400 (06.10.)
+
+Knjižno odobrenje **FA-KO-92/26** (Vimport, 281.400,00 sa PDV-om 46.900,00) nije
+dobilo obaveštenje: `SEF greška 400` na
+`/recipients-notice-on-input-vat/sender/send`. Prihvatanje na SEF-u jeste prošlo.
+
+**Prva prepreka nije bila SEF nego mi:** `SefError` je nosio telo odgovora u
+atributu, ali ga poruka nije prikazivala, pa je na ekranu pisalo samo „SEF
+greška 400“. Sa time se nema šta raditi. Sada telo ide u samu poruku (do 400
+znakova), pa se vidi i na dokumentu i u dnevniku.
+
+Provereno kod SEF-a: `sender/mistake-status` vraća **praznu listu** — dakle
+obaveštenje nije ni nastalo, odbijeno je na proveri. Swagger traži autorizaciju
+koju naš ključ nema (401), pa se šema ne može pročitati.
+
+**Najverovatniji uzrok, ali nepotvrđen.** Ovo odobrenje ispravlja **32 fakture**,
+pa `telo_zahteva` bira `CreditNoteReferenceToPeriod` — a i dalje šalje
+`relatedDocumentNumber` i `relatedDocumentIssueDate`. Ta grana se do sada nije
+javila (20 od 967 odobrenja pokriva više faktura), pa nikad nije ni isprobana.
+Verovatno se za period traže druga polja.
+
+**Nije popravljano napamet.** Pogađanje imena polja znači slanje pogrešnog
+obaveštenja dobavljaču, a to je nepovratno. Umesto toga je dodato dugme
+**„Pošalji obaveštenje ponovo“** (operater, na dokumentu) — jedan klik i
+SEF-ova poruka se vidi doslovno, pa se popravlja tačno.

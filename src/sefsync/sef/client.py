@@ -110,8 +110,15 @@ class SefClient:
                 f"SEF privremeno nedostupan ({resp.status_code}).", resp.status_code, resp.text[:500]
             )
         if resp.status_code >= 400:
+            # Telo odgovora ide u poruku, ne samo u atribut. `str(izuzetak)` je
+            # ono sto covek vidi na ekranu i sto zavrsi u dnevniku; bez ovoga je
+            # pisalo samo "SEF greska 400" i nije se imalo sta uraditi s tim
+            # (obavestenje o prethodnom porezu, 06.10.).
+            opis = " ".join((resp.text or "").split())[:400]
             raise SefError(
-                f"SEF greska {resp.status_code} na {path}", resp.status_code, resp.text[:1000]
+                f"SEF greška {resp.status_code} na {path}" + (f": {opis}" if opis else ""),
+                resp.status_code,
+                resp.text[:1000],
             )
         return resp
 
