@@ -2694,3 +2694,41 @@ Upit ka `ARTIKLI` po barkodu ostaje, ali se radi tek kad barkod nije u vezama.
 
 `nacrti --osvezi` sada ispisuje i koliko je trajalo, da se sledeći put ne
 procenjuje po osećaju.
+
+## Arhiviranje starih UBL fajlova (06.10.)
+
+Disk na serveru je bio skoro pun — 7,7 GB slobodno od 140, a `C:\efakture`
+drži 12,2 GB. Mereno: UBL-ova ima 7.728 i zauzimaju 1,8 GB u našoj kopiji,
+**oko 220 KB po fakturi**. Zašto toliko: **56 % je prilog koji dobavljač
+zapakuje kao base64 unutar samog XML-a** (pojedinačni idu do 971 KB).
+
+**Ključni nalaz: SEF i dalje daje te dokumente.** Provereno 06.10. — UBL za
+januar, mart i jun se skida bez problema. Zato se stari fajlovi smeju sklanjati:
+arhiva je čuvanje, ne radni materijal.
+
+### Pravilo
+
+Ostaje **60 dana** (`UBL_ARHIVA_DANA`) i **svaki nezavršen dokument** bez obzira
+na starost — nacrt koji nije upisan, otvoren manjak, stavka koja čeka šifru.
+Fajl koji treba sutra ne ide nigde.
+
+Mereno na našoj kopiji: arhivira se **6.929 fajlova / 1.627 MB**, ostaje 11 %.
+
+### Kako
+
+`sefsync arhiviraj-ubl` bez `--stvarno` samo ispiše šta bi sklonila, po
+mesecima. Sa `--stvarno` pravi `data/arhiva/ubl-GGGG-MM.zip`, pa **proverava
+fajl po fajl** — ime i veličina moraju da se poklope — i tek onda briše
+originale. Ako provera padne, ne briše ništa i kaže zašto.
+
+Zip ostaje na serveru dok ga čovek ne prebaci. Aplikacija ne briše jedini
+primerak; to je jedina nepovratna stvar u lancu i ostaje ljudska odluka.
+
+### Samo-lečenje
+
+Svi koji čitaju UBL (devizni obračun, `osvezi-ubl`, dugme „preuzmi XML“) idu
+kroz `ubl_bajtovi`: ako fajla nema na disku, skida ga sa SEF-a i snimi nazad.
+Čovek ne vidi razliku. U bazi stoji `ubl_arhiviran`, da se zna razlika između
+„nikad nije ni bio“ i „sklonjen namerno“.
+
+E-fakture se čuvaju deset godina — ovo je premeštanje, ne brisanje.

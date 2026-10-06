@@ -852,6 +852,43 @@ def cmd_zaboravi_upis(
     typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
 
 
+@app.command("arhiviraj-ubl")
+def cmd_arhiviraj_ubl(
+    dana: int = typer.Option(None, "--dana", help="Koliko dana ostaje na disku."),
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+) -> None:
+    """Pakuje stare UBL fajlove u zip po mesecima i sklanja ih sa diska.
+
+    Ne dira poslednjih 60 dana, ni dokumente koji nisu završeni. Kad aplikaciji
+    zatreba stari UBL, skida ga ponovo sa SEF-a — provereno, daje i januarske.
+
+    Zip ostaje na serveru dok ga čovek ne prebaci; aplikacija ne briše jedini
+    primerak.
+    """
+    _boot()
+    from .services.arhiva import arhiviraj
+
+    ishod = arhiviraj(dana, stvarno=stvarno)
+    if not ishod["meseci"]:
+        typer.echo("Nema šta da se arhivira.")
+        raise typer.Exit(0)
+
+    typer.echo(f"{'mesec':<10}{'fajlova':>9}{'MB':>9}")
+    for mesec, red in ishod["meseci"].items():
+        typer.echo(f"{mesec:<10}{red['fajlova']:>9}{red['bajtova']/1_000_000:>9.0f}"
+                   + (f"   {red['greska']}" if red.get("greska") else ""))
+    typer.echo(f"{'UKUPNO':<10}{ishod['fajlova']:>9}{ishod['bajtova']/1_000_000:>9.0f}")
+
+    if not stvarno:
+        typer.echo("")
+        typer.secho("Suvi prolaz. Za stvarno dodaj --stvarno.", fg="yellow")
+        raise typer.Exit(0)
+
+    typer.echo("")
+    typer.secho(f"Sklonjeno sa diska: {ishod['obrisano']} fajlova. "
+                f"Zipovi su u data\arhiva — prebaci ih pa obriši.", fg="green")
+
+
 @app.command("arhiviraj-stare")
 def cmd_arhiviraj_stare(
     stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),

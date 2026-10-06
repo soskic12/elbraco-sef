@@ -306,18 +306,14 @@ def dinarski_obracun(doc: Document) -> tuple[float | None, float | None]:
     if doc.sum_without_vat_rsd is not None:
         return doc.sum_without_vat_rsd, doc.vat_amount_rsd
 
-    putanja = (doc.ubl_path or "").strip()
-    if not putanja:
-        return None, None
     try:
-        from pathlib import Path
-
+        from ..services.arhiva import ubl_bajtovi
         from ..ubl.parser import parse_ubl
 
-        datoteka = Path(putanja)
-        if not datoteka.exists():
+        sadrzaj = ubl_bajtovi(doc)
+        if not sadrzaj:
             return None, None
-        ubl = parse_ubl(datoteka.read_bytes())
+        ubl = parse_ubl(sadrzaj)
     except Exception as exc:  # noqa: BLE001 - citanje fajla ne sme da obori nacrt
         log.info("UBL za #%s nije procitan: %s", doc.id, exc)
         return None, None

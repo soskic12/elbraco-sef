@@ -157,6 +157,9 @@ class Settings(BaseSettings):
 
     # --- Skladiste UBL/PDF fajlova ---
     storage_dir: Path = PROJECT_ROOT / "data"
+    # Koliko dana UBL-ova ostaje na disku. Starije `arhiviraj-ubl` pakuje u zip
+    # po mesecima i sklanja; kad zatrebaju, skidaju se ponovo sa SEF-a.
+    ubl_arhiva_dana: int = 60
 
     # --- Sinhronizacija ---
     poll_interval_minutes: int = 15

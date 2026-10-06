@@ -550,9 +550,12 @@ class IngestService:
             doc = session.get(Document, doc_id)
             if doc is None:
                 raise ValueError(f"Dokument {doc_id} ne postoji.")
-            if not doc.ubl_path or not Path(doc.ubl_path).exists():
+            from .arhiva import ubl_bajtovi
+
+            sadrzaj = ubl_bajtovi(doc)
+            if not sadrzaj:
                 return False
-            ubl = parse_ubl(Path(doc.ubl_path).read_bytes())
+            ubl = parse_ubl(sadrzaj)
             ranije = {
                 line.line_no: (line.erp_item_code, line.erp_mapping_source)
                 for line in doc.lines

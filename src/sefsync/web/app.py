@@ -901,20 +901,27 @@ def upisi_kalkulaciju(doc_id: int, user: Korisnik) -> RedirectResponse:
 
 
 @app.get("/dokument/{doc_id}/ubl")
-def document_ubl(doc_id: int, user: Korisnik) -> FileResponse:
+def document_ubl(doc_id: int, user: Korisnik) -> Response:
+    """XML onakav kakav je stigao. Arhiviran se vraca sa SEF-a, covek ne vidi razliku."""
+    from ..services.arhiva import ubl_bajtovi
+
     with session_scope() as session:
         doc = session.get(Document, doc_id)
-        if doc is None or not doc.ubl_path or not Path(doc.ubl_path).exists():
-            raise HTTPException(404, "UBL fajl nije dostupan.")
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
         if not user.is_operator:
             moja = _unit_for(session, user)
             if moja is None or doc.business_unit_id != moja.id:
                 raise HTTPException(403, "Nije tvoj dokument.")
-        return FileResponse(
-            doc.ubl_path,
-            media_type="application/xml",
-            filename=f"{doc.document_number or doc.sef_invoice_id}.xml",
-        )
+        ime = f"{doc.document_number or doc.sef_invoice_id}.xml"
+        sadrzaj = ubl_bajtovi(doc)
+    if not sadrzaj:
+        raise HTTPException(404, "UBL fajl nije dostupan ni na disku ni na SEF-u.")
+    return Response(
+        content=sadrzaj,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{quote(ime)}"'},
+    )
 
 
 @app.post("/dokument/{doc_id}/slika")

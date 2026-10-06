@@ -301,6 +301,9 @@ class Document(Base):
     note: Mapped[str | None] = mapped_column(Text, default=None)
 
     ubl_path: Mapped[str | None] = mapped_column(String(400), default=None)
+    # Kad je fajl premesten u arhivu. Razlika izmedju „nikad nije ni bio“ i
+    # „sklonjen namerno“; sadrzaj se po potrebi skida ponovo sa SEF-a.
+    ubl_arhiviran: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     pdf_path: Mapped[str | None] = mapped_column(String(400), default=None)
     raw_overview: Mapped[dict | None] = mapped_column(JSON, default=None)
 

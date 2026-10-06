@@ -503,6 +503,14 @@
 {% endcall %}
 {% endif %}
 
+{% call korak('Stare fakture — XML i PDF') %}
+  <p>Uz svaku fakturu stoji <b>preuzmi XML</b>. Kod starijih faktura taj fajl
+  više ne stoji na serveru — disk nije guma — nego se u tom trenutku skine sa
+  SEF-a. Ti to ne vidiš, osim što ume da potraje koji trenutak duže.</p>
+  <p class="muted small">Isto važi i za <b>Štampaj</b>: PDF se ionako uvek uzima
+  sa SEF-a, ništa se ne čuva kod nas.</p>
+{% endcall %}
+
 {% call korak('Štampa fakture') %}
   <p>Na stranici dokumenta, pored broja, stoji <span class="tag">Štampaj</span>.
   Otvara <b>zvanični PDF sa SEF-a</b> — ono što je dobavljač poslao, ne naš
