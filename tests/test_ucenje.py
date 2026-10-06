@@ -469,3 +469,34 @@ def test_nedostupan_erp_ne_blokira_povezivanje(db, monkeypatch):
             select(DocumentLine).where(DocumentLine.document_id == doc)
         )
         assert linija.erp_item_code == "87621"
+
+
+def test_nova_veza_se_vidi_odmah_iako_se_veze_kesiraju(db, monkeypatch):
+    """Šifarnik veza se čita jednom i drži u pameti — ali povezivanje mora da važi odmah.
+
+    Keš je uveden 06.10. jer je `_nasa_sifra` radila do četiri upita po stavci
+    i `nacrti --osvezi` je trajao pola sata. Ako se keš ne ugasi pri
+    povezivanju, vraća se bug zbog kog je Ilijana klikćala bez efekta.
+    """
+    from sefsync.erp.kalkulacija import veze_dobavljaca
+    from sefsync.models import DocumentLine
+    from sefsync.services import nacrti
+
+    class Nacrt:
+        magacin, tabela_zaglavlja, zaglavlje = "002", "MKALKUL", {}
+        problemi, nemapirane, napomene = [], [], []
+        spreman = True
+
+    monkeypatch.setattr(nacrti, "pripremi", lambda *a, **k: Nacrt())
+    monkeypatch.setattr(nacrti, "_proveri_sifru", lambda *a, **k: None)
+    doc = _dokument_sa_stavkom(db, "CSM-20", "PONYE40", "CSM ponye 40")
+
+    with db.session_scope() as session:
+        veze = veze_dobavljaca(session)
+        assert ("110130228", "PONYE40") not in veze.po_sifri
+
+    nacrti.povezi_sifru(doc, 1, "50040", korisnik="dusan")
+
+    with db.session_scope() as session:
+        veze = veze_dobavljaca(session)
+        assert veze.po_sifri.get(("110130228", "PONYE40")) == "50040"

@@ -34,11 +34,14 @@ def _env(tmp_path_factory: pytest.TempPathFactory) -> None:
 def db():
     """Prazna baza za svaki test."""
     from sefsync import db as db_module
+    from sefsync.erp.kalkulacija import zaboravi_veze
     from sefsync.models import Base
 
     engine = db_module.get_engine()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    # Veze se drze u pameti izmedju poziva; svaki test pocinje od nule.
+    zaboravi_veze()
     return db_module
 
 

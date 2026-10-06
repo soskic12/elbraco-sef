@@ -2674,3 +2674,23 @@ izmene nemaju. Popravka je važila samo za ono što tek stigne.
 Komanda `osvezi-ubl` bi ih popunila, ali tok ne sme da zavisi od toga da li se
 neko setio da je pusti. Sada, kad polja nema, nacrt pročita **sačuvani UBL sa
 diska** i usput upiše vrednost, pa se fajl sledeći put ne čita.
+
+## `nacrti --osvezi` je trajao pola sata (06.10.)
+
+MS SQL je prijavljivao upite od **7,3 s** nad `item_mapping`, a osvežavanje
+celog spiska je trajalo pola sata i opterećivalo server dok ljudi rade.
+
+Uzrok: `_nasa_sifra` je radila **do četiri upita po stavci**, a jedan od njih
+učitavao je **sve veze tog dobavljača** — i to za svaku stavku ponaosob. Na
+nekoliko stotina dokumenata to su desetine hiljada upita.
+
+Veza ima oko **2.100** — sve stanu u pamet. Sada se čitaju **jednom** i drže u
+keširanom obliku, sa tri pripremljena pogleda (po šifri dobavljača, po barkodu,
+po nazivu). Keš živi 120 s i **gasi se pri svakoj izmeni veze**
+(`zaboravi_veze`), pa povezivanje i dalje važi odmah — bez toga bi se vratio
+bug zbog kog je Ilijana klikćala bez efekta.
+
+Upit ka `ARTIKLI` po barkodu ostaje, ali se radi tek kad barkod nije u vezama.
+
+`nacrti --osvezi` sada ispisuje i koliko je trajalo, da se sledeći put ne
+procenjuje po osećaju.

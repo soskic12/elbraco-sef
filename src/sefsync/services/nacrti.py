@@ -20,7 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..db import session_scope
 from ..erp.connection import get_erp_engine
-from ..erp.kalkulacija import VecPostoji, pripremi, upisi
+from ..erp.kalkulacija import VecPostoji, pripremi, upisi, zaboravi_veze
 from ..models import (
     AuditLog,
     Document,
@@ -983,6 +983,7 @@ def povezi_sifru(
                 )
             )
 
+    zaboravi_veze()
     osvezeni = osvezi(document_id, engine=engine)
 
     # Isti artikal stize na vise objekata. Kad se sifra jednom kaze, sve ostale

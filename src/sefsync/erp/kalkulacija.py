@@ -524,6 +524,68 @@ def _sifra_je_oznaka(session, pib: str, sifra: str) -> bool:
     return len(nazivi) >= OZNAKA_OD_NAZIVA
 
 
+@dataclass
+class Veze:
+    """Sifarnik veza, procitan jednom. Vidi `veze_dobavljaca`."""
+
+    po_sifri: dict[tuple[str, str], str] = field(default_factory=dict)
+    po_barkodu: dict[str, set[str]] = field(default_factory=dict)
+    po_imenu: dict[tuple[str, str], set[str]] = field(default_factory=dict)
+    # (pib, sifra) -> da li je to oznaka vrste dokumenta, a ne sifra artikla
+    oznake: dict[tuple[str, str], bool] = field(default_factory=dict)
+
+
+_KES_VEZA: tuple[float, Veze] | None = None
+KES_VEZA_S = 120.0
+
+
+def zaboravi_veze() -> None:
+    """Posle svake izmene u sifarniku veza - da se promena odmah vidi."""
+    global _KES_VEZA
+    _KES_VEZA = None
+
+
+def veze_dobavljaca(session, *, osvezi_kes: bool = False) -> Veze:
+    """Sve aktivne veze, procitane jednom i drzane u pameti.
+
+    Ranije je `_nasa_sifra` za **svaku stavku** radila do cetiri upita, a jedan
+    od njih je ucitavao sve veze tog dobavljaca. Na `nacrti --osvezi` to je
+    bilo desetine hiljada upita i MS SQL je prijavljivao upite od sedam sekundi
+    (Bane, 06.10.: "vrti ga bukvalno pola sata"). Veza ima oko 2.100 - sve
+    staju u pamet i citaju se jednom.
+
+    Kes se gasi pri svakoj izmeni veze (`zaboravi_veze`), pa povezivanje i
+    dalje vazi odmah.
+    """
+    global _KES_VEZA
+    sada = time.monotonic()
+    if not osvezi_kes and _KES_VEZA and sada - _KES_VEZA[0] < KES_VEZA_S:
+        return _KES_VEZA[1]
+
+    veze = Veze()
+    for pib, sifra, barkod, naziv, erp in session.execute(
+        select(
+            ItemMapping.supplier_vat,
+            ItemMapping.supplier_item_id,
+            ItemMapping.barcode,
+            ItemMapping.supplier_item_name,
+            ItemMapping.erp_item_code,
+        ).where(ItemMapping.active == True)  # noqa: E712 - MS SQL nema IS TRUE
+    ):
+        kod = (erp or "").strip()
+        if not kod:
+            continue
+        if pib and (sifra or "").strip():
+            veze.po_sifri[(pib, sifra.strip())] = kod
+        if (barkod or "").strip():
+            veze.po_barkodu.setdefault(barkod.strip(), set()).add(kod)
+        if pib and (naziv or "").strip():
+            veze.po_imenu.setdefault((pib, normalize(naziv)), set()).add(kod)
+
+    _KES_VEZA = (sada, veze)
+    return veze
+
+
 def _nasa_sifra(
     session,
     conn: Connection,
@@ -531,65 +593,52 @@ def _nasa_sifra(
     linija: DocumentLine,
     *,
     odobrenje: bool = False,
+    veze: Veze | None = None,
 ) -> tuple[str | None, str]:
     """Vraca (sifra, odakle). Redosled po pouzdanosti - vidi docs/FAZA-2.md."""
+    veze = veze if veze is not None else veze_dobavljaca(session)
+
     # Covek je sifru rekao bas za OVU stavku. To je pouzdanije od svake veze i
     # vredi i kad se veza ne pamti za ubuduce.
     #
     # Bez ovoga je povezivanje na knjiznom odobrenju bilo bez ikakvog dejstva:
     # tamo se veza pamti samo kad covek cekira "zapamti vezu", a kad ne cekira
-    # nije nastajalo nista - sifra se upisivala na stavku koju niko nije citao.
-    # Ilijana je povezala Vivax 90911 na KIM-TEC odobrenju, dobila zelenu
-    # poruku i ostala na istom ekranu (01.10.).
+    # nije nastajalo nista - sifra se upisivala na stavku koju niko nije citao
+    # (Ilijana, Vivax 90911 na KIM-TEC odobrenju, 01.10.).
     if (linija.erp_mapping_source or "") == "rucno" and (linija.erp_item_code or "").strip():
         return linija.erp_item_code.strip(), "ručno"
 
-    if pib and linija.sellers_item_id and not (
-        odobrenje and _sifra_je_oznaka(session, pib, linija.sellers_item_id.strip())
-    ):
-        m = (
-            session.query(ItemMapping)
-            .filter(
-                ItemMapping.supplier_vat == pib,
-                ItemMapping.supplier_item_id == linija.sellers_item_id.strip(),
-                ItemMapping.active == True,  # noqa: E712 - MS SQL nema IS TRUE
-            )
-            .first()
-        )
-        if m is not None:
-            return m.erp_item_code, "mapiranje"
+    sifra_dob = (linija.sellers_item_id or "").strip()
+    if pib and sifra_dob:
+        oznaka = False
+        if odobrenje:
+            kljuc = (pib, sifra_dob)
+            if kljuc not in veze.oznake:
+                veze.oznake[kljuc] = _sifra_je_oznaka(session, pib, sifra_dob)
+            oznaka = veze.oznake[kljuc]
+        if not oznaka:
+            kod = veze.po_sifri.get((pib, sifra_dob))
+            if kod:
+                return kod, "mapiranje"
 
     # Veza zapamcena po barkodu vazi i kad dobavljac promeni svoju sifru, i kad
-    # isti artikal stigne od drugog dobavljaca. Kolona `barcode` se do sada
-    # upisivala a nikad nije citana, pa je Dule povezao sifru na jednoj fakturi
-    # a ostale su i dalje cekale (zalba 30.09.).
-    #
-    # Mereno na 2.110 aktivnih veza: 1.872 ima barkod, 1.867 razlicitih, i
-    # nijedan barkod ne vodi na dve sifre - pa je trazenje jednoznacno. Ako se
-    # ikad pojavi dvosmislen, ne odlucuje se: vraca se "ceka coveka".
-    if linija.standard_item_id:
-        barkod = linija.standard_item_id.strip()
-        po_barkodu = (
-            session.query(ItemMapping)
-            .filter(
-                ItemMapping.barcode == barkod,
-                ItemMapping.active == True,  # noqa: E712 - MS SQL nema IS TRUE
-            )
-            .all()
-        )
-        sifre = {m.erp_item_code.strip() for m in po_barkodu if m.erp_item_code}
-        if len(sifre) == 1:
-            return sifre.pop(), "mapiranje po barkodu"
-        if len(sifre) > 1:
+    # isti artikal stigne od drugog dobavljaca. Mereno na 2.110 aktivnih veza:
+    # 1.872 ima barkod i nijedan ne vodi na dve sifre - pa je trazenje
+    # jednoznacno. Ako se ikad pojavi dvosmislen, ne odlucuje se.
+    barkod = (linija.standard_item_id or "").strip()
+    if barkod:
+        kodovi = veze.po_barkodu.get(barkod, set())
+        if len(kodovi) == 1:
+            return next(iter(kodovi)), "mapiranje po barkodu"
+        if len(kodovi) > 1:
             return None, "barkod je ranije povezan sa više šifara"
 
-    if linija.standard_item_id:
         redovi = conn.execute(
             text(
                 "SELECT DISTINCT RTRIM(ARTIKAL) a FROM dbo.ARTIKLI "
                 "WHERE RTRIM(ISNULL(BARCODE,''))=:b AND RTRIM(SIFRAMAG)='099'"
             ),
-            {"b": linija.standard_item_id.strip()},
+            {"b": barkod},
         ).all()
         if len(redovi) == 1:
             return redovi[0].a, "barkod"
@@ -597,32 +646,18 @@ def _nasa_sifra(
             return None, "barkod vodi na vise sifara"
 
     # Poslednja nada: isti dobavljac, isti naziv. Neki dobavljaci ne salju ni
-    # svoju sifru ni barkod (Vitel: „LEXA BT ZVUCNIK LX-302 NITRO“, sifra i EAN
-    # prazni), pa veza nema za sta drugo da se zakaci - Dule je povezivao isti
-    # artikal na svakoj fakturi posebno (zalba 30.09.).
+    # svoju sifru ni barkod (Vitel: „LEXA BT ZVUCNIK LX-302 NITRO“), pa veza
+    # nema za sta drugo da se zakaci.
     #
     # Mereno na 2.110 veza: 2.057 razlicitih parova (dobavljac + naziv), od
-    # kojih 24 vode na vise sifara - svi od jednog dobavljaca koji salje opste
-    # nazive tipa „MASINA ZA PRANJE VESA“. Zato se odlucuje samo kad je pogodak
-    # jedan; opsti nazivi ostaju coveku.
+    # kojih 24 vode na vise sifara - svi od dobavljaca koji salje opste nazive
+    # tipa „MASINA ZA PRANJE VESA“. Zato se odlucuje samo kad je pogodak jedan.
     if pib and (linija.name or "").strip():
-        ime = normalize(linija.name)
-        if ime:
-            po_imenu = [
-                m
-                for m in session.query(ItemMapping)
-                .filter(
-                    ItemMapping.supplier_vat == pib,
-                    ItemMapping.active == True,  # noqa: E712
-                )
-                .all()
-                if normalize(m.supplier_item_name or "") == ime
-            ]
-            sifre = {m.erp_item_code.strip() for m in po_imenu if m.erp_item_code}
-            if len(sifre) == 1:
-                return sifre.pop(), "mapiranje po nazivu"
-            if len(sifre) > 1:
-                return None, "isti naziv je ranije povezan sa više šifara"
+        kodovi = veze.po_imenu.get((pib, normalize(linija.name)), set())
+        if len(kodovi) == 1:
+            return next(iter(kodovi)), "mapiranje po nazivu"
+        if len(kodovi) > 1:
+            return None, "isti naziv je ranije povezan sa više šifara"
 
     return None, "nepoznat"
 
@@ -723,6 +758,7 @@ def pripremi(
         # artikla za "Naknada za transakcije na POS terminalu" - a takva sifra
         # nikad nece ni postojati, pa bi kalkulacija zauvek cekala coveka.
         bez_stavki = magacin == MAGACIN_ULAZNI_RACUN
+        veze = veze_dobavljaca(session)
 
         linije = (
             []
@@ -783,7 +819,8 @@ def pripremi(
                 # u kalkulaciju. Vidi se na strani dokumenta, uz stavku.
                 continue
             sifra, odakle = _nasa_sifra(
-                session, conn, doc.supplier_vat, linija, odobrenje=predznak < 0
+                session, conn, doc.supplier_vat, linija,
+                odobrenje=predznak < 0, veze=veze,
             )
             if sifra is None:
                 # Ne recenica nego podaci: ekran na kom se otvara sifra treba

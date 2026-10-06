@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -723,7 +724,9 @@ def cmd_nacrti(
         from .services.nacrti import osvezi_sve
 
         typer.echo("Računam nacrte (za svaki dokument se pita ERP)...")
+        poceto = time.monotonic()
         brojac = osvezi_sve(limit=limit)
+        typer.echo(f"Trajalo: {time.monotonic() - poceto:.0f} s")
     else:
         with session_scope() as session:
             brojac = {
