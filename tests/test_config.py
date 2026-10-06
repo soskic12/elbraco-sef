@@ -25,12 +25,26 @@ def test_radni_folder_kad_u_njemu_ima_env(tmp_path, monkeypatch):
     assert _project_root() == tmp_path
 
 
-def test_radni_folder_kad_u_njemu_ima_data(tmp_path, monkeypatch):
+def test_radni_folder_kad_u_njemu_ima_env(tmp_path, monkeypatch):
     monkeypatch.delenv("SEFSYNC_HOME", raising=False)
-    (tmp_path / "data").mkdir()
+    (tmp_path / ".env").write_text("DB_URL=sqlite:///x.db", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     assert _project_root() == tmp_path
+
+
+def test_goli_data_folder_nije_instalacija(tmp_path, monkeypatch):
+    r"""`data\` nastane čim komanda jednom promaši — ne sme da važi kao dokaz.
+
+    Zbog toga je zaštita bila slepa: 06.10. je `nacrti --osvezi` „završio za
+    0 s“ nad praznom bazom u `C:\Users\Administrator`, jer je tamo od ranije
+    stajao prazan `data\` folder.
+    """
+    _cist_env(monkeypatch, tmp_path)
+    (tmp_path / "data").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    assert _project_root() != tmp_path
 
 
 def test_izvorni_folder_projekta(tmp_path, monkeypatch):
@@ -49,7 +63,8 @@ def test_baza_nikad_ne_zavrsi_u_venv(tmp_path, monkeypatch):
     """Instaliran paket ne sme da drzi bazu u sopstvenom okruzenju."""
     monkeypatch.delenv("SEFSYNC_HOME", raising=False)
     odrediste = tmp_path / "efakture"
-    (odrediste / "data").mkdir(parents=True)
+    odrediste.mkdir(parents=True)
+    (odrediste / ".env").write_text("DB_URL=sqlite:///x.db", encoding="utf-8")
     monkeypatch.chdir(odrediste)
 
     assert ".venv" not in str(_project_root())
@@ -61,9 +76,16 @@ def test_baza_nikad_ne_zavrsi_u_venv(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def _cist_env(monkeypatch):
+def _cist_env(monkeypatch, tmp_path=None):
     for ime in ("SEFSYNC_HOME", "DB_URL", "SEF_DISABLE_DOTENV"):
         monkeypatch.delenv(ime, raising=False)
+    if tmp_path is not None:
+        # Instalacija se prepoznaje i po tome gde stoji virtuelno okruzenje.
+        # U testu to vodi na sam repozitorijum, pa se mora skloniti da bi se
+        # uopste moglo isprobati „pokrenuto van instalacije“.
+        import sys
+
+        monkeypatch.setattr(sys, "executable", str(tmp_path / "x" / "y" / "python.exe"))
 
 
 def test_folder_bez_instalacije_se_prijavljuje(tmp_path, monkeypatch):
@@ -74,8 +96,8 @@ def test_folder_bez_instalacije_se_prijavljuje(tmp_path, monkeypatch):
     """
     from sefsync import config
 
-    _cist_env(monkeypatch)
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    _cist_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "_project_root", lambda: tmp_path)
 
     problem = config.dom_nije_instalacija()
 
@@ -86,9 +108,9 @@ def test_folder_bez_instalacije_se_prijavljuje(tmp_path, monkeypatch):
 def test_folder_instalacije_prolazi(tmp_path, monkeypatch):
     from sefsync import config
 
-    _cist_env(monkeypatch)
+    _cist_env(monkeypatch, tmp_path)
     (tmp_path / ".env").write_text("SEF_ENV=prod", encoding="utf-8")
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(config, "_project_root", lambda: tmp_path)
 
     assert config.dom_nije_instalacija() is None
 
@@ -97,9 +119,9 @@ def test_izricito_zadata_baza_ne_trazi_folder(tmp_path, monkeypatch):
     """Testovi i posebna podesavanja zadaju DB_URL - njima folder nije potreban."""
     from sefsync import config
 
-    _cist_env(monkeypatch)
+    _cist_env(monkeypatch, tmp_path)
     monkeypatch.setenv("DB_URL", "sqlite:///:memory:")
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(config, "_project_root", lambda: tmp_path)
 
     assert config.dom_nije_instalacija() is None
 
@@ -108,8 +130,8 @@ def test_komanda_staje_umesto_da_radi_nad_praznom_bazom(tmp_path, monkeypatch):
     """Provera da je zastita zaista zakacena na pokretanje svake komande."""
     from sefsync import cli, config
 
-    _cist_env(monkeypatch)
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    _cist_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "_project_root", lambda: tmp_path)
 
     with pytest.raises(typer.Exit) as izlaz:
         cli._boot()

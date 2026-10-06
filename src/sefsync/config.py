@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from datetime import date
 from pathlib import Path
@@ -27,8 +28,15 @@ def _project_root() -> Path:
         return Path(izricito).resolve()
 
     cwd = Path.cwd()
-    if (cwd / ".env").exists() or (cwd / "data").exists():
+    if (cwd / ".env").exists():
         return cwd
+
+    # Folder u kom stoji virtuelno okruzenje iz kog se komanda pokrece. Na
+    # serveru je to `C:\efakture\.venv\Scripts\python.exe` -> `C:\efakture`.
+    # To je jedini pokazatelj koji ne zavisi od toga odakle je covek kucao.
+    putanje = Path(sys.executable).resolve().parents
+    if len(putanje) > 2 and (putanje[2] / ".env").exists():
+        return putanje[2]
 
     izvorni = Path(__file__).resolve().parents[2]
     if (izvorni / "pyproject.toml").exists():
@@ -52,11 +60,18 @@ def dom_nije_instalacija() -> str | None:
     """
     if os.getenv("SEFSYNC_HOME") or os.getenv("DB_URL") or os.getenv("SEF_DISABLE_DOTENV"):
         return None  # izricito zadato - covek zna gde radi
-    if (PROJECT_ROOT / ".env").exists() or (PROJECT_ROOT / "data").exists():
+    # Racuna se u trenutku poziva, ne pri uvozu modula: pitanje je gde komanda
+    # radi sada, a ne gde je Python startovan.
+    koren = _project_root()
+    # Trazi se bas `.env`. Ranije je prolazio i goli `data\` folder - a on
+    # nastane cim komanda jednom promasi, pa je zastita od tada bila slepa.
+    # Tako je 06.10. `nacrti --osvezi` "zavrsio za 0 s" nad praznom bazom u
+    # `C:\Users\Administrator`, a panel je radio nad svojom.
+    if (koren / ".env").exists():
         return None
     return (
-        f"Ovde nema instalacije: {PROJECT_ROOT}\n"
-        r"Ocekujem `.env` ili `data\` u tom folderu, a nema ih - komanda bi "
+        f"Ovde nema instalacije: {koren}\n"
+        r"Ocekujem `.env` u tom folderu, a nema ga - komanda bi "
         "napravila novu praznu bazu pored i radila nad njom.\n"
         r"Predji u folder instalacije (na serveru: cd C:\efakture) ili zadaj "
         "SEFSYNC_HOME."

@@ -2732,3 +2732,30 @@ kroz `ubl_bajtovi`: ako fajla nema na disku, skida ga sa SEF-a i snimi nazad.
 „nikad nije ni bio“ i „sklonjen namerno“.
 
 E-fakture se čuvaju deset godina — ovo je premeštanje, ne brisanje.
+
+## Komanda pokrenuta iz pogrešnog foldera — opet (06.10.)
+
+`nacrti --osvezi` je „završio za 0 s“, sa nulom u svakom redu, a `arhiviraj-ubl`
+rekao da nema šta da se arhivira. Panel je za to vreme radio normalno.
+
+Odavalo ga je ovo: *„Šema dopunjena: business_unit.logins“* — kolona koja na
+serveru postoji nedeljama. Tabele su tek nastajale, dakle baza je bila **nova i
+prazna**. Prompt je bio `PS C:\Users\Administrator>`, a ne `PS C:\efakture>`.
+
+**Zaštita za baš ovo postoji od 16.09. i nije se oglasila.** Prepoznavala je
+instalaciju po tome ima li u folderu `.env` **ili `data\`** — a `data\` nastane
+čim komanda jednom promaši. Posle prve greške 16.09. u
+`C:\Users\Administrator` je ostao prazan `data\`, pa je od tada svaka sledeća
+greška prolazila kao ispravna.
+
+Dve popravke:
+
+* **Instalacija se traži i po tome gde stoji virtuelno okruženje.**
+  `C:\efakture\.venv\Scripts\python.exe` → `C:\efakture`. To ne zavisi od toga
+  odakle je čovek kucao, pa cela vrsta greške nestaje — komanda radi kako treba
+  iz bilo kog foldera. Provereno.
+* **Goli `data\` folder više ne važi kao dokaz** — traži se `.env`. Zaštita
+  ostaje kao poslednja brana, ali sada stvarno brani.
+
+Pouka je ista kao i sa dugmetom „otvori šifru“: zaštita koju niko nije video da
+radi nije dokazano ispravna. Ova je tiho otkazala tri nedelje.
