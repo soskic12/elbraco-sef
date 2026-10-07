@@ -2489,6 +2489,100 @@ def cmd_erp_check() -> None:
         raise typer.Exit(1) from exc
 
 
+@app.command("erp-nalog")
+def cmd_erp_nalog(
+    novi: str = typer.Option(
+        None, "--novi", help="Sastavi naredbe za zaseban nalog pod ovim imenom."
+    ),
+    lozinka: str = typer.Option(None, help="Lozinka za novi nalog; bez nje se izmišlja."),
+    sql_fajl: str = typer.Option(None, "--sql-fajl", help="Upiši naredbe u ovaj fajl."),
+) -> None:
+    """Šta ERP nalog panela sme, i šta mu od toga aplikaciji fali.
+
+    Bez opcija samo meri postojeće stanje. Sa `--novi sefsync_erp` sastavi i
+    naredbe za zaseban nalog — aplikacija ih ne izvršava, `CREATE LOGIN` traži
+    prava na nivou servera.
+    """
+    _boot()
+    from .erp.nalog import TABELE_UPISA, pregled, skripta
+
+    p = pregled()
+    if p.get("greska"):
+        typer.secho(p["greska"], fg="yellow")
+        raise typer.Exit(1)
+
+    typer.echo(f"nalog       : {p['nalog']}  (u bazi: {p['korisnik']})")
+    typer.echo(f"radna baza  : {p['radna_baza']}   test: {p['test_baza'] or '—'}")
+    if p["iz_secrets_fajla"]:
+        typer.secho(
+            "veza        : POZAJMLJENA — ERP_DB_URL nije zadat, čita se iz "
+            f"{p['secrets_fajl'] or 'web.config-a drugog projekta'}",
+            fg="yellow",
+        )
+    else:
+        typer.echo("veza        : ERP_DB_URL (sopstvena)")
+    typer.echo("")
+
+    fali_negde = False
+    for baza, s in p["baze"].items():
+        if s.get("greska"):
+            typer.echo(f"  {baza:16} ne mogu: {s['greska']}")
+            continue
+        red = f"  {baza:16} {'čita' if s['cita'] else 'NE ČITA':8}"
+        red += f" INSERT: {', '.join(s['upis']) if s['upis'] else '—'}"
+        typer.echo(red)
+        if s.get("fali_upis"):
+            fali_negde = True
+            typer.secho(f"  {'':16} fali INSERT: {', '.join(s['fali_upis'])}", fg="yellow")
+        if s.get("suvisno"):
+            typer.secho(
+                f"  {'':16} suvišno (app ne piše): {', '.join(s['suvisno'])}", fg="yellow"
+            )
+
+    if p["suvisan_pristup"]:
+        typer.echo("")
+        typer.secho(
+            "  pristup koji aplikaciji ne treba: " + ", ".join(p["suvisan_pristup"]),
+            fg="yellow",
+        )
+
+    if not fali_negde and not p["iz_secrets_fajla"]:
+        typer.echo("")
+        typer.secho("Sve stoji: nalog je sopstveni i ima tačno što mu treba.", fg="green")
+
+    if not novi:
+        return
+
+    s = skripta(novi, lozinka)
+    if s.get("greska"):
+        typer.secho(s["greska"], fg="yellow")
+        raise typer.Exit(1)
+
+    typer.echo("")
+    typer.echo("=" * 72)
+    typer.echo(f"Naredbe za nalog {s['nalog']}")
+    typer.echo(f"  čita : {', '.join(s['citanje'])}")
+    typer.echo(f"  piše : {', '.join(s['upis'])}  —  {len(TABELE_UPISA)} tabela")
+    typer.echo("=" * 72)
+    if sql_fajl:
+        from pathlib import Path
+
+        Path(sql_fajl).write_text(s["sql"] + "\n", encoding="utf-8")
+        typer.echo(f"Naredbe upisane u {sql_fajl}")
+    else:
+        typer.echo(s["sql"])
+    typer.echo("")
+    typer.echo("Posle toga u C:\\efakture\\.env dodaj jedan red:")
+    typer.echo("")
+    typer.echo("  " + s["env"])
+    typer.echo("")
+    typer.secho(
+        "Lozinka se nigde ne pamti — prepiši je sada. Posle restarta proveri sa "
+        "`sefsync erp-nalog`: mora da piše da je veza sopstvena.",
+        fg="cyan",
+    )
+
+
 @app.command("erp-tables")
 def cmd_erp_tables(sadrzi: str = typer.Option(None, help="Filtriraj po delu naziva.")) -> None:
     """Ispisuje tabele u ERP bazi (pomoć pri mapiranju kalkulacije)."""

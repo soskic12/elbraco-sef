@@ -168,15 +168,78 @@ zastarelo.
 
 ---
 
-## Posle prelaska, kad nema pritiska
+## Posle prelaska: razdvajanje ERP naloga
 
-**Razdvojiti nalog ka ERP-u.** Panel se prijavljuje kao `elbraco_dev_ro` — isti
-nalog koji koristi i razvojna mašina, i po imenu „dev read-only“. Pred prelazak
-mu je dat INSERT na pet tabela u `ELBS_2026` (Bane, 27.09., svesna odluka: pet
-naredbi umesto diranja `web.config`-a uoči prelaska).
+Panel se prijavljuje kao `elbraco_dev_ro` — isti nalog kojim se kačim i sa
+razvojne mašine, i po imenu „dev read-only“. Pred prelazak mu je dat INSERT na
+pet tabela u `ELBS_2026` (Bane, 27.09., svesna odluka: pet naredbi umesto
+diranja `web.config`-a uoči prelaska), a 06.10. još tri za otvaranje šifre i
+komitenta.
 
-Posle prelaska napraviti zaseban nalog samo za panel, npr. `sefsync_erp`, dati
-mu INSERT isključivo na `ULKALKUL`, `PRULKALK`, `MKALKUL`, `MPRULK`, `PDVEVIDX`,
-upisati ga u `web.config` na serveru i **oduzeti INSERT nalogu `elbraco_dev_ro`**.
-Time razvojno okruženje ostaje bez ikakvog prava upisa u produkciju, pa pravilo
-„u produkciju se piše samo dok je Bane tu“ ne zavisi samo od prekidača u `.env`.
+**Gde je stvarni problem.** Nije u imenu naloga nego u tome što panel **nema
+svoju konekciju** — pozajmljuje Logistikinu (`ConnectionStrings:ErpDatabase`,
+iz .NET user-secrets na razvojnoj mašini, iz `web.config`-a na serveru). Dve
+posledice: u logovima baze se saobraćaj panela ne razlikuje od Logistikinog, a
+razvojna mašina ima pravo upisa u produkciju — pravilo „u produkciju se piše
+samo dok je Bane tu“ visi na prekidaču u `.env`-u.
+
+**Šta nalog danas sme** (mereno 07.10. komandom `sefsync erp-nalog`):
+
+| baza | čita | INSERT |
+|---|---|---|
+| `ELBS_2026` | da | ULKALKUL, PRULKALK, MKALKUL, MPRULK, PDVEVIDX, ARTIKLI, ARTPROD, NAZIVI, **DARTIKLI** |
+| `ELBSX_2026` (test) | da | prvih pet; **fali** ARTIKLI, ARTPROD, NAZIVI |
+| `ELBS_2025`–`ELBS_2022` | da | — |
+
+Van toga **ničemu nema pristup**: ni `ELBS_Logistika`, ni MobAssist,
+Reklamacije, Vozila, Webkroler, ni starije godine, ni `SefSync`. (Ranije sam
+rekao da se na njih kači — to je bilo pogrešno čitanje: `42S02` je „nema takvog
+objekta“, ne „ušao sam“. Autoritet je `HAS_DBACCESS`, i on kaže ne.) Obim je,
+dakle, već uzak; ostaje identitet i pozajmljena konekcija.
+
+Dve stvari koje iz te tabele ispadaju:
+
+* **`DARTIKLI` nalogu ne treba.** Aplikacija je namerno ne dira — puni je noćni
+  posao na serveru i duplirani ključ bi ga oborio. Pravo koje se ne koristi je
+  pravo koje jednog dana neko iskoristi slučajno.
+* **U test bazi fali INSERT na `ARTIKLI`, `ARTPROD` i `NAZIVI`.** Dok je
+  `ERP_ALLOW_PRODUCTION_WRITE` isključen, otvaranje šifre i komitenta ide u
+  `ELBSX_2026` i tamo puca na dozvolu. Na serveru radi jer je upis u produkciju
+  uključen — ali proba pre postavljanja ne bi prošla.
+
+### Kako se radi
+
+Aplikacija sama sastavi naredbe; izvršiti ih ne može i neće moći —
+`CREATE LOGIN` traži prava na nivou servera.
+
+```
+sefsync erp-nalog                      # samo meri: šta nalog sme, šta mu fali
+sefsync erp-nalog --novi sefsync_erp   # sastavi naredbe i red za .env
+```
+
+1. **Pusti naredbe** koje ispis da (neko sa pravima na SQL serveru). One prave
+   `sefsync_erp`, daju mu `db_datareader` na šest baza i INSERT na osam tabela u
+   `ELBS_2026` i `ELBSX_2026`. Ništa drugo: ni UPDATE, ni DELETE, ni EXECUTE, ni
+   `DARTIKLI`, ni druge baze.
+2. **Dodaj jedan red u `C:\efakture\.env`** — `ERP_DB_URL=...`, isti ispis ga da
+   gotovog. Time panel prestaje da čita Logistikin `web.config`: `ERP_DB_URL`
+   ima prednost nad `ERP_SECRETS_FILE`.
+3. **Restart i provera.**
+
+   ```
+   powershell -ExecutionPolicy Bypass -File C:\efakture\restart.ps1
+   sefsync erp-nalog
+   ```
+
+   Mora da piše `veza : ERP_DB_URL (sopstvena)`, nalog `sefsync_erp`, i
+   nijedno žuto „fali INSERT“.
+
+**Stari nalog se ne dira.** `elbraco_dev_ro` koristi drugi projekat (Bane,
+06.10.: „ovo elbraco dev ro ne bismo smeli tek tako oduzimati kad ga koristi
+drugi projekat“). Kad panel nekoliko dana proradi pod svojim nalogom, odvojeno
+se dogovara šta se njemu oduzima — prvi kandidat je INSERT na `DARTIKLI`, koji
+ne koristi nijedan projekat.
+
+**Ako nešto pođe naopako:** izbriši red `ERP_DB_URL` iz `.env`-a i restartuj —
+panel se vrati na staru vezu, jer `sefsync_erp` ne menja ništa u bazi što bi
+stari nalog mogao da promaši.

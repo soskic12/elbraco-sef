@@ -1,0 +1,112 @@
+"""Naredbe za zaseban ERP nalog panela.
+
+Panel pise u ERP kao `elbraco_dev_ro`, nalogom koji deli sa razvojnom masinom i
+cija konekcija je pozajmljena od drugog projekta. Ovde se proverava da ono sto
+aplikacija sastavi daje tacno onoliko prava koliko joj treba - ni manje (test
+baza mora da dobije ARTIKLI/ARTPROD/NAZIVI, bez njih otvaranje sifre u probi
+puca na dozvolu), ni vise (DARTIKLI puni nocni posao, aplikacija je ne dira).
+"""
+
+from __future__ import annotations
+
+from sefsync.erp import nalog as n
+
+VEZA = (
+    "mssql+pyodbc://elbraco_dev_ro:taj-na@194.146.57.216:1433/ELBS_2026"
+    "?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+)
+
+
+def _skripta(monkeypatch, **podesi):
+    monkeypatch.setattr(n, "resolve_erp_url", lambda: VEZA)
+
+    class Lazna:
+        erp_test_db_name = podesi.get("test", "ELBSX_2026")
+        erp_db_url = None
+        erp_secrets_file = None
+
+    monkeypatch.setattr(n, "get_settings", lambda: Lazna())
+    return n.skripta("sefsync_erp", lozinka="l-o-z-1-n-k-a")
+
+
+def _naredbe(sql: str) -> str:
+    """Skripta bez komentara - u komentarima se te reci spominju namerno."""
+    redovi = [r for r in sql.splitlines() if not r.lstrip().startswith("--")]
+    return chr(10).join(redovi).upper()
+
+
+def test_pise_samo_u_tekucu_i_test_bazu(monkeypatch):
+    s = _skripta(monkeypatch)
+
+    assert s["upis"] == ["ELBS_2026", "ELBSX_2026"]
+    assert s["citanje"] == [
+        "ELBS_2026",
+        "ELBS_2025",
+        "ELBS_2024",
+        "ELBS_2023",
+        "ELBS_2022",
+        "ELBSX_2026",
+    ]
+    # Stare godine dobijaju citanje, a ni jedan GRANT INSERT.
+    for stara in ("ELBS_2025", "ELBS_2024", "ELBS_2023", "ELBS_2022"):
+        deo = s["sql"].split(f"USE [{stara}];", 1)[1].split("USE [", 1)[0]
+        assert "GRANT INSERT" not in deo
+
+
+def test_test_baza_dobija_i_sifarnike(monkeypatch):
+    """Bez ovoga otvaranje sifre i komitenta pre prelaska na produkciju puca."""
+    s = _skripta(monkeypatch)
+    deo = s["sql"].split("USE [ELBSX_2026];", 1)[1]
+
+    for tabela in ("ARTIKLI", "ARTPROD", "NAZIVI"):
+        assert f"GRANT INSERT ON dbo.{tabela} TO [sefsync_erp];" in deo
+
+
+def test_dartikli_ne_dobija_dozvolu(monkeypatch):
+    """Nju puni nocni posao; duplirani kljuc bi ga oborio."""
+    s = _skripta(monkeypatch)
+
+    assert "DARTIKLI" not in _naredbe(s["sql"])
+    assert "DARTIKLI" not in n.TABELE_UPISA
+
+
+def test_bez_update_delete_i_rola_koje_pisu(monkeypatch):
+    s = _skripta(monkeypatch)
+    veliko = _naredbe(s["sql"])
+
+    for zabranjeno in ("UPDATE", "DELETE", "EXECUTE", "DB_DATAWRITER", "DB_OWNER", "SYSADMIN"):
+        assert zabranjeno not in veliko
+
+
+def test_stari_nalog_se_ne_dira(monkeypatch):
+    """Nalog koristi drugi projekat - skripta mu nista ne oduzima."""
+    s = _skripta(monkeypatch)
+
+    assert "elbraco_dev_ro" not in s["sql"]
+    assert "REVOKE" not in _naredbe(s["sql"])
+    assert "DROP" not in _naredbe(s["sql"])
+
+
+def test_env_red_nosi_novi_nalog_i_istu_bazu(monkeypatch):
+    s = _skripta(monkeypatch)
+
+    assert s["env"].startswith("ERP_DB_URL=mssql+pyodbc://sefsync_erp:l-o-z-1-n-k-a@")
+    assert "194.146.57.216:1433/ELBS_2026" in s["env"]
+    assert "driver=ODBC+Driver+18+for+SQL+Server" in s["env"]
+    # Lozinka starog naloga ne sme da se prepise u novu vezu.
+    assert "taj-na" not in s["env"]
+
+
+def test_bez_test_baze_nema_praznog_use(monkeypatch):
+    s = _skripta(monkeypatch, test="")
+
+    assert s["upis"] == ["ELBS_2026"]
+    assert "USE [];" not in s["sql"]
+
+
+def test_izmisljena_lozinka_prolazi_kroz_url_nedirnuta():
+    lozinka = n.nova_lozinka()
+
+    assert len(lozinka) == 28
+    # Znakovi koji bi se u .env-u, URL-u ili ODBC stringu izgubili ili prekodirali.
+    assert not set(lozinka) & set("@:/?#&%\"' ;=")

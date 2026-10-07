@@ -2922,3 +2922,42 @@ Bez toga bi zauvek prijavljivao četiri greške za nešto što je završeno.
 **Posledica po dijagnostiku:** SEF-ov tekst greške za `400` još nemamo. Dobićemo
 ga tek kad padne **sledeće** obaveštenje — poruka od tada nosi telo odgovora.
 Pogađati popravku i slati dobavljaču pogrešno obaveštenje ne dolazi u obzir.
+
+### Razdvajanje ERP naloga — merenje pre plana (07.10.)
+
+Panel piše u ERP kao `elbraco_dev_ro`. Pre bilo kakvog plana izmereno je šta taj
+nalog **stvarno** sme, nalogom samim, a ne iz dokumentacije:
+
+| baza | čita | INSERT |
+|---|---|---|
+| `ELBS_2026` | da | ULKALKUL, PRULKALK, MKALKUL, MPRULK, PDVEVIDX, ARTIKLI, ARTPROD, NAZIVI, **DARTIKLI** |
+| `ELBSX_2026` | da | prvih pet — **fali** ARTIKLI, ARTPROD, NAZIVI |
+| `ELBS_2025`–`2022` | da | — |
+
+**Ispravka ranijeg nalaza.** Rekao sam 06.10. da se nalog kači i na
+`ELBS_Logistika`, MobAssist, Reklamacije, Vozila i Webkroler, jer su te baze na
+upit vratile `42S02` umesto odbijanja. Pogrešno: `42S02` je „nema takvog
+objekta“ kod upita preko granice baze, ne uspešan ulaz. `HAS_DBACCESS` za svih
+pet kaže **ne** — kao i za `ELBS_2012`–`2021`, `ELBSX_2024/2025` i `SefSync`.
+Obim naloga je, dakle, već bio uzak.
+
+Ostaju dva stvarna problema, i nijedan nije u imenu:
+
+1. **Panel nema svoju konekciju** — pozajmljuje Logistikinu
+   (`ConnectionStrings:ErpDatabase`: .NET user-secrets na razvojnoj mašini,
+   `web.config` na serveru). U logovima baze se njegov saobraćaj ne razlikuje od
+   Logistikinog, a razvojna mašina ima pravo upisa u produkciju.
+2. **Dve dozvole stoje naopako:** `DARTIKLI` je dobila INSERT koji aplikacija
+   namerno ne koristi (puni je noćni posao, duplirani ključ bi ga oborio), a test
+   baza nije dobila `ARTIKLI/ARTPROD/NAZIVI` — zato otvaranje šifre i komitenta
+   nije moguće probati dok je `ERP_ALLOW_PRODUCTION_WRITE` isključen.
+
+`sefsync erp-nalog` meri to stanje i označava žuto i ono što fali i ono što je
+suvišno; `--novi sefsync_erp` sastavi naredbe i gotov red `ERP_DB_URL=` za
+`.env`. Aplikacija ih **ne izvršava i neće moći** — `CREATE LOGIN` traži prava na
+nivou servera. Prelaz je jedan red u `.env`-u (`ERP_DB_URL` ima prednost nad
+`ERP_SECRETS_FILE`), a povratak brisanje tog reda. Stari nalog se ne dira jer ga
+koristi drugi projekat; šta se njemu oduzima gleda se posle, kad panel nekoliko
+dana proradi pod svojim.
+
+Koraci i provera: [PRELAZAK.md](PRELAZAK.md).
