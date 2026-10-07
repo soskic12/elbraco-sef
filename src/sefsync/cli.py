@@ -860,6 +860,56 @@ def cmd_zaboravi_upis(
     typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
 
 
+@app.command("dopuni-cenovnike")
+def cmd_dopuni_cenovnike(
+    sifra: str = typer.Argument(..., help="Šifra artikla iz jedinstvenog šifarnika."),
+    cena: float = typer.Option(None, "--cena", help="Maloprodajna cena za sva mesta."),
+    stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
+) -> None:
+    """Dodaje postojećoj šifri redove po magacinima i prodajnim mestima.
+
+    Šifra otvorena ručno završi samo u jedinstvenom šifarniku (099), pa
+    kalkulacija posle staje sa „artikal nema cenu u objektu“. Tako je devet
+    EWE faktura stalo na artiklu 87622 (07.10.).
+
+    Ne dira ono što već postoji i ne menja nijednu postojeću cenu.
+    """
+    _boot()
+    from .erp.artikal import bez_cenovnika, dopuni_cenovnike
+    from .erp.connection import get_erp_engine
+
+    with get_erp_engine().connect() as conn:
+        art, magacini, mesta = bez_cenovnika(conn, sifra.strip())
+
+    if art is None:
+        typer.secho(f"Šifre {sifra} nema u jedinstvenom šifarniku (099).", fg="red")
+        raise typer.Exit(1)
+
+    typer.echo(f"{art['artikal']}  {art['naziv']}  barkod {art['barkod'] or '—'}  "
+               f"kategorija {art['shkat'] or '—'}")
+    typer.echo(f"   fali u magacinima:      {', '.join(magacini) or '—'}")
+    typer.echo(f"   fali u prodajnim mestima: {', '.join(mesta) or '—'}")
+
+    if not magacini and not mesta:
+        typer.secho("Nema šta da se dopuni.", fg="green")
+        raise typer.Exit(0)
+
+    if not stvarno:
+        typer.echo("")
+        typer.secho("Suvi prolaz. Za stvarno dodaj --cena <iznos> --stvarno.", fg="yellow")
+        raise typer.Exit(0)
+
+    podesavanja = get_settings()
+    try:
+        opis = dopuni_cenovnike(
+            sifra.strip(), cena, produkcija=podesavanja.erp_allow_production_write
+        )
+    except ValueError as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1) from exc
+    typer.secho(opis, fg="green")
+
+
 @app.command("izvestaj")
 def cmd_izvestaj(
     dana: int = typer.Option(7, "--dana", help="Za koliko dana unazad."),

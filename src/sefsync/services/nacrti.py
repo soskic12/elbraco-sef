@@ -713,6 +713,7 @@ def otvori_sifru(
     bez_barkoda: bool = False,
     jedmere: str | None = None,
     tarifa: str | None = None,
+    shkat: str | None = None,
     engine=None,
 ) -> str:
     """Otvara novu sifru artikla u ERP-u i odmah je veze za stavku.
@@ -746,6 +747,8 @@ def otvori_sifru(
         predlog.jedmere = jedmere.strip()[:3]
     if tarifa:
         predlog.tarifa = tarifa.strip()[:3]
+    if shkat:
+        predlog.shkat = shkat.strip()[:5]
 
     opis = upisi_artikal(predlog, produkcija=get_settings().erp_allow_production_write)
     sifra = predlog.predlozena_sifra

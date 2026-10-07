@@ -77,6 +77,17 @@ STALNO_ARTIKLI = {
     "PROIZVODJAC": ".",
 }
 
+# Kategorija artikla. Baza je trazi (`SHKAT` je NOT NULL i u ARTIKLI i u
+# ARTPROD), a mi je nismo slali - zato je Duletovo otvaranje sifre puklo sa
+# "Cannot insert the value NULL into column 'SHKAT'" (07.10.).
+#
+# Nije popuna nego prava kategorija: laptop 712, televizor 820, zvucnici 853.
+# Zato se ne upisuje najcesca vrednost nego se predlaze po slicnim artiklima -
+# istim onima koje ionako trazimo zbog provere duplikata - a covek je potvrdi.
+# Kad slicnih nema, ostaje 880 ("ostalo"), pod kojim stoji 15.516 od 43.531
+# artikla u 099.
+SHKAT_OSTALO = "880"
+
 
 @dataclass
 class PredlogArtikla:
@@ -100,6 +111,9 @@ class PredlogArtikla:
     # Maloprodajna cena je uslov, ne ukras: bez nje kalkulacija u maloprodaji
     # staje sa "artikal nema cenu u objektu".
     cena_mp: float | None = None
+    # Kategorija (SHKAT) i odakle je predlozena.
+    shkat: str = SHKAT_OSTALO
+    shkat_predlog: str = ""
     # Odakle je cena predlozena (ili zasto nije) - da covek vidi na cemu stoji.
     cena_predlog: dict | None = None
     # Covek je izricito rekao da artikal nema barkod - tek tada se upisuje
@@ -233,7 +247,8 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
     trazene = set(reci)
     nadjeni = []
     for r in conn.execute(
-        text("SELECT TOP 200 RTRIM(ARTIKAL) a, RTRIM(NAZIV) n, RTRIM(ISNULL(BARCODE,'')) b "
+        text("SELECT TOP 200 RTRIM(ARTIKAL) a, RTRIM(NAZIV) n, RTRIM(ISNULL(BARCODE,'')) b, "
+             "RTRIM(ISNULL(SHKAT,'')) k "
              f"FROM dbo.ARTIKLI WHERE RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}' AND NAZIV LIKE :u"),
         {"u": f"%{najduza}%"},
     ):
@@ -250,6 +265,7 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
             nadjeni.append({
                 "artikal": r.a, "naziv": r.n, "barkod": r.b,
                 "poklapanje": round(poklapanje, 2),
+                "shkat": r.k,
                 "cena_mp": float(cene.mp) if cene else None,
                 "nabavna": float(cene.nab) if cene and cene.nab else None,
             })
@@ -270,6 +286,31 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
 PRAG_STAVKI = 20          # koliko stavki dobavljac mora da ima u istoriji
 PRAG_RASPONA = 0.10       # 25-75 percentil mora da stane u 10 procentnih poena
 ZAOKRUZI_NA = 100         # 86 % maloprodajnih cena je zaokruzeno na 100 dinara
+
+
+def kategorije(conn: Connection) -> list[tuple[str, str]]:
+    """Sifarnik kategorija (`KATARTIK`) - sifra i citljivo ime, za izbor."""
+    return [
+        (r.s, " / ".join(x for x in (r.k1, r.k2) if x))
+        for r in conn.execute(
+            text("SELECT RTRIM(SHKAT) s, RTRIM(ISNULL(KAT1,'')) k1, "
+                 "RTRIM(ISNULL(KAT2,'')) k2 FROM dbo.KATARTIK ORDER BY KAT1, KAT2")
+        )
+        if (r.s or "").strip()
+    ]
+
+
+def predlog_kategorije(slicni: list[dict]) -> str:
+    """Kategorija po slicnim artiklima - oni iz iste serije je dele.
+
+    Lexa LX-201 i LX-302 su oba 853, pa novi zvucnik iste serije skoro sigurno
+    ide tamo. Kad slicnih nema ili se ne slazu, ostaje „ostalo“ i covek bira.
+    """
+    glasovi = [s["shkat"] for s in slicni if (s.get("shkat") or "").strip()]
+    if not glasovi:
+        return ""
+    najcesca = max(set(glasovi), key=glasovi.count)
+    return najcesca if glasovi.count(najcesca) > len(glasovi) / 2 else ""
 
 
 def predlog_cene(
@@ -394,6 +435,8 @@ def predlozi(
         dobavljac = _analitika_dobavljaca(
             conn, doc.supplier_reg_no, doc.supplier_vat, doc.payment_account
         )
+        predlog.shkat_predlog = predlog_kategorije(predlog.slicni)
+        predlog.shkat = predlog.shkat_predlog or SHKAT_OSTALO
         predlog.cena_predlog = predlog_cene(
             conn, dobavljac, predlog.nabavna_cena, predlog.pdv_stopa
         )
@@ -431,6 +474,7 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
         "BARCODE": barkod,
         "JEDMERE": predlog.jedmere,
         "TARIFA": predlog.tarifa,
+        "SHKAT": predlog.shkat or SHKAT_OSTALO,
         **STALNO_ARTIKLI,
     }
     artikli = [{**osnova, "SIFRAMAG": m} for m in predlog.magacini]
@@ -443,6 +487,7 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
             "BARCODE": barkod,
             "JEDMERE": predlog.jedmere,
             "TARIFA": predlog.tarifa,
+            "SHKAT": predlog.shkat or SHKAT_OSTALO,
             "CENAMALO": round(float(predlog.cena_mp), 2),
             "NABCENA": round(float(predlog.nabavna_cena or 0), 2),
             "DECCENA": 2,
@@ -529,4 +574,93 @@ def upisi(predlog: PredlogArtikla, *, produkcija: bool = False) -> str:
             f"({len(redovi_po_tabeli['ARTIKLI'])} magacina, "
             f"{len(redovi_po_tabeli['ARTPROD'])} prodajnih mesta)")
     log.info("Otvorena šifra: %s", opis)
+    return opis
+
+
+def bez_cenovnika(conn: Connection, sifra: str) -> tuple[dict | None, list[str], list[str]]:
+    """Gde sifra koja vec postoji u 099 nema svoj red. Vraca (artikal, magacini, mesta).
+
+    Sifra otvorena rucno zavrsi samo u jedinstvenom sifarniku, pa kalkulacija
+    posle staje sa "artikal nema cenu u objektu". Tako je devet EWE faktura
+    stalo na artiklu 87622, koji je imao jedan red u ARTIKLI/099 i nijedan u
+    ARTPROD (07.10.).
+    """
+    art = conn.execute(
+        text("SELECT TOP 1 RTRIM(ARTIKAL) artikal, RTRIM(NAZIV) naziv, "
+             "RTRIM(ISNULL(BARCODE,'')) barkod, RTRIM(ISNULL(JEDMERE,'kom')) jm, "
+             "RTRIM(ISNULL(TARIFA,'002')) tarifa, RTRIM(ISNULL(SHKAT,'')) shkat "
+             f"FROM dbo.ARTIKLI WHERE RTRIM(ARTIKAL)=:a AND RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}'"),
+        {"a": sifra},
+    ).first()
+    if art is None:
+        return None, [], []
+
+    magacini, mesta = _mesta(conn)
+    ima_mag = {
+        r[0] for r in conn.execute(
+            text("SELECT RTRIM(SIFRAMAG) FROM dbo.ARTIKLI WHERE RTRIM(ARTIKAL)=:a"),
+            {"a": sifra})
+    }
+    ima_mesta = {
+        r[0] for r in conn.execute(
+            text("SELECT RTRIM(SIFRAPRO) FROM dbo.ARTPROD WHERE RTRIM(ARTIKAL)=:a"),
+            {"a": sifra})
+    }
+    return (
+        dict(art._mapping),
+        [m for m in magacini if m not in ima_mag],
+        [m for m in mesta if m not in ima_mesta],
+    )
+
+
+def dopuni_cenovnike(
+    sifra: str, cena_mp: float, *, produkcija: bool = False
+) -> str:
+    """Dodaje sifri koja postoji u 099 redove po magacinima i prodajnim mestima.
+
+    Ne dira ono sto vec postoji i ne menja nijednu postojecu cenu - samo
+    dopunjava ono cega nema. Jedna transakcija.
+    """
+    if not cena_mp or cena_mp <= 0:
+        raise ValueError("Maloprodajna cena mora da se unese i da bude veća od nule.")
+
+    engine, baza = erp_engine_za_upis(produkcija)
+    with engine.begin() as conn:
+        art, magacini, mesta = bez_cenovnika(conn, sifra)
+        if art is None:
+            raise ValueError(f"Šifre {sifra} nema u jedinstvenom šifarniku (099).")
+        if not magacini and not mesta:
+            return f"Šifra {sifra} već ima sve cenovnike — nema šta da se dopuni."
+
+        osnova = {
+            "ARTIKAL": art["artikal"],
+            "NAZIV": art["naziv"],
+            "BARCODE": art["barkod"],
+            "JEDMERE": art["jm"],
+            "TARIFA": art["tarifa"],
+            "SHKAT": art["shkat"] or SHKAT_OSTALO,
+            **STALNO_ARTIKLI,
+        }
+        upisano = 0
+        for mag in magacini:
+            red = {**osnova, "SIFRAMAG": mag}
+            conn.execute(
+                text(f"INSERT INTO dbo.ARTIKLI ({', '.join(red)}) "
+                     f"VALUES ({', '.join(f':{k}' for k in red)})"), red)
+            upisano += 1
+        for mesto in mesta:
+            red = {
+                **osnova, "SIFRAPRO": mesto, "SIFRAMAG": MATICNI_MAGACIN,
+                "CENAMALO": round(float(cena_mp), 2), "DECCENA": 2, "DECKOLIC": 2,
+            }
+            red.pop("VLAGA", None); red.pop("LOM", None)
+            red.pop("PRIMESE", None); red.pop("NECISTO", None); red.pop("PCENA", None)
+            conn.execute(
+                text(f"INSERT INTO dbo.ARTPROD ({', '.join(red)}) "
+                     f"VALUES ({', '.join(f':{k}' for k in red)})"), red)
+            upisano += 1
+
+    opis = (f"{baza}: šifra {sifra} „{art['naziv'][:30]}“ dopunjena — "
+            f"{len(magacini)} magacina, {len(mesta)} prodajnih mesta po {cena_mp:,.2f}")
+    log.info("Dopunjeni cenovnici: %s", opis)
     return opis

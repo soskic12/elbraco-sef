@@ -1144,8 +1144,8 @@ def test_slicni_artikli_upozoravaju_na_duplikat(db):
             if "ARTPROD" in str(upit):
                 return _Rezultat([type("R", (), {"mp": 12400.0, "nab": 6900.0})()])
             return [
-                type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860"})(),
-                type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861"})(),
+                type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860", "k": "853"})(),
+                type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861", "k": "411"})(),
             ]
 
     nadjeni = slicni_artikli(Conn(), "LEXA BT ZVUCNIK LX-302 NITRO")
@@ -1272,3 +1272,69 @@ def test_dokument_nudi_ispravku_i_pre_upisa(client, db, podaci, monkeypatch):
     tekst = client.get(f"/dokument/{podaci}").text
 
     assert "Pogrešna šifra artikla?" in tekst
+
+
+def test_sifra_se_otvara_sa_kategorijom():
+    """`SHKAT` je NOT NULL — bez nje upis puca na samoj bazi.
+
+    Duletovo otvaranje šifre je tako palo: „Cannot insert the value NULL into
+    column 'SHKAT'“ (07.10.). Kategorija nije popuna nego prava vrednost:
+    laptop 712, televizor 820, zvučnici 853.
+    """
+    from sefsync.erp.artikal import PredlogArtikla, redovi
+
+    p = PredlogArtikla(document_id=1, line_no=1, predlozena_sifra="14445",
+                       naziv="Dell OEM 15", barkod="217", cena_mp=57000.0,
+                       shkat="712", magacini=["099"], prodajna_mesta=["001"])
+
+    red = redovi(p)
+    assert red["ARTIKLI"][0]["SHKAT"] == "712"
+    assert red["ARTPROD"][0]["SHKAT"] == "712"
+
+
+def test_kategorija_se_predlaze_po_slicnim_artiklima():
+    """Artikli iste serije dele kategoriju — Lexa LX-201 i LX-302 su oba 853."""
+    from sefsync.erp.artikal import predlog_kategorije
+
+    assert predlog_kategorije([{"shkat": "853"}, {"shkat": "853"}, {"shkat": "411"}]) == "853"
+
+
+def test_kategorija_se_ne_pogadja_kad_se_slicni_ne_slazu():
+    from sefsync.erp.artikal import predlog_kategorije
+
+    assert predlog_kategorije([{"shkat": "853"}, {"shkat": "411"}]) == ""
+    assert predlog_kategorije([]) == ""
+
+
+def test_dopuna_cenovnika_trazi_cenu_i_postojecu_sifru(monkeypatch):
+    """Dopuna ne izmišlja ni šifru ni cenu."""
+    import pytest
+
+    from sefsync.erp import artikal as A
+
+    class PrazanErp:
+        def begin(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+    monkeypatch.setattr(A, "erp_engine_za_upis",
+                        lambda produkcija=False: (PrazanErp(), "ELBSX_2026"))
+
+    with pytest.raises(ValueError, match="cena"):
+        A.dopuni_cenovnike("87622", 0)
+    with pytest.raises(ValueError, match="nema u jedinstvenom"):
+        A.dopuni_cenovnike("87622", 100.0)

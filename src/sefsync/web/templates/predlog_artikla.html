@@ -111,6 +111,13 @@
         <input name="jedmere" maxlength="3" value="{{ predlog.jedmere }}"></div>
       <div class="field"><label>Tarifa</label>
         <input name="tarifa" maxlength="3" value="{{ predlog.tarifa }}"></div>
+      <div class="field" style="flex:2"><label>Kategorija</label>
+        <select name="shkat" required>
+          {% for sifra, ime in kategorije %}
+            <option value="{{ sifra }}" {% if sifra == predlog.shkat %}selected{% endif %}>
+              {{ sifra }} — {{ ime }}</option>
+          {% endfor %}
+        </select></div>
       <div class="field"><label>Maloprodajna cena</label>
         <input name="cena_mp" type="number" step="0.01" min="0.01" required
                value="{{ '%.2f'|format(predlog.cena_mp) if predlog.cena_mp else '' }}"></div>
@@ -124,6 +131,13 @@
           <span style="color:#b45309">Bez predloga — {{ predlog.cena_predlog.razlog }}.</span>
         {% endif %}
       </div>
+    {% endif %}
+    {% if predlog.shkat_predlog %}
+      <div class="small" style="margin:2px 0 6px;color:#166534">
+        Kategorija predložena po sličnim artiklima — proveri da li odgovara.</div>
+    {% else %}
+      <div class="small" style="margin:2px 0 6px;color:#b45309">
+        Kategoriju nisam mogao da predložim — stoji „ostalo“, izaberi pravu.</div>
     {% endif %}
     <label class="small"><input type="checkbox" name="bez_barkoda" value="1">
       ovaj artikal <b>zaista nema</b> barkod — upiši šifru umesto njega</label>

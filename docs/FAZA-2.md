@@ -2862,3 +2862,42 @@ lokalne cenovnike. Naš tok otvara samo nove. Dok se to ne reši, takve dopunjav
 `izvestaj` je prijavio 10 zaustavljenih, `nacrti --spisak` devet. Razlika je
 bila arhiva: spisak ju je preskakao, brojač u izveštaju nije. Sada oba koriste
 isti kriterijum.
+
+## Zašto otvaranje šifre nije prošlo: `SHKAT` (07.10.)
+
+Dule je probao da otvori šifru kroz aplikaciju i dobio:
+
+```
+Cannot insert the value NULL into column 'SHKAT', table 'ELBS_2026.dbo.ARTIKLI'
+```
+
+Umesto da dodam tu jednu kolonu, izmerio sam **sve** koje baza traži a mi ih ne
+šaljemo — `NOT NULL` bez podrazumevane vrednosti, upoređeno sa onim što naš
+`INSERT` nabraja:
+
+| tabela | NOT NULL kolona | mi šaljemo | fali |
+|---|---:|---:|---|
+| `ARTIKLI` | 5 | 14 | **SHKAT** |
+| `ARTPROD` | 6 | 12 | **SHKAT** |
+| `NAZIVI` | 2 | 13 | — |
+
+Dakle samo ta jedna, na dva mesta; otvaranje komitenta bi prošlo.
+
+**`SHKAT` nije popuna nego prava kategorija** — laptop 712, televizor 820,
+zvučnici 853 — pa se ne sme upisati najčešća vrednost (880, pod kojom stoji
+15.516 od 43.531 artikla u 099). Umesto toga se **predlaže po sličnim
+artiklima**, istim onima koje ionako tražimo zbog provere duplikata: Lexa LX-201
+i LX-302 su oba 853, pa novi zvučnik iste serije skoro sigurno ide tamo.
+Predlog se daje samo kad se većina sličnih slaže; inače stoji „ostalo“ i piše da
+treba izabrati. Spisak kategorija se čita iz `KATARTIK` (386 redova).
+
+## Dopuna cenovnika za šifru koja već postoji
+
+Devet EWE faktura je stalo na artiklu **87622**: jedan red u `ARTIKLI/099`,
+nijedan u `ARTPROD`. Šifra otvorena ručno završi samo u jedinstvenom šifarniku,
+a naš tok otvara samo **nove** šifre.
+
+`sefsync dopuni-cenovnike <šifra>` ispisuje gde fali (za 87622: deset magacina i
+dvanaest prodajnih mesta), a sa `--cena N --stvarno` dopunjava. **Ne dira ono
+što već postoji i ne menja nijednu postojeću cenu** — samo dodaje redove kojih
+nema, u jednoj transakciji.
