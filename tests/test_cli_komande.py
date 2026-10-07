@@ -479,3 +479,43 @@ def test_ozivi_veze_vraca_samo_jednoznacne(db):
             )
         )
     assert zive == ["98101", "98102"]
+
+
+def test_izvestaj_pokazuje_sta_se_radilo(db, monkeypatch, capsys):
+    """Posle isporuke se do sada proveravalo po osećaju — ovo pokazuje odjednom."""
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import AuditLog, Document, SefStatus
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=1, document_number="FA-1", supplier_name="X",
+                       currency="EUR", amount=100.0, sef_status=SefStatus.SEEN)
+        session.add(doc)
+        session.flush()
+        session.add_all([
+            AuditLog(actor="bogdan", action="kalkulacija.upisana", document_id=doc.id),
+            AuditLog(actor="dusan", action="artikal.otvoren", document_id=doc.id),
+            AuditLog(actor="nina", action="komitent.otvoren", document_id=doc.id),
+        ])
+
+    ishod = CliRunner().invoke(app, ["izvestaj", "--dana", "7"])
+
+    assert ishod.exit_code == 0
+    assert "kalkulacija.upisana" in ishod.stdout
+    assert "artikal.otvoren" in ishod.stdout
+    assert "komitent.otvoren" in ishod.stdout
+    assert "EUR 1" in ishod.stdout
+    assert "bogdan" in ishod.stdout and "nina" in ishod.stdout
+
+
+def test_izvestaj_kaze_kad_nema_niceg(db):
+    """Prazan ispis znači ili da se ne radi, ili da gledamo pogrešnu bazu."""
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+
+    ishod = CliRunner().invoke(app, ["izvestaj"])
+
+    assert ishod.exit_code == 0
+    assert "gleda pogrešnu bazu" in ishod.stdout

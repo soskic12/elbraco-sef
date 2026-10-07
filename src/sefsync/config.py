@@ -271,12 +271,6 @@ class Settings(BaseSettings):
         p.mkdir(parents=True, exist_ok=True)
         return p
 
-    @property
-    def pdf_dir(self) -> Path:
-        p = self.storage_dir / "pdf"
-        p.mkdir(parents=True, exist_ok=True)
-        return p
-
     def operator_logins(self) -> set[str]:
         return {x.strip().lower() for x in self.web_operators.split(",") if x.strip()}
 

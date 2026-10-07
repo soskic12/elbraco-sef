@@ -2759,3 +2759,24 @@ Dve popravke:
 
 Pouka je ista kao i sa dugmetom „otvori šifru“: zaštita koju niko nije video da
 radi nije dokazano ispravna. Ova je tiho otkazala tri nedelje.
+
+## Komanda `izvestaj` — da se ne proverava po osećaju (07.10.)
+
+Posle 24 izmene u nedelju dana ispostavilo se da **ne znamo šta od toga radi**.
+Proveravalo se tako što se otvori ekran, pogleda jedna faktura i zaključi.
+
+`sefsync izvestaj --dana 7` ispisuje odjednom: koliko je dokumenata pristiglo i
+u kojoj valuti, šta se dešavalo po vrstama (kalkulacija upisana, šifra
+povezana, artikal otvoren, komitent otvoren, ispravka, obaveštenje), ko je
+radio, trenutno stanje nacrta, i upozorenja koja stoje na dokumentima.
+
+Kad je ispis prazan, komanda to **kaže**: „ništa — ili se ne radi, ili komanda
+gleda pogrešnu bazu“. Posle 06.10. to nije teorijska mogućnost.
+
+### Usput počišćeno
+
+* `docs/uputstva/*.html` — odštampana uputstva od 26.09., povučena čim je pomoć
+  ušla u aplikaciju (Bane: „neću štampati, nema potrebe ako ga imaju u app“).
+  Stajala su i zastarevala.
+* `Settings.pdf_dir` — folder koji se pravio pri svakom čitanju podešavanja, a
+  u njega nikad ništa nije upisano; PDF se uvek uzima sa SEF-a.

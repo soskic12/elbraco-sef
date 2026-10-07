@@ -852,6 +852,106 @@ def cmd_zaboravi_upis(
     typer.echo(f"#{document_id}: oznaka skinuta, upis se može ponoviti.")
 
 
+@app.command("izvestaj")
+def cmd_izvestaj(
+    dana: int = typer.Option(7, "--dana", help="Za koliko dana unazad."),
+) -> None:
+    """Šta je aplikacija i ko od ljudi uradio u poslednjih N dana.
+
+    Posle isporuke se do sada proveravalo po osećaju — otvori ekran, pogledaj
+    jednu fakturu, pa zaključi. Ovde se vidi odjednom: koliko je kalkulacija
+    otišlo u ERP, ko je povezivao šifre, šta je otvoreno u šifarniku, i gde je
+    nešto palo.
+    """
+    _boot()
+    from collections import Counter
+    from datetime import timedelta
+
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+
+    from .models import (
+        AuditLog, Document, NacrtKalkulacije, ObavestenjeOPrethodnomPorezu,
+        StanjeNacrta, utcnow,
+    )
+
+    granica = utcnow() - timedelta(days=dana)
+    with session_scope() as session:
+        zapisi = list(session.scalars(
+            _select(AuditLog).where(AuditLog.at >= granica).order_by(AuditLog.id)
+        ))
+        po_akciji = Counter(z.action for z in zapisi)
+        ko = Counter(z.actor for z in zapisi if z.actor and z.actor != "system")
+
+        stanja = {
+            s.value: session.scalar(
+                _select(_func.count()).select_from(NacrtKalkulacije)
+                .where(NacrtKalkulacije.stanje == s)
+            )
+            for s in StanjeNacrta
+        }
+        novih = session.scalar(
+            _select(_func.count()).select_from(Document)
+            .where(Document.created_at >= granica)
+        )
+        devizne = list(session.execute(
+            _select(Document.currency, _func.count())
+            .where(Document.created_at >= granica, Document.currency.isnot(None))
+            .group_by(Document.currency)
+        ))
+        # `uspelo` je svojstvo, ne kolona - uspeh se vidi po tome ima li greske.
+        obavestenja = [
+            (o.uspelo, o.greska)
+            for o in session.scalars(
+                _select(ObavestenjeOPrethodnomPorezu)
+                .where(ObavestenjeOPrethodnomPorezu.poslato_u >= granica)
+            )
+        ]
+        pali = [
+            (n.document_id, (n.upozorenje or "")[:70])
+            for n in session.scalars(
+                _select(NacrtKalkulacije).where(NacrtKalkulacije.upozorenje.isnot(None))
+            )
+        ]
+
+    typer.echo(f"Poslednjih {dana} dana — pristiglo {novih} dokumenata")
+    typer.echo("   po valuti: " + (", ".join(f"{v or '?'} {n}" for v, n in devizne) or "—"))
+
+    typer.echo("")
+    typer.echo("Šta se dešavalo")
+    for akcija, n in po_akciji.most_common():
+        typer.echo(f"   {akcija:<30} {n}")
+    if not po_akciji:
+        typer.secho("   ništa — ili se ne radi, ili komanda gleda pogrešnu bazu", fg="yellow")
+
+    typer.echo("")
+    typer.echo("Ko je radio")
+    for covek, n in ko.most_common(10):
+        typer.echo(f"   {covek:<16} {n}")
+
+    typer.echo("")
+    typer.echo("Nacrti, trenutno stanje")
+    for kljuc, n in stanja.items():
+        typer.echo(f"   {kljuc.replace('_', ' '):<16} {n}")
+
+    if obavestenja:
+        typer.echo("")
+        typer.echo("Obaveštenja o prethodnom porezu")
+        uspesna = sum(1 for u, _ in obavestenja if u)
+        typer.echo(f"   {'poslato':<16} {uspesna}")
+        pala = [g for u, g in obavestenja if not u]
+        if pala:
+            typer.secho(f"   {'NIJE POSLATO':<16} {len(pala)}", fg="yellow")
+            for greska in pala[:5]:
+                typer.echo(f"      {(greska or '')[:90]}")
+
+    if pali:
+        typer.echo("")
+        typer.secho(f"Upozorenja koja stoje na dokumentima: {len(pali)}", fg="yellow")
+        for doc_id, tekst in pali[:10]:
+            typer.echo(f"   #{doc_id}  {tekst}")
+
+
 @app.command("arhiviraj-ubl")
 def cmd_arhiviraj_ubl(
     dana: int = typer.Option(None, "--dana", help="Koliko dana ostaje na disku."),
