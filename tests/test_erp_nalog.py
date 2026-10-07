@@ -140,3 +140,11 @@ def test_objasnjenje_razlikuje_bazu_od_prijave():
 
     assert "CREATE USER" in chr(10).join(nema_baze)
     assert "mreža" in chr(10).join(mreza)
+
+
+def test_skripta_nosi_sopstvenu_proveru(monkeypatch):
+    """Da SSMS odmah kaze da li je proslo i na kom serveru - bez pogadjanja."""
+    s = _skripta(monkeypatch)
+
+    assert "SELECT @@SERVERNAME AS server, SUSER_ID('sefsync_erp') AS nalog;" in s["sql"]
+    assert "194.146.57.216" in s["sql"]

@@ -20,8 +20,9 @@ Mereno 07.10.2026. na nalogu `elbraco_dev_ro`:
   PDVEVIDX, ARTIKLI, ARTPROD, NAZIVI **i DARTIKLI**;
 * `ELBSX_2026` (test) - cita sve, INSERT samo na prvih pet;
 * `ELBS_2025`, `ELBS_2024`, `ELBS_2023`, `ELBS_2022` - samo citanje;
-* `ELBS_Logistika`, `MobAssist`, `Reklamacije`, `Vozila`, `Webkroler` - kaci se,
-  a aplikaciji nijedna ne treba.
+* `ELBS_Logistika`, `MobAssist`, `Reklamacije`, `Vozila`, `Webkroler`, starije
+  godine i `SefSync` - **nema pristup** (`HAS_DBACCESS` = 0). Obim je vec uzak;
+  problem je identitet i pozajmljena konekcija, ne sirina prava.
 
 Dve stvari koje iz toga ispadaju:
 
@@ -264,6 +265,15 @@ def skripta(nalog: str = "sefsync_erp", lozinka: str | None = None) -> dict:
     redovi += [
         "-- Nista vise: ni UPDATE, ni DELETE, ni EXECUTE, ni INSERT na DARTIKLI",
         "-- (nju puni nocni posao), ni pristup bazama Logistike i ostalih projekata.",
+        "",
+        "-- ---------------------------------------------------------------------",
+        "-- Provera. Pusti i ovaj red, pa pogledaj sta je vratio:",
+        f"--   server - mora da bude onaj na koji se panel kaci ({osnovna.host})",
+        "--   nalog  - NULL znaci da naredbe iznad NISU prosle",
+        "-- Nalog koji se vidi ovde, a prijava i dalje pada, znaci da lozinka u",
+        "-- .env-u nije iz ovog fajla - prepisi je iz komentara na dnu.",
+        "USE master;",
+        f"SELECT @@SERVERNAME AS server, SUSER_ID('{nalog}') AS nalog;",
     ]
 
     veza = osnovna.set(username=nalog, password=lozinka).render_as_string(hide_password=False)
