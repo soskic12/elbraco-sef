@@ -181,14 +181,12 @@ istoriji). Na dokumentu, ispod razloga, veza „otvori komitenta u šifarniku“
 
 ## Šta ostaje otvoreno
 
-* **Razdvojiti ERP nalog.** Panel piše kao `elbraco_dev_ro` i, gore od imena,
-  **pozajmljuje Logistikinu konekciju** iz `web.config`-a. Rešenje je spremno:
-  `sefsync erp-nalog --novi sefsync_erp` sastavi naredbe i red `ERP_DB_URL` za
-  `.env`; stari nalog se **ne dira** jer ga koristi drugi projekat. Koraci i
-  provera u [PRELAZAK.md](PRELAZAK.md). Jedini otvoreni dug sa stvarnim rizikom.
-* **U test bazi fali INSERT** na `ARTIKLI`, `ARTPROD`, `NAZIVI` — otvaranje
-  šifre i komitenta se zato ne može probati van produkcije. Skripta iznad to
-  usput popravlja.
+* ~~**Razdvojiti ERP nalog.**~~ **Urađeno 07.10.** Server je na `sefsync_erp`,
+  razvojna mašina na `sefsync_dev` bez prava upisa u produkciju, a panel više ne
+  pozajmljuje Logistikinu konekciju. `elbraco_dev_ro` je nedirnut jer ga koristi
+  drugi projekat; ostaje da mu se, kad novi nalog odradi nekoliko dana, oduzme
+  INSERT na `DARTIKLI` (ne koristi ga nijedan projekat). Vidi
+  [PRELAZAK.md](PRELAZAK.md), merenje u [FAZA-2.md](FAZA-2.md).
 * **Automatsko prosleđivanje** — pustiti `analiza-razvrstavanja` posle nekoliko
   dana sa očišćenim pravilima, pa videti gde je app sigurna.
 * **Veza po nazivu na odobrenjima.** Ako neko čekira „zapamti vezu“, naziv može

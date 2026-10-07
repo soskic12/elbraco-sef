@@ -170,6 +170,11 @@ zastarelo.
 
 ## Posle prelaska: razdvajanje ERP naloga
 
+> **Urađeno 07.10.2026.** Server radi kao `sefsync_erp`, razvojna mašina kao
+> `sefsync_dev` (bez prava upisa u produkciju), `elbraco_dev_ro` je nedirnut.
+> `provera-prelaska` na serveru: „Dozvole za upis u ELBS_2026 (nalog
+> sefsync_erp): sve na broju“. Ostalo niže je zapis kako je urađeno.
+
 Panel se prijavljuje kao `elbraco_dev_ro` — isti nalog kojim se kačim i sa
 razvojne mašine, i po imenu „dev read-only“. Pred prelazak mu je dat INSERT na
 pet tabela u `ELBS_2026` (Bane, 27.09., svesna odluka: pet naredbi umesto
