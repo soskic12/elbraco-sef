@@ -338,9 +338,16 @@
   doslovno broj odobrenja, a iznos je PDV sa njega.</p>
   <p class="muted small">Ne radi se odvojeno i ne šalje se u paketu — ide samo uz
   prihvatanje. Ako slanje padne, prihvatanje <b>ostaje</b>, a na dokumentu stoji
-  crveno upozorenje sa SEF-ovim objašnjenjem i dugme
-  <span class="tag">Pošalji obaveštenje ponovo</span>. Ako ni iz drugog puta ne
-  prođe, napravi ga na portalu.</p>
+  crveno upozorenje sa SEF-ovim objašnjenjem i dva dugmeta.</p>
+  <table class="small">
+    <tr><td style="width:36%"><span class="tag">Pošalji obaveštenje ponovo</span></td>
+        <td>samo ako <b>nisi</b> ništa radio na portalu. Slanje je prema
+        dobavljaču i ne može da se povuče — ako obaveštenje tamo već postoji,
+        ovim bi otišlo <b>drugo</b>.</td></tr>
+    <tr><td><span class="tag">Već sam ga napravio na portalu</span></td>
+        <td>kad si ga uradio ručno. Time se zatvara: aplikacija više ne nudi
+        slanje i ne prijavljuje grešku.</td></tr>
+  </table>
   <p class="muted small">Odobrenje sa nultim PDV-om nema obaveštenje — propis
   traži iznos veći od nule.</p>
 {% endcall %}

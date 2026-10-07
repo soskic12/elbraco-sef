@@ -2901,3 +2901,24 @@ a naš tok otvara samo **nove** šifre.
 dvanaest prodajnih mesta), a sa `--cena N --stvarno` dopunjava. **Ne dira ono
 što već postoji i ne menja nijednu postojeću cenu** — samo dodaje redove kojih
 nema, u jednoj transakciji.
+
+### Obaveštenje napravljeno ručno (07.10.)
+
+Ona četiri obaveštenja koja su pala sa `SEF 400` su u međuvremenu **napravljena
+na portalu**. Dugme „Pošalji ponovo“ bi tada poslalo dobavljaču **drugo**
+obaveštenje — a to se ne može povući. Bane je pitao pre nego što je kliknuo.
+
+Zato se dodaje drugo dugme, **„Već sam ga napravio na portalu“**: zapisuje ko i
+kad, pa aplikacija više ne nudi slanje i ne prijavljuje grešku. `uspelo` ostaje
+`False` — nije ga poslala app, i to ostaje tačno — a `zavrseno` je `True`, jer
+dobavljač ga ima.
+
+Dugme za ponovno slanje sada traži potvrdu i u njoj izričito kaže da bi, ako
+obaveštenje već postoji, otišlo drugo.
+
+`izvestaj` broji tri korpe umesto dve: poslato, ručno na portalu, nije poslato.
+Bez toga bi zauvek prijavljivao četiri greške za nešto što je završeno.
+
+**Posledica po dijagnostiku:** SEF-ov tekst greške za `400` još nemamo. Dobićemo
+ga tek kad padne **sledeće** obaveštenje — poruka od tada nosi telo odgovora.
+Pogađati popravku i slati dobavljaču pogrešno obaveštenje ne dolazi u obzir.

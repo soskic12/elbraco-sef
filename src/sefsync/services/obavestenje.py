@@ -81,6 +81,32 @@ def telo_zahteva(doc: Document) -> dict:
     }
 
 
+def zabelezi_rucno(document_id: int, korisnik: str) -> str:
+    """Covek je obavestenje napravio na portalu - app vise ne nudi slanje.
+
+    Bez ovoga bi izvestaj zauvek prijavljivao gresku za nesto sto je zavrseno,
+    a neko bi pre ili kasnije kliknuo "posalji ponovo" i poslao dobavljacu
+    **drugo** obavestenje - sto se ne moze povuci.
+    """
+    with session_scope() as session:
+        red = session.get(ObavestenjeOPrethodnomPorezu, document_id)
+        if red is None:
+            raise NeMozeObavestenje("Za ovaj dokument nema zapisa o obaveštenju.")
+        if red.uspelo:
+            return f"Obaveštenje {red.broj} je app već poslala — nema šta da se beleži."
+        red.rucno_potvrdio = korisnik
+        red.rucno_u = utcnow()
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="obavestenje.rucno",
+                document_id=document_id,
+                detail=f"{red.broj}: napravljeno na portalu",
+            )
+        )
+        return f"Zabeleženo: obaveštenje {red.broj} je napravljeno ručno na portalu."
+
+
 def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str]:
     """Salje obavestenje i pamti trag. Vraca (da li je poslato, poruka za coveka).
 

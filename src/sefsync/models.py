@@ -795,11 +795,23 @@ class ObavestenjeOPrethodnomPorezu(Base):
     poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     greska: Mapped[str | None] = mapped_column(String(500), default=None)
 
+    # Kad slanje padne, covek obavestenje napravi na portalu - to se belezi
+    # ovde. Bez toga bi izvestaj zauvek prijavljivao gresku za nesto sto je
+    # odavno zavrseno, a neko bi pre ili kasnije kliknuo "posalji ponovo" i
+    # poslao dobavljacu drugo obavestenje (Bane, 07.10.).
+    rucno_potvrdio: Mapped[str | None] = mapped_column(String(100), default=None)
+    rucno_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
     document: Mapped[Document] = relationship()
 
     @property
     def uspelo(self) -> bool:
         return self.sef_notice_id is not None and not self.greska
+
+    @property
+    def zavrseno(self) -> bool:
+        """Posla li ga app ili covek rucno - svejedno, dobavljac ga ima."""
+        return self.uspelo or self.rucno_u is not None
 
 
 class PopustZaPrenos(Base):

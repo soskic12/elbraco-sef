@@ -74,7 +74,11 @@
       {% if obavestenje %}
       <dt>Obaveštenje o prethodnom porezu</dt>
       <dd style="font-weight:400">
-        {% if obavestenje.uspelo %}
+        {% if obavestenje.rucno_u %}
+          <span class="tag ok">napravljeno ručno {{ obavestenje.broj }}</span>
+          <div class="muted small">{{ obavestenje.rucno_potvrdio }},
+            {{ obavestenje.rucno_u.strftime('%d.%m.%Y %H:%M') }} — na portalu</div>
+        {% elif obavestenje.uspelo %}
           <span class="tag ok">poslato {{ obavestenje.broj }}</span>
           <div class="muted small">{{ obavestenje.poslao }},
             {{ obavestenje.poslato_u.strftime('%d.%m.%Y %H:%M') }}
@@ -86,8 +90,13 @@
             „Kreiraj obaveštenje o prethodnom porezu“.
             <div class="muted" style="margin:4px 0">{{ (obavestenje.greska or '')[:400] }}</div>
             {% if user.is_operator %}
-              <form method="post" action="/dokument/{{ doc.id }}/obavestenje">
+              <form class="inline" method="post" action="/dokument/{{ doc.id }}/obavestenje"
+                    onsubmit="return confirm('Šalje se dobavljaču i ne može da se povuče. Ako je obaveštenje već napravljeno na portalu, ovo bi poslalo DRUGO. Nastaviti?')">
                 <button type="submit">Pošalji obaveštenje ponovo</button>
+              </form>
+              <form class="inline" method="post"
+                    action="/dokument/{{ doc.id }}/obavestenje-rucno">
+                <button class="ghost" type="submit">Već sam ga napravio na portalu</button>
               </form>
             {% endif %}
           </div>

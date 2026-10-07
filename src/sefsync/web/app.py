@@ -1673,6 +1673,18 @@ def dokument_obavestenje(doc_id: int, user: Operater) -> RedirectResponse:
     return _back(f"/dokument/{doc_id}", poruka, ok)
 
 
+@app.post("/dokument/{doc_id}/obavestenje-rucno")
+def dokument_obavestenje_rucno(doc_id: int, user: Operater) -> RedirectResponse:
+    """Obavestenje je napravljeno na portalu - app vise ne nudi slanje."""
+    from ..services.obavestenje import NeMozeObavestenje, zabelezi_rucno
+
+    try:
+        poruka = zabelezi_rucno(doc_id, user.login)
+    except NeMozeObavestenje as exc:
+        return _back(f"/dokument/{doc_id}", str(exc), False)
+    return _back(f"/dokument/{doc_id}", poruka)
+
+
 @app.get("/dokument/{doc_id}/komitent", response_class=HTMLResponse)
 def komitent_predlog(request: Request, doc_id: int, user: Operater) -> HTMLResponse:
     """Sve sto se sa fakture zna o dobavljacu koga nema u sifarniku."""

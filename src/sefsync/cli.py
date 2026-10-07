@@ -968,7 +968,7 @@ def cmd_izvestaj(
         ))
         # `uspelo` je svojstvo, ne kolona - uspeh se vidi po tome ima li greske.
         obavestenja = [
-            (o.uspelo, o.greska)
+            (o.uspelo, o.rucno_u is not None, o.greska)
             for o in session.scalars(
                 _select(ObavestenjeOPrethodnomPorezu)
                 .where(ObavestenjeOPrethodnomPorezu.poslato_u >= granica)
@@ -1004,9 +1004,11 @@ def cmd_izvestaj(
     if obavestenja:
         typer.echo("")
         typer.echo("Obaveštenja o prethodnom porezu")
-        uspesna = sum(1 for u, _ in obavestenja if u)
-        typer.echo(f"   {'poslato':<16} {uspesna}")
-        pala = [g for u, g in obavestenja if not u]
+        typer.echo(f"   {'poslato':<16} {sum(1 for u, _, _ in obavestenja if u)}")
+        rucno = sum(1 for u, r, _ in obavestenja if not u and r)
+        if rucno:
+            typer.echo(f"   {'ručno na portalu':<16} {rucno}")
+        pala = [g for u, r, g in obavestenja if not u and not r]
         if pala:
             typer.secho(f"   {'NIJE POSLATO':<16} {len(pala)}", fg="yellow")
             for greska in pala[:5]:
