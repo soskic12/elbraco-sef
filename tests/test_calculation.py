@@ -1647,6 +1647,11 @@ def test_devizna_faktura_cita_obracun_iz_sacuvanog_ubl_a(db, tmp_path):
         '<cac:TaxTotal><cbc:TaxAmount currencyID="RSD">0.00</cbc:TaxAmount>'
         '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="RSD">124426.85</cbc:TaxableAmount>'
         '<cbc:TaxAmount currencyID="RSD">0.00</cbc:TaxAmount></cac:TaxSubtotal></cac:TaxTotal>'
+        # Iznos u valuti fakture - bez njega se kurs ne moze izracunati.
+        '<cac:LegalMonetaryTotal>'
+        '<cbc:TaxExclusiveAmount currencyID="EUR">1058.96</cbc:TaxExclusiveAmount>'
+        '<cbc:PayableAmount currencyID="EUR">1058.96</cbc:PayableAmount>'
+        '</cac:LegalMonetaryTotal>'
         "</Invoice>",
         encoding="utf-8",
     )

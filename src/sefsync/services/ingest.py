@@ -358,12 +358,33 @@ class IngestService:
         doc.supplier_vat = pick(record, "SupplierVatRegistrationNumber") or doc.supplier_vat
         doc.supplier_reg_no = pick(record, "SupplierRegistrationNumber") or doc.supplier_reg_no
 
-        for attr, keys in (
+        # SEF u pregledu mesa valute: `Amount` je u valuti fakture, a
+        # `SumWithoutVat` i `VatAmount` su u **dinarima**. Mereno 07.10. na
+        # KR1384362/26: Amount 1.058,96 EUR, SumWithoutVat 124.426,85 RSD.
+        #
+        # Dok se to upisivalo u istu kolonu, na ekranu je pisalo „osnovica
+        # 124.426,85 EUR“, a preracun u dinare je ispao kurs 1,0000 - jer je
+        # delio dinare dinarima.
+        valuta_zapisa = (pick(record, "Currency") or doc.currency or "RSD").strip().upper()
+        devizna = bool(valuta_zapisa) and valuta_zapisa != "RSD"
+
+        polja = [
             ("amount", ("Amount", "SumWithVat")),
-            ("sum_without_vat", ("SumWithoutVat",)),
-            ("vat_amount", ("VatAmount", "VatSum")),
             ("rounding_amount", ("RoundingAmount",)),
-        ):
+        ]
+        if devizna:
+            # Dinarski iznosi idu tamo gde im je mesto; iznose u valuti fakture
+            # daje UBL, koji ih drzi dosledno.
+            polja += [
+                ("sum_without_vat_rsd", ("SumWithoutVat",)),
+                ("vat_amount_rsd", ("VatAmount", "VatSum")),
+            ]
+        else:
+            polja += [
+                ("sum_without_vat", ("SumWithoutVat",)),
+                ("vat_amount", ("VatAmount", "VatSum")),
+            ]
+        for attr, keys in polja:
             value = as_float(pick(record, *keys))
             if value is not None:
                 setattr(doc, attr, value)
@@ -457,11 +478,14 @@ class IngestService:
         doc.supplier_vat = doc.supplier_vat or ubl.supplier.vat
         doc.supplier_reg_no = doc.supplier_reg_no or ubl.supplier.registration_number
 
+        devizna = (doc.currency or ubl.currency or "RSD").strip().upper() not in ("", "RSD")
         if doc.amount is None and ubl.payable_amount is not None:
             doc.amount = float(ubl.payable_amount)
-        if doc.sum_without_vat is None and ubl.tax_exclusive_amount is not None:
+        # Kod devizne fakture UBL je jedini izvor iznosa u valuti fakture, pa
+        # se uzima i kad je nesto vec upisano - iz pregleda su stizali dinari.
+        if (doc.sum_without_vat is None or devizna) and ubl.tax_exclusive_amount is not None:
             doc.sum_without_vat = float(ubl.tax_exclusive_amount)
-        if doc.vat_amount is None and ubl.tax_amount is not None:
+        if (doc.vat_amount is None or devizna) and ubl.tax_amount is not None:
             doc.vat_amount = float(ubl.tax_amount)
         if ubl.taxable_amount_rsd is not None:
             doc.sum_without_vat_rsd = float(ubl.taxable_amount_rsd)

@@ -295,37 +295,35 @@ def predlog_dobavljaca(
     return f"Možda je {k.a} {k.nz}{mesto}{rep}."
 
 
-def dinarski_obracun(doc: Document) -> tuple[float | None, float | None]:
-    """Osnovica i PDV u dinarima za deviznu fakturu. Cita i iz sacuvanog UBL-a.
+def dinarski_obracun(doc: Document) -> tuple[float | None, float | None, float | None]:
+    """Osnovica i PDV u dinarima, i osnovica u valuti fakture - sve iz UBL-a.
 
-    Polja se pune pri uvozu, pa ih dokumenti koji su stigli pre te izmene nemaju
-    - a oni su na disku vec od prvog dana. Bez ovoga bi svaka starija devizna
-    faktura stala sa "nema dinarskog obracuna", iako obracun stoji u XML-u
-    (Banca Intesa KR1384362/26, 06.10.).
+    Oba broja moraju iz **istog izvora**, inace se dele jabuke i kruske. SEF u
+    pregledu salje `Amount` u valuti fakture a `SumWithoutVat` u dinarima
+    (mereno 07.10. na KR1384362/26: 1.058,96 EUR i 124.426,85 RSD), pa je
+    preracun jednom vec ispao kurs 1,0000 - delio je dinare dinarima.
+
+    Zato se kod devizne fakture uvek cita UBL: on oba iznosa drzi dosledno, a
+    `ubl_bajtovi` ga vrati i kad je fajl odavno arhiviran.
     """
-    if doc.sum_without_vat_rsd is not None:
-        return doc.sum_without_vat_rsd, doc.vat_amount_rsd
-
     try:
         from ..services.arhiva import ubl_bajtovi
         from ..ubl.parser import parse_ubl
 
         sadrzaj = ubl_bajtovi(doc)
-        if not sadrzaj:
-            return None, None
-        ubl = parse_ubl(sadrzaj)
-    except Exception as exc:  # noqa: BLE001 - citanje fajla ne sme da obori nacrt
+        if sadrzaj:
+            ubl = parse_ubl(sadrzaj)
+            if ubl.taxable_amount_rsd is not None and ubl.tax_exclusive_amount:
+                return (
+                    float(ubl.taxable_amount_rsd),
+                    float(ubl.tax_amount_rsd) if ubl.tax_amount_rsd is not None else None,
+                    float(ubl.tax_exclusive_amount),
+                )
+    except Exception as exc:  # noqa: BLE001 - citanje ne sme da obori nacrt
         log.info("UBL za #%s nije procitan: %s", doc.id, exc)
-        return None, None
 
-    if ubl.taxable_amount_rsd is None:
-        return None, None
-    osnovica = float(ubl.taxable_amount_rsd)
-    pdv = float(ubl.tax_amount_rsd) if ubl.tax_amount_rsd is not None else None
-    # Zapise se da se sledeci put ne cita fajl.
-    doc.sum_without_vat_rsd = osnovica
-    doc.vat_amount_rsd = pdv
-    return osnovica, pdv
+    # Rezerva kad UBL nije dostupan: ono sto je upisano pri uvozu.
+    return doc.sum_without_vat_rsd, doc.vat_amount_rsd, doc.sum_without_vat
 
 
 def vrsta_pdv_evidencije(
@@ -734,8 +732,8 @@ def pripremi(
         pdv_rsd = None
         valuta = (doc.currency or "RSD").strip().upper()
         if valuta and valuta != "RSD":
-            osnovica_rsd, pdv_rsd = dinarski_obracun(doc)
-            osnovica_val = doc.sum_without_vat or doc.amount
+            osnovica_rsd, pdv_rsd, osnovica_val = dinarski_obracun(doc)
+            osnovica_val = osnovica_val or doc.amount
             if osnovica_rsd and osnovica_val:
                 kurs = float(osnovica_rsd) / float(osnovica_val)
                 nacrt.napomene.append(

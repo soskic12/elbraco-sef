@@ -2780,3 +2780,33 @@ gleda pogrešnu bazu“. Posle 06.10. to nije teorijska mogućnost.
   Stajala su i zastarevala.
 * `Settings.pdf_dir` — folder koji se pravio pri svakom čitanju podešavanja, a
   u njega nikad ništa nije upisano; PDF se uvek uzima sa SEF-a.
+
+### SEF u pregledu meša valute (07.10.)
+
+Provera na Banca Intesa KR1384362/26 pokazala je da popravka iz 05.10. nije
+radila: na ekranu je pisalo **„Osnovica 124 426,85 EUR“** uz „Za plaćanje
+1 058,96 EUR“, a napomena je rekla *„preračunato u dinare po kursu 1,0000“*.
+
+Uzrok je u SEF-ovom pregledu, ne kod nas prvobitno:
+
+| polje iz `purchase_overview` | vrednost | valuta |
+|---|---:|---|
+| `Amount` | 1.058,96 | **EUR** |
+| `SumWithoutVat` | 124.426,85 | **RSD** |
+| `VatAmount` | 0,00 | RSD |
+
+Oba su išla u ista polja dokumenta. Zato je ekran prikazivao dinare sa oznakom
+EUR, a kurs se računao kao `osnovica_RSD / osnovica_RSD` = 1,0000 — delili smo
+dinare dinarima i „preračunali“ ih u same sebe.
+
+Dve popravke:
+
+* **Kod devizne fakture** `SumWithoutVat` i `VatAmount` iz pregleda idu u
+  `*_rsd` polja, gde im je mesto; iznose u valuti fakture daje **UBL**, koji ih
+  drži dosledno. Dinarska faktura se puni kao i do sada.
+* **Kurs se računa iz jednog izvora.** `dinarski_obracun` sada uvek čita UBL za
+  deviznu fakturu i vraća oba broja iz istog XML-a. `ubl_bajtovi` ga vrati i
+  kad je fajl arhiviran.
+
+Bogdanov ručni unos je bio tačan: `088/03226` nosi 124.426,85 sa ID PDV 75.
+Greška je bila samo naša, i nije stigla u ERP.

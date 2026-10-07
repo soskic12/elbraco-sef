@@ -399,3 +399,51 @@ def test_prisilno_preuzimanje_ne_probija_zastitu(db, faktura_xml, monkeypatch):
     with db.session_scope() as session:
         doc = session.scalar(select(Document).where(Document.sef_invoice_id == 494482))
         assert doc.ubl_path is None
+
+
+def test_sef_salje_dinare_u_polju_za_osnovicu(db):
+    """SEF u pregledu meša valute — to ne sme da završi u istoj koloni.
+
+    Mereno 07.10. na KR1384362/26: `Amount` 1.058,96 EUR, a `SumWithoutVat`
+    124.426,85 **u dinarima**. Dok je oboje išlo u ista polja, na ekranu je
+    pisalo „osnovica 124.426,85 EUR“, a preračun u dinare ispao kurs 1,0000.
+    """
+    from sefsync.models import Document
+    from sefsync.services.ingest import IngestService
+
+    zapis = {
+        "InvoiceId": 480218010, "DocumentNumber": "KR1384362/26",
+        "SupplierName": "BANCA INTESA", "SupplierVatRegistrationNumber": "100001159",
+        "Amount": 1058.96, "SumWithoutVat": 124426.85, "VatAmount": 0.0,
+        "Currency": "EUR", "Status": "Approved",
+    }
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=480218010)
+        session.add(doc)
+        session.flush()
+        IngestService.__new__(IngestService)._apply_overview(doc, zapis)
+        session.flush()
+
+        assert doc.amount == 1058.96                 # valuta fakture
+        assert doc.sum_without_vat_rsd == 124426.85  # dinari idu tamo gde im je mesto
+        assert doc.sum_without_vat is None, "dinarski iznos ne sme da glumi osnovicu u EUR"
+
+
+def test_dinarska_faktura_puni_polja_kao_i_do_sada(db):
+    from sefsync.models import Document
+    from sefsync.services.ingest import IngestService
+
+    zapis = {
+        "InvoiceId": 1, "DocumentNumber": "FA-1", "Amount": 1200.0,
+        "SumWithoutVat": 1000.0, "VatAmount": 200.0, "Currency": "RSD",
+    }
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=1)
+        session.add(doc)
+        session.flush()
+        IngestService.__new__(IngestService)._apply_overview(doc, zapis)
+
+        assert (doc.sum_without_vat, doc.vat_amount) == (1000.0, 200.0)
+        assert doc.sum_without_vat_rsd is None
