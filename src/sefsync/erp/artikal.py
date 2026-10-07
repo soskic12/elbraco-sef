@@ -614,7 +614,11 @@ def bez_cenovnika(conn: Connection, sifra: str) -> tuple[dict | None, list[str],
 
 
 def dopuni_cenovnike(
-    sifra: str, cena_mp: float, *, produkcija: bool = False
+    sifra: str,
+    cena_mp: float,
+    *,
+    samo: list[str] | None = None,
+    produkcija: bool = False,
 ) -> str:
     """Dodaje sifri koja postoji u 099 redove po magacinima i prodajnim mestima.
 
@@ -629,6 +633,13 @@ def dopuni_cenovnike(
         art, magacini, mesta = bez_cenovnika(conn, sifra)
         if art is None:
             raise ValueError(f"Šifre {sifra} nema u jedinstvenom šifarniku (099).")
+        # Kod dopune postojece sifre covek je vec odlucio gde artikal ide.
+        # Spisak mesta je isti kao kod otvaranja nove, a to je ovde pregrubo:
+        # 87622 je Dell laptop, a spisak nudi i kafic (07.10.).
+        if samo:
+            trazena = {m.strip() for m in samo if m.strip()}
+            magacini = [m for m in magacini if m in trazena]
+            mesta = [m for m in mesta if m in trazena]
         if not magacini and not mesta:
             return f"Šifra {sifra} već ima sve cenovnike — nema šta da se dopuni."
 

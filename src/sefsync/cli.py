@@ -864,6 +864,7 @@ def cmd_zaboravi_upis(
 def cmd_dopuni_cenovnike(
     sifra: str = typer.Argument(..., help="Šifra artikla iz jedinstvenog šifarnika."),
     cena: float = typer.Option(None, "--cena", help="Maloprodajna cena za sva mesta."),
+    samo: str = typer.Option(None, "--samo", help="Samo ta mesta, npr. 002,003,009."),
     stvarno: bool = typer.Option(False, "--stvarno", help="Bez ovoga samo ispisuje."),
 ) -> None:
     """Dodaje postojećoj šifri redove po magacinima i prodajnim mestima.
@@ -889,6 +890,8 @@ def cmd_dopuni_cenovnike(
                f"kategorija {art['shkat'] or '—'}")
     typer.echo(f"   fali u magacinima:      {', '.join(magacini) or '—'}")
     typer.echo(f"   fali u prodajnim mestima: {', '.join(mesta) or '—'}")
+    typer.echo("   (spisak je isti kao kod otvaranja nove šifre — ako artikal "
+               "ne ide svuda, suzi ga sa --samo)")
 
     if not magacini and not mesta:
         typer.secho("Nema šta da se dopuni.", fg="green")
@@ -902,7 +905,9 @@ def cmd_dopuni_cenovnike(
     podesavanja = get_settings()
     try:
         opis = dopuni_cenovnike(
-            sifra.strip(), cena, produkcija=podesavanja.erp_allow_production_write
+            sifra.strip(), cena,
+            samo=[x for x in (samo or "").split(",") if x.strip()] or None,
+            produkcija=podesavanja.erp_allow_production_write,
         )
     except ValueError as exc:
         typer.secho(str(exc), fg="red")
