@@ -206,12 +206,23 @@ def nova_lozinka(duzina: int = 28) -> str:
     return "".join(secrets.choice(azbuka) for _ in range(duzina))
 
 
-def skripta(nalog: str = "sefsync_erp", lozinka: str | None = None) -> dict:
+def skripta(
+    nalog: str = "sefsync_erp",
+    lozinka: str | None = None,
+    *,
+    upis_u_produkciju: bool = True,
+) -> dict:
     """Naredbe za zaseban nalog panela i red koji ide u `.env`.
 
     Stari nalog se **ne dira**. `elbraco_dev_ro` koristi drugi projekat, pa mu se
     ovim putem nista ne oduzima (Bane, 06.10.: "ovo elbraco dev ro ne bismo
     smeli tek tako oduzimati kad ga koristi drugi projekat").
+
+    `upis_u_produkciju=False` pravi nalog koji sve cita, a pise **samo u test
+    bazu**. To je nalog za razvojnu masinu: bez njega bi razvojna i server opet
+    delili jedan nalog, pa bi se razdvajanje svelo na promenu imena. Ovako
+    razvojna fizicki ne moze da upise u produkciju, pa pravilo "u produkciju se
+    pise samo sa servera" ne visi na prekidacu u `.env`-u.
     """
     podesavanja = get_settings()
     url = resolve_erp_url()
@@ -228,13 +239,16 @@ def skripta(nalog: str = "sefsync_erp", lozinka: str | None = None) -> dict:
     citanje = [f"ELBS_{g}" for g in range(godina, godina - GODINA_UNAZAD - 1, -1)]
     if test and test not in citanje:
         citanje.append(test)
-    upis = [radna] + ([test] if test and test != radna else [])
+    u_test = [test] if test and test != radna else []
+    upis = ([radna] + u_test) if upis_u_produkciju else u_test
 
     # Skripta se sme pustiti vise puta: ako nalog vec postoji, samo mu se
     # postavi lozinka. Bez toga bi drugo pustanje puklo na CREATE LOGIN, a bas
     # se ponavlja kad se lozinka iz .env-a i ona iz skripte raziđu.
     redovi = [
-        "-- Zaseban nalog za panel e-faktura.",
+        "-- Zaseban nalog za panel e-faktura."
+        if upis_u_produkciju
+        else "-- Nalog za razvojnu masinu: cita sve, pise SAMO u test bazu.",
         "-- Pokrece ga neko sa pravima na SQL serveru; aplikacija ovo ne moze sama.",
         "-- Stari nalog se ne dira - koristi ga drugi projekat.",
         "-- Sme da se pusti vise puta: nista ne duplira, samo dopuni sta fali.",
@@ -265,6 +279,13 @@ def skripta(nalog: str = "sefsync_erp", lozinka: str | None = None) -> dict:
     redovi += [
         "-- Nista vise: ni UPDATE, ni DELETE, ni EXECUTE, ni INSERT na DARTIKLI",
         "-- (nju puni nocni posao), ni pristup bazama Logistike i ostalih projekata.",
+    ]
+    if not upis_u_produkciju:
+        redovi += [
+            f"-- U {radna} ovaj nalog NEMA pravo upisa - to je i poenta. Razvojna",
+            "-- masina moze da proba sve, a produkciju ne moze da dirne.",
+        ]
+    redovi += [
         "",
         "-- ---------------------------------------------------------------------",
         "-- Provera. Pusti i ovaj red, pa pogledaj sta je vratio:",

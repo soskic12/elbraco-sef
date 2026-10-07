@@ -148,3 +148,24 @@ def test_skripta_nosi_sopstvenu_proveru(monkeypatch):
 
     assert "SELECT @@SERVERNAME AS server, SUSER_ID('sefsync_erp') AS nalog;" in s["sql"]
     assert "194.146.57.216" in s["sql"]
+
+
+def test_nalog_za_razvojnu_ne_pise_u_produkciju(monkeypatch):
+    """Inace bi razvojna i server opet delili nalog, pa bi razdvajanje bilo samo ime."""
+    monkeypatch.setattr(n, "resolve_erp_url", lambda: VEZA)
+
+    class Lazna:
+        erp_test_db_name = "ELBSX_2026"
+        erp_db_url = None
+        erp_secrets_file = None
+
+    monkeypatch.setattr(n, "get_settings", lambda: Lazna())
+    s = n.skripta("sefsync_dev", "l-o-z-1-n-k-a", upis_u_produkciju=False)
+
+    assert s["upis"] == ["ELBSX_2026"]
+    # Citanje ostaje svuda - razvoj mora da vidi prave podatke.
+    assert "ELBS_2026" in s["citanje"]
+    produkcija = s["sql"].split("USE [ELBS_2026];", 1)[1].split("USE [", 1)[0]
+    assert "GRANT INSERT" not in produkcija
+    test = s["sql"].split("USE [ELBSX_2026];", 1)[1]
+    assert test.count("GRANT INSERT") == len(n.TABELE_UPISA)

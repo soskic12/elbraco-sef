@@ -2489,11 +2489,13 @@ def cmd_erp_check() -> None:
         raise typer.Exit(1) from exc
 
 
-def _ispisi_skriptu(novi: str, lozinka: str | None, sql_fajl: str | None) -> None:
+def _ispisi_skriptu(
+    novi: str, lozinka: str | None, sql_fajl: str | None, u_produkciju: bool = True
+) -> None:
     """Naredbe za zaseban ERP nalog i red za `.env`, iz istog pokretanja."""
     from .erp.nalog import TABELE_UPISA, skripta
 
-    s = skripta(novi, lozinka)
+    s = skripta(novi, lozinka, upis_u_produkciju=u_produkciju)
     if s.get("greska"):
         typer.secho(s["greska"], fg="yellow")
         raise typer.Exit(1)
@@ -2543,6 +2545,11 @@ def cmd_erp_nalog(
     ),
     lozinka: str = typer.Option(None, help="Lozinka za novi nalog; bez nje se izmišlja."),
     sql_fajl: str = typer.Option(None, "--sql-fajl", help="Upiši naredbe u ovaj fajl."),
+    bez_produkcije: bool = typer.Option(
+        False,
+        "--bez-produkcije",
+        help="Nalog za razvojnu mašinu: čita sve, piše samo u test bazu.",
+    ),
 ) -> None:
     """Šta ERP nalog panela sme, i šta mu od toga aplikaciji fali.
 
@@ -2564,7 +2571,7 @@ def cmd_erp_nalog(
             raise typer.Exit(1)
         typer.echo("")
         typer.secho("Naredbe ispod ne zavise od te veze — pusti ih pa probaj ponovo.", fg="cyan")
-        _ispisi_skriptu(novi, lozinka, sql_fajl)
+        _ispisi_skriptu(novi, lozinka, sql_fajl, not bez_produkcije)
         raise typer.Exit(1)
 
     typer.echo(f"nalog       : {p['nalog']}  (u bazi: {p['korisnik']})")
@@ -2607,7 +2614,7 @@ def cmd_erp_nalog(
         typer.secho("Sve stoji: nalog je sopstveni i ima tačno što mu treba.", fg="green")
 
     if novi:
-        _ispisi_skriptu(novi, lozinka, sql_fajl)
+        _ispisi_skriptu(novi, lozinka, sql_fajl, not bez_produkcije)
 
 
 
