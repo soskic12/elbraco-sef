@@ -110,3 +110,33 @@ def test_izmisljena_lozinka_prolazi_kroz_url_nedirnuta():
     assert len(lozinka) == 28
     # Znakovi koji bi se u .env-u, URL-u ili ODBC stringu izgubili ili prekodirali.
     assert not set(lozinka) & set("@:/?#&%\"' ;=")
+
+
+def test_skripta_sme_da_se_pusti_dva_puta(monkeypatch):
+    """Drugo puštanje ne sme da pukne na CREATE LOGIN - tako se resetuje lozinka."""
+    s = _skripta(monkeypatch)
+
+    assert "IF NOT EXISTS (SELECT 1 FROM sys.server_principals" in s["sql"]
+    assert "ALTER LOGIN [sefsync_erp] WITH PASSWORD" in s["sql"]
+    # CREATE USER i dodavanje u rolu takođe pod uslovom, u svakoj bazi.
+    assert s["sql"].count("IF NOT EXISTS (SELECT 1 FROM sys.database_principals") == 6
+    assert s["sql"].count("ALTER ROLE db_datareader ADD MEMBER") == 6
+
+
+def test_objasnjenje_za_odbijenu_prijavu():
+    redovi = n.objasni_gresku(RuntimeError("[28000] Login failed for user 'x'. (18456)"), "x")
+    tekst = chr(10).join(redovi)
+
+    assert "odbijena" in tekst
+    assert "ISTOG pokretanja" in tekst
+    assert "ALTER LOGIN [x] WITH PASSWORD" in tekst
+    # Bez traceback-a i bez ODBC smeća.
+    assert "28000" not in tekst
+
+
+def test_objasnjenje_razlikuje_bazu_od_prijave():
+    nema_baze = n.objasni_gresku(RuntimeError("(4060) Cannot open database"), "x")
+    mreza = n.objasni_gresku(RuntimeError("[08001] server does not exist"), "x")
+
+    assert "CREATE USER" in chr(10).join(nema_baze)
+    assert "mreža" in chr(10).join(mreza)

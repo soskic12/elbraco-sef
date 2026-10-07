@@ -110,6 +110,41 @@ def _stanje_baze(osnovna, baza: str) -> dict:
         eng.dispose()
 
 
+def objasni_gresku(exc: Exception, nalog: str) -> list[str]:
+    """Ljudski prevod cestih ODBC gresaka pri kacenju na ERP.
+
+    Komanda se pokrece bas kad veza ne radi, pa je traceback od dvesta redova
+    najgore sto moze da ispise. Ovde se vraca kratko objasnjenje i sta proveriti.
+    """
+    poruka = str(exc)
+    if "18456" in poruka:
+        return [
+            f"Prijava naloga „{nalog}“ je odbijena.",
+            "",
+            "SQL Server namerno ne razlikuje „nalog ne postoji“ od „lozinka ne",
+            "odgovara“ — obe greške izgledaju isto. Po redu verovatnoće:",
+            "",
+            "  1. Naredbe (CREATE LOGIN...) još nisu puštene na bazi.",
+            "  2. Lozinka u .env-u i lozinka u naredbama nisu iz ISTOG pokretanja —",
+            "     `erp-nalog --novi` izmisli novu lozinku svaki put. Pusti ga jednom,",
+            "     sa `--sql-fajl`, pa uzmi i naredbe i red za .env iz tog jednog ispisa.",
+            "  3. Naredbe su puštene na drugom serveru ili instanci.",
+            "",
+            "Ako nisi siguran koja je lozinka prošla, postavi je ponovo:",
+            f"  ALTER LOGIN [{nalog}] WITH PASSWORD = '<ista ona iz .env-a>';",
+        ]
+    if "4060" in poruka or "cannot open database" in poruka.lower():
+        return [
+            f"Nalog „{nalog}“ se prijavio, ali ne sme da otvori bazu iz veze.",
+            "Fali mu CREATE USER u toj bazi — pusti deo naredbi za nju.",
+        ]
+    if "08001" in poruka or "timeout" in poruka.lower():
+        return [
+            "Server baze se ne javlja. Adresa, port ili mreža — nalog tu nije kriv.",
+        ]
+    return [str(exc).splitlines()[0][:200]]
+
+
 def pregled() -> dict:
     """Sta nalog koji panel trenutno koristi sme, po bazama, i sta mu fali."""
     podesavanja = get_settings()
@@ -118,7 +153,16 @@ def pregled() -> dict:
         return {"greska": "Veza ka ERP bazi nije podešena."}
     osnovna = make_url(url)
 
-    with get_erp_engine().connect() as conn:
+    try:
+        veza = get_erp_engine().connect()
+    except Exception as exc:  # noqa: BLE001 - ovde se bas meri da li veza radi
+        return {
+            "greska": f"Ne mogu da se nakačim na ERP kao „{osnovna.username}“.",
+            "objasnjenje": objasni_gresku(exc, osnovna.username or "?"),
+            "pokusani_nalog": osnovna.username,
+        }
+
+    with veza as conn:
         nalog = str(conn.execute(text("select suser_sname()")).scalar())
         korisnik = str(conn.execute(text("select user_name()")).scalar())
         radna = str(conn.execute(text("select db_name()")).scalar())
@@ -185,20 +229,34 @@ def skripta(nalog: str = "sefsync_erp", lozinka: str | None = None) -> dict:
         citanje.append(test)
     upis = [radna] + ([test] if test and test != radna else [])
 
+    # Skripta se sme pustiti vise puta: ako nalog vec postoji, samo mu se
+    # postavi lozinka. Bez toga bi drugo pustanje puklo na CREATE LOGIN, a bas
+    # se ponavlja kad se lozinka iz .env-a i ona iz skripte raziđu.
     redovi = [
         "-- Zaseban nalog za panel e-faktura.",
         "-- Pokrece ga neko sa pravima na SQL serveru; aplikacija ovo ne moze sama.",
         "-- Stari nalog se ne dira - koristi ga drugi projekat.",
+        "-- Sme da se pusti vise puta: nista ne duplira, samo dopuni sta fali.",
         "",
         "USE master;",
-        f"CREATE LOGIN [{nalog}] WITH PASSWORD = '{lozinka}',",
-        f"    DEFAULT_DATABASE = [{radna}], CHECK_POLICY = ON;",
+        f"IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '{nalog}')",
+        f"    CREATE LOGIN [{nalog}] WITH PASSWORD = '{lozinka}',",
+        f"        DEFAULT_DATABASE = [{radna}], CHECK_POLICY = ON;",
+        "ELSE",
+        f"    ALTER LOGIN [{nalog}] WITH PASSWORD = '{lozinka}';",
         "",
     ]
     for baza in citanje:
         redovi.append(f"USE [{baza}];")
-        redovi.append(f"CREATE USER [{nalog}] FOR LOGIN [{nalog}];")
-        redovi.append(f"ALTER ROLE db_datareader ADD MEMBER [{nalog}];")
+        redovi.append(
+            f"IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '{nalog}')"
+        )
+        redovi.append(f"    CREATE USER [{nalog}] FOR LOGIN [{nalog}];")
+        redovi.append("IF NOT EXISTS (SELECT 1 FROM sys.database_role_members m")
+        redovi.append("    JOIN sys.database_principals r ON r.principal_id = m.role_principal_id")
+        redovi.append("    JOIN sys.database_principals u ON u.principal_id = m.member_principal_id")
+        redovi.append(f"    WHERE r.name = 'db_datareader' AND u.name = '{nalog}')")
+        redovi.append(f"    ALTER ROLE db_datareader ADD MEMBER [{nalog}];")
         if baza in upis:
             for tabela in TABELE_UPISA:
                 redovi.append(f"GRANT INSERT ON dbo.{tabela} TO [{nalog}];")

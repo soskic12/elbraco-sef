@@ -2489,6 +2489,53 @@ def cmd_erp_check() -> None:
         raise typer.Exit(1) from exc
 
 
+def _ispisi_skriptu(novi: str, lozinka: str | None, sql_fajl: str | None) -> None:
+    """Naredbe za zaseban ERP nalog i red za `.env`, iz istog pokretanja."""
+    from .erp.nalog import TABELE_UPISA, skripta
+
+    s = skripta(novi, lozinka)
+    if s.get("greska"):
+        typer.secho(s["greska"], fg="yellow")
+        raise typer.Exit(1)
+
+    typer.echo("")
+    typer.echo("=" * 72)
+    typer.echo(f"Naredbe za nalog {s['nalog']}")
+    typer.echo(f"  čita : {', '.join(s['citanje'])}")
+    typer.echo(f"  piše : {', '.join(s['upis'])}  —  {len(TABELE_UPISA)} tabela")
+    typer.echo("=" * 72)
+    if sql_fajl:
+        from pathlib import Path
+
+        # Red za .env ide u isti fajl, kao komentar. Lozinka je u njemu ionako
+        # (CREATE LOGIN), a ovako ne mogu da se raziđu — najčešći razlog zašto
+        # prijava novog naloga padne je .env iz jednog, a naredbe iz drugog
+        # pokretanja.
+        Path(sql_fajl).write_text(
+            s["sql"] + "\n\n-- Red za C:\\efakture\\.env, iz ovog istog pokretanja:\n-- "
+            + s["env"]
+            + "\n",
+            encoding="utf-8",
+        )
+        typer.echo(f"Naredbe upisane u {sql_fajl}")
+        typer.secho(
+            f"U tom fajlu je i lozinka — obriši ga kad završiš ({sql_fajl}).", fg="yellow"
+        )
+    else:
+        typer.echo(s["sql"])
+    typer.echo("")
+    typer.echo("Posle toga u C:\\efakture\\.env dodaj jedan red:")
+    typer.echo("")
+    typer.echo("  " + s["env"])
+    typer.echo("")
+    typer.secho(
+        "Lozinka se nigde ne pamti i svako pokretanje izmišlja novu — uzmi naredbe "
+        "i red za .env iz ISTOG ispisa. Posle restarta proveri sa `sefsync erp-nalog`: "
+        "mora da piše da je veza sopstvena.",
+        fg="cyan",
+    )
+
+
 @app.command("erp-nalog")
 def cmd_erp_nalog(
     novi: str = typer.Option(
@@ -2504,11 +2551,20 @@ def cmd_erp_nalog(
     prava na nivou servera.
     """
     _boot()
-    from .erp.nalog import TABELE_UPISA, pregled, skripta
+    from .erp.nalog import pregled
 
     p = pregled()
     if p.get("greska"):
-        typer.secho(p["greska"], fg="yellow")
+        typer.secho(p["greska"], fg="red")
+        for red in p.get("objasnjenje", []):
+            typer.echo(red)
+        # Sa `--novi` se ne staje: naredbe se sastavljaju iz podešavanja, ne iz
+        # veze, a trebaju baš kad veza ne radi.
+        if not novi:
+            raise typer.Exit(1)
+        typer.echo("")
+        typer.secho("Naredbe ispod ne zavise od te veze — pusti ih pa probaj ponovo.", fg="cyan")
+        _ispisi_skriptu(novi, lozinka, sql_fajl)
         raise typer.Exit(1)
 
     typer.echo(f"nalog       : {p['nalog']}  (u bazi: {p['korisnik']})")
@@ -2550,37 +2606,9 @@ def cmd_erp_nalog(
         typer.echo("")
         typer.secho("Sve stoji: nalog je sopstveni i ima tačno što mu treba.", fg="green")
 
-    if not novi:
-        return
+    if novi:
+        _ispisi_skriptu(novi, lozinka, sql_fajl)
 
-    s = skripta(novi, lozinka)
-    if s.get("greska"):
-        typer.secho(s["greska"], fg="yellow")
-        raise typer.Exit(1)
-
-    typer.echo("")
-    typer.echo("=" * 72)
-    typer.echo(f"Naredbe za nalog {s['nalog']}")
-    typer.echo(f"  čita : {', '.join(s['citanje'])}")
-    typer.echo(f"  piše : {', '.join(s['upis'])}  —  {len(TABELE_UPISA)} tabela")
-    typer.echo("=" * 72)
-    if sql_fajl:
-        from pathlib import Path
-
-        Path(sql_fajl).write_text(s["sql"] + "\n", encoding="utf-8")
-        typer.echo(f"Naredbe upisane u {sql_fajl}")
-    else:
-        typer.echo(s["sql"])
-    typer.echo("")
-    typer.echo("Posle toga u C:\\efakture\\.env dodaj jedan red:")
-    typer.echo("")
-    typer.echo("  " + s["env"])
-    typer.echo("")
-    typer.secho(
-        "Lozinka se nigde ne pamti — prepiši je sada. Posle restarta proveri sa "
-        "`sefsync erp-nalog`: mora da piše da je veza sopstvena.",
-        fg="cyan",
-    )
 
 
 @app.command("erp-tables")
