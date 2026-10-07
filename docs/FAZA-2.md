@@ -2810,3 +2810,31 @@ Dve popravke:
 
 Bogdanov ručni unos je bio tačan: `088/03226` nosi 124.426,85 sa ID PDV 75.
 Greška je bila samo naša, i nije stigla u ERP.
+
+### Osvežavanje: 369 s umesto pola sata (07.10.)
+
+Posle popravke sa keširanjem veza, `nacrti --osvezi` je na serveru trajao
+**369 sekundi** za oko 420 dokumenata. Ranije pola sata. Komanda sada sama
+ispisuje trajanje, pa se više ne procenjuje.
+
+### Zaustavljeno što niko ne može da reši
+
+Coffee Center 26-FA001010834 stajao je kao „zaustavljeno: artikal nema cenu u
+objektu 071“, a Dule je rekao da cene postoje — i bio je u pravu. Provereno
+pozivom **naše** funkcije nad produkcijom: `200152 → 215,00`,
+`2000153 → 225,00`, `87597 → 32.900,00`. Kod je radio.
+
+Stvar je bila u tome što je dokument **arhiviran**. `osvezi_sve` i
+`osvezi_zapele` namerno preskaču arhivu, pa se njegovo stanje nikad nije
+preračunalo — ostalo je zapisano od 14.09. A `nacrti --spisak` arhivu **nije**
+filtrirao, pa je prikazivao nešto na šta se ne može uticati. Poslalo nas je u
+proveru dvaput.
+
+Sada i brojači i spisak preskaču arhivu, kao i osvežavanje. Isti kriterijum na
+sva tri mesta.
+
+### Log koji ćuti dvosmisleno
+
+Red „Odmrznuto nacrta“ ispisivao se **samo kad je nešto odmrznuto**, pa se iz
+loga nije moglo razlikovati „radi i nema šta“ od „uopšte se ne izvršava“. Isto
+i za dovršavanje upisa. Sada se piše uvek, i kad je nula.

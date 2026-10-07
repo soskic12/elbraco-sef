@@ -48,8 +48,12 @@ class SyncWorker:
                     from .nacrti import osvezi_zapele
 
                     ishod = osvezi_zapele(limit=self.settings.osvezi_zapele_limit)
-                    if ishod["odmrznuto"]:
-                        log.info("Odmrznuto nacrta: %(odmrznuto)s od %(pregledano)s", ishod)
+                    # Pise se uvek, i kad je nula. Ranije je red izostajao kad
+                    # nista nije odmrznuto, pa se iz loga nije moglo razlikovati
+                    # "radi i nema sta" od "uopste se ne radi" - a to je pitanje
+                    # koje se postavilo prvi put kad je nesto zapelo (07.10.).
+                    log.info("Zapeli nacrti: odmrznuto %(odmrznuto)s od %(pregledano)s, "
+                             "greska %(greska)s", ishod)
                 except Exception:  # noqa: BLE001 - ERP ume da bude nedostupan
                     log.exception("Osvežavanje zapelih nacrta nije prošlo")
 
@@ -64,8 +68,7 @@ class SyncWorker:
                         limit=self.settings.dovrsi_upise_limit,
                         produkcija=self.settings.erp_allow_production_write,
                     )
-                    if ishod["nasao"]:
-                        log.info("Dovrseno upisa: %(upisao)s od %(nasao)s", ishod)
+                    log.info("Zaostali upisi: dovrseno %(upisao)s od %(nasao)s", ishod)
                 except Exception:  # noqa: BLE001 - ciklus ne sme da stane zbog ovoga
                     log.exception("Dovršavanje zaostalih upisa nije prošlo")
             elapsed = time.monotonic() - started

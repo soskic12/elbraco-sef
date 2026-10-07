@@ -718,7 +718,7 @@ def cmd_nacrti(
     from sqlalchemy import func as _func
     from sqlalchemy import select as _select
 
-    from .models import NacrtKalkulacije, StanjeNacrta
+    from .models import Document, NacrtKalkulacije, StanjeNacrta
 
     if osvezi:
         from .services.nacrti import osvezi_sve
@@ -732,7 +732,9 @@ def cmd_nacrti(
             brojac = {
                 s.value: session.scalar(
                     _select(_func.count()).select_from(NacrtKalkulacije)
-                    .where(NacrtKalkulacije.stanje == s)
+                    .where(NacrtKalkulacije.stanje == s,
+                           NacrtKalkulacije.document.has(
+                               Document.archived == False))  # noqa: E712
                 )
                 for s in StanjeNacrta
             }
@@ -749,7 +751,13 @@ def cmd_nacrti(
             upit = (
                 _select(NacrtKalkulacije)
                 .options(_selectinload(NacrtKalkulacije.document))
-                .where(NacrtKalkulacije.stanje == StanjeNacrta(stanje))
+                # Arhivirani dokument niko ne radi, a osvezavanje ga ne dira -
+                # pa bi zauvek stajao na spisku "zaustavljeno". Coffee Center
+                # 26-FA001010834 nas je tako dvaput poslao u proveru necega na
+                # sta se ne moze uticati (07.10.).
+                .where(NacrtKalkulacije.stanje == StanjeNacrta(stanje),
+                       NacrtKalkulacije.document.has(
+                           Document.archived == False))  # noqa: E712
             )
             if magacin:
                 upit = upit.where(NacrtKalkulacije.magacin == magacin)

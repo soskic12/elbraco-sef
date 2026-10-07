@@ -519,3 +519,35 @@ def test_izvestaj_kaze_kad_nema_niceg(db):
 
     assert ishod.exit_code == 0
     assert "gleda pogrešnu bazu" in ishod.stdout
+
+
+def test_spisak_nacrta_preskace_arhivu(db):
+    """Arhiviran dokument niko ne radi, a osvežavanje ga ne dira.
+
+    Coffee Center 26-FA001010834 je tako dvaput poslao u proveru nečega na šta
+    se ne može uticati: spisak ga je prikazivao kao „zaustavljeno“, a
+    `nacrti --osvezi` ga uopšte nije gledao (07.10.).
+    """
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import Document, NacrtKalkulacije, SefStatus, StanjeNacrta
+
+    with db.session_scope() as session:
+        ziv = Document(sef_invoice_id=1, document_number="FA-ZIV",
+                       supplier_name="X", sef_status=SefStatus.SEEN)
+        arhiviran = Document(sef_invoice_id=2, document_number="FA-ARHIVA",
+                             supplier_name="Y", sef_status=SefStatus.SEEN, archived=True)
+        session.add_all([ziv, arhiviran])
+        session.flush()
+        session.add_all([
+            NacrtKalkulacije(document_id=ziv.id, stanje=StanjeNacrta.PROBLEM,
+                             problemi=["nema cene"]),
+            NacrtKalkulacije(document_id=arhiviran.id, stanje=StanjeNacrta.PROBLEM,
+                             problemi=["nema cene"]),
+        ])
+
+    ishod = CliRunner().invoke(app, ["nacrti", "--spisak", "--stanje", "problem"])
+
+    assert "FA-ZIV" in ishod.stdout
+    assert "FA-ARHIVA" not in ishod.stdout
