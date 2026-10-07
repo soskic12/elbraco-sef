@@ -235,6 +235,24 @@ sefsync erp-nalog --novi sefsync_erp   # sastavi naredbe i red za .env
    Mora da piše `veza : ERP_DB_URL (sopstvena)`, nalog `sefsync_erp`, i
    nijedno žuto „fali INSERT“.
 
+### Razvojna mašina dobija svoj nalog
+
+Da server i razvojna mašina ne bi opet delili jednu prijavu — time bi razdvajanje
+bilo samo promena imena — razvojna ide na **`sefsync_dev`**, koji sve čita a piše
+**samo u `ELBSX_2026`**:
+
+```
+sefsync erp-nalog --novi sefsync_dev --bez-produkcije --sql-fajl H:\sefsync_dev.sql
+```
+
+Tako razvojna mašina fizički ne može da upiše u produkciju, pa pravilo „u
+produkciju se piše samo sa servera“ ne visi na prekidaču
+`ERP_ALLOW_PRODUCTION_WRITE`. Isti red `ERP_DB_URL=` ide u `.env` razvojnog
+projekta.
+
+Urađeno 07.10.: razvojna je prvo prebačena na `sefsync_erp` da se nalog isproba,
+pa onda na `sefsync_dev`.
+
 **Stari nalog se ne dira.** `elbraco_dev_ro` koristi drugi projekat (Bane,
 06.10.: „ovo elbraco dev ro ne bismo smeli tek tako oduzimati kad ga koristi
 drugi projekat“). Kad panel nekoliko dana proradi pod svojim nalogom, odvojeno
