@@ -177,8 +177,9 @@ diranja `web.config`-a uoči prelaska), a 06.10. još tri za otvaranje šifre i
 komitenta.
 
 **Gde je stvarni problem.** Nije u imenu naloga nego u tome što panel **nema
-svoju konekciju** — pozajmljuje Logistikinu (`ConnectionStrings:ErpDatabase`,
-iz .NET user-secrets na razvojnoj mašini, iz `web.config`-a na serveru). Dve
+svoju konekciju** — pozajmljuje Logistikinu (`ConnectionStrings:ErpDatabase`
+iz .NET user-secrets na razvojnoj mašini, `ConnectionStrings__ErpDatabase` iz
+`C:\elbraco-logistika\web.config` na serveru). Dve
 posledice: u logovima baze se saobraćaj panela ne razlikuje od Logistikinog, a
 razvojna mašina ima pravo upisa u produkciju — pravilo „u produkciju se piše
 samo dok je Bane tu“ visi na prekidaču u `.env`-u.
