@@ -169,3 +169,65 @@ def test_nalog_za_razvojnu_ne_pise_u_produkciju(monkeypatch):
     assert "GRANT INSERT" not in produkcija
     test = s["sql"].split("USE [ELBSX_2026];", 1)[1]
     assert test.count("GRANT INSERT") == len(n.TABELE_UPISA)
+
+
+def _pregled(monkeypatch, stanja: dict, radna="ELBS_2026", test="ELBSX_2026"):
+    """`pregled()` nad izmerenim stanjem, bez kacenja na pravu bazu."""
+    monkeypatch.setattr(n, "resolve_erp_url", lambda: VEZA)
+    monkeypatch.setattr(n, "_stanje_baze", lambda osnovna, baza: dict(stanja[baza]))
+
+    class Lazna:
+        erp_test_db_name = test
+        erp_db_url = VEZA
+        erp_secrets_file = None
+
+    monkeypatch.setattr(n, "get_settings", lambda: Lazna())
+
+    class LaznaVeza:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, upit, *a):
+            tekst = str(upit)
+
+            class R:
+                def scalar(self_):
+                    if "suser_sname" in tekst:
+                        return "nalog"
+                    if "user_name" in tekst:
+                        return "nalog"
+                    return radna
+
+                def __iter__(self_):
+                    return iter((b,) for b in stanja)
+
+            return R()
+
+    monkeypatch.setattr(n, "get_erp_engine", lambda: type("E", (), {"connect": lambda s: LaznaVeza()})())
+    return n.pregled()
+
+
+def test_razvojni_nalog_nije_manjkav(monkeypatch):
+    """Nema upis u produkciju jer tako treba - ne sme da se zuti svaki put."""
+    sve = {"cita": True, "role": ["db_datareader"], "upis": list(n.TABELE_UPISA)}
+    p = _pregled(monkeypatch, {
+        "ELBS_2026": {"cita": True, "role": ["db_datareader"], "upis": []},
+        "ELBSX_2026": sve,
+    })
+
+    assert p["razvojni"] is True
+    assert "fali_upis" not in p["baze"]["ELBS_2026"]
+
+
+def test_nalog_panela_bez_upisa_u_test_bazi_se_prijavljuje(monkeypatch):
+    """Obrnut slucaj: pise u produkciju, a u test bazi fali - to je greska."""
+    p = _pregled(monkeypatch, {
+        "ELBS_2026": {"cita": True, "role": ["db_datareader"], "upis": list(n.TABELE_UPISA)},
+        "ELBSX_2026": {"cita": True, "role": ["db_datareader"], "upis": ["ULKALKUL"]},
+    })
+
+    assert p["razvojni"] is False
+    assert "ARTIKLI" in p["baze"]["ELBSX_2026"]["fali_upis"]

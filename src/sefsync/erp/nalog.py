@@ -188,7 +188,24 @@ def pregled() -> dict:
             stanje["suvisno"] = [t for t in stanje["upis"] if t not in TABELE_UPISA]
         baze[baza] = stanje
 
+    # Razvojni nalog namerno nema pravo upisa u produkciju (`--bez-produkcije`),
+    # pa mu to nije manjak nego svrha. Prepoznaje se po tome sto u test bazi ima
+    # sve, a u produkcionoj nista - inace bi komanda zutila na svakom pokretanju
+    # i covek bi prestao da gleda zuto.
+    proizvodna = baze.get(radna, {})
+    probna = baze.get(test, {})
+    razvojni = (
+        bool(test)
+        and "greska" not in proizvodna
+        and "greska" not in probna
+        and not proizvodna.get("upis")
+        and not probna.get("fali_upis")
+    )
+    if razvojni:
+        proizvodna.pop("fali_upis", None)
+
     return {
+        "razvojni": razvojni,
         "nalog": nalog,
         "korisnik": korisnik,
         "radna_baza": radna,

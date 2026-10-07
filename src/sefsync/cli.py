@@ -2576,6 +2576,8 @@ def cmd_erp_nalog(
 
     typer.echo(f"nalog       : {p['nalog']}  (u bazi: {p['korisnik']})")
     typer.echo(f"radna baza  : {p['radna_baza']}   test: {p['test_baza'] or '—'}")
+    if p.get("razvojni"):
+        typer.echo("vrsta       : razvojni — u produkciju NE upisuje, i tako treba")
     if p["iz_secrets_fajla"]:
         typer.secho(
             "veza        : POZAJMLJENA — ERP_DB_URL nije zadat, čita se iz "
@@ -2611,7 +2613,12 @@ def cmd_erp_nalog(
 
     if not fali_negde and not p["iz_secrets_fajla"]:
         typer.echo("")
-        typer.secho("Sve stoji: nalog je sopstveni i ima tačno što mu treba.", fg="green")
+        if p.get("razvojni"):
+            typer.secho(
+                "Sve stoji: razvojni nalog, čita sve a piše samo u test bazu.", fg="green"
+            )
+        else:
+            typer.secho("Sve stoji: nalog je sopstveni i ima tačno što mu treba.", fg="green")
 
     if novi:
         _ispisi_skriptu(novi, lozinka, sql_fajl, not bez_produkcije)
