@@ -891,10 +891,14 @@ def cmd_izvestaj(
         po_akciji = Counter(z.action for z in zapisi)
         ko = Counter(z.actor for z in zapisi if z.actor and z.actor != "system")
 
+        # Isti kriterijum kao u `nacrti`: arhivu niko ne radi, pa se ne broji.
+        # Bez toga su dva ispisa davala razlicit broj zaustavljenih (10 i 9).
         stanja = {
             s.value: session.scalar(
                 _select(_func.count()).select_from(NacrtKalkulacije)
-                .where(NacrtKalkulacije.stanje == s)
+                .where(NacrtKalkulacije.stanje == s,
+                       NacrtKalkulacije.document.has(
+                           Document.archived == False))  # noqa: E712
             )
             for s in StanjeNacrta
         }

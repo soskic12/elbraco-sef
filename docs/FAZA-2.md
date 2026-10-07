@@ -2838,3 +2838,27 @@ sva tri mesta.
 Red „Odmrznuto nacrta“ ispisivao se **samo kad je nešto odmrznuto**, pa se iz
 loga nije moglo razlikovati „radi i nema šta“ od „uopšte se ne izvršava“. Isto
 i za dovršavanje upisa. Sada se piše uvek, i kad je nula.
+
+### Šifra otvorena samo u jedinstvenom šifarniku (07.10.)
+
+Devet EWE faktura (Dell laptop, 57.097,76 svaka) stalo je sa „artikal 87622
+nema cenu u objektu“ — u objektima 002, 003, 004, 005, 008 i 009.
+
+Provereno u ERP-u: **87622 postoji u `ARTIKLI/099` i nigde drugde.** U
+`ARTPROD` nema nijedan red. Šifra je otvorena ručno, po starom, samo u
+jedinstvenom šifarniku — tačno slučaj zbog kog otvaranje iz aplikacije i piše
+lokalne cenovnike (Bane, 03.10.: „kad se otvori šifra u jedinstvenom nema je u
+lokalnim cenovnicima i kalkulacije neće moći raditi“).
+
+Naš tok to ne bi napravio: `otvori_sifru` upisuje `ARTIKLI` u 11 magacina i
+`ARTPROD` po prodajnim mestima, sa cenom, u jednoj transakciji.
+
+**Ostaje rupa koju nemamo pokrivenu:** šifra koja **već postoji** u 099 a nema
+lokalne cenovnike. Naš tok otvara samo nove. Dok se to ne reši, takve dopunjava
+čovek u ERP-u.
+
+### Dva ispisa, dva broja
+
+`izvestaj` je prijavio 10 zaustavljenih, `nacrti --spisak` devet. Razlika je
+bila arhiva: spisak ju je preskakao, brojač u izveštaju nije. Sada oba koriste
+isti kriterijum.
