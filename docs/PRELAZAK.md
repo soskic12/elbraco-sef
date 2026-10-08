@@ -42,6 +42,27 @@ SEF razvrstaj
 Namerno **bez `--sve`**: sa njim bi promenio poslovnu jedinicu i dokumentima
 koje je operater već prosledio.
 
+### 3a. Veze šifara iz ERP istorije — **promaklo 28.09.**
+
+```
+SEF mapiranje            # samo ispis
+SEF mapiranje --upisi
+```
+
+Izvodi veze „dobavljačeva šifra → naša“ iz **vaše sopstvene istorije**: barkod iz
+šifarnika i ono što su ljudi knjižili u kalkulacijama. Upisuje samo ono gde se
+dva nezavisna izvora slažu, ili je viđeno barem dvaput; postojeće veze se
+**preskaču**, ništa se ne pregazi.
+
+**Mereno 08.10., deset dana posle prelaska:** u panelu je bilo **22** veze, a
+izvođenje daje **2.265** pouzdanih. Zato je Dule ručno povezivao stavke koje ERP
+već zna — 312 stavki je u tom trenutku čekalo šifru pod razlogom „šifra
+dobavljača nije viđena“. Korak je bio napisan u uputstvu za razvoj, ali nije u
+redosledu prelaska, pa se na serveru nije pustio.
+
+Posle upisa obavezno `nacrti --osvezi`, pa pogledati `nemapirane` — broj mora
+osetno da padne.
+
 ### 4. Preračunaj nacrte
 
 ```
