@@ -144,9 +144,26 @@ Inženjering Servis 22, Vitel 17, Infocar 11.
 * `document.created 723` u 24 h. Prosek od 11.09. je oko 310 dnevno, pa je ovo
   dvostruko, ali ne vanredno.
 
+### 08.10.2026. — pravila razvrstavanja uvezena ✔
+
+`pravila.json` iz paketa (datum 08.10. 13:14, 233 pravila) uvezen na serveru:
+
+* **nova 187**, postojeća 44, ugašena 2 (duplikati), mapiranja nova 7.
+
+Potvrda da fajl sve vreme dolazi: `postavi.ps1` kopira sve iz paketa u
+`C:\efakture`, čuva samo `.env` i `data` — dakle `pravila.json` je bio tu posle
+svakog postavljanja, ali `pravila-uvoz` nije puštan. Zato 53 umesto 231.
+
+`razvrstaj`: **28 od 125** razvrstano, 97 čeka operatera. Od tih 97 devet
+dobavljača nosi više od polovine: EXPORT-IMPORT (105504820) 11, ROA
+(103285506) 8, Dunav osiguranje 7, FORMA PLUS 7, Radmilo Aleksić PR Sky 6, Mali
+kućni aparati 4, CSM 2017 4, Linkom 4, Preduzeće za spoljnu i unutrašnju 4.
+
+Dva od njih su **poznate odluke koje čekaju**, ne propust: FORMA PLUS čeka
+pravilo po napomeni, Radmilo Aleksić PR Sky isto (Nina).
+
 ### 08.10.2026. — šta je ostalo otvoreno
 
-* ✗ 180 pravila razvrstavanja
 * ✗ `#8121` i `#8122` — obaveštenja koja treba poslati
 * ✗ `MAG010` nema mejl, a ima dokumente
 * ✗ em-crta u `BU_SOURCE_SQL` u serverskom `.env`-u (ime jedinice dvostruko
