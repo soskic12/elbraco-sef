@@ -1494,19 +1494,46 @@ def cmd_dokument(
     )
 
     with session_scope() as session:
+        jedinice = {u.id: u.code for u in session.scalars(select(BusinessUnit))}
         if broj.startswith("#") and broj[1:].isdigit():
             doc = session.get(Document, int(broj[1:]))
+            svi = [doc] if doc is not None else []
         else:
-            doc = session.scalar(
-                select(Document).where(Document.document_number == broj.strip())
-            ) or session.scalar(
-                select(Document).where(Document.document_number.like(f"%{broj.strip()}%"))
+            # Svi koji se poklope, ne prvi. Do 08.10. je komanda uzimala prvi i
+            # nije rekla da ih ima vise - pa sam na Systemsovoj 1386/26 gledao
+            # novi zapis i tvrdio da stari nikad nije postojao, dok je Bane znao
+            # da je bila na Bogdanovom ekranu.
+            svi = list(
+                session.scalars(
+                    select(Document)
+                    .where(Document.document_number == broj.strip())
+                    .order_by(Document.id)
+                )
+            ) or list(
+                session.scalars(
+                    select(Document)
+                    .where(Document.document_number.like(f"%{broj.strip()}%"))
+                    .order_by(Document.id)
+                )
             )
+            doc = svi[0] if svi else None
         if doc is None:
             typer.secho(f"Nema dokumenta „{broj}“.", fg="red")
             raise typer.Exit(1)
+        if len(svi) > 1:
+            typer.secho(
+                f"PAZI: broju „{broj}“ odgovara {len(svi)} zapisa u panelu:", fg="yellow"
+            )
+            for d in svi:
+                typer.echo(
+                    f"   #{d.id:<6} SEF {d.sef_invoice_id or '-':<11}"
+                    f" {jedinice.get(d.business_unit_id, 'nerazvrstano'):<10}"
+                    f" {d.sef_status.value:<9} u panelu od"
+                    f" {d.created_at:%d.%m. %H:%M}{'  ARHIVIRAN' if d.archived else ''}"
+                )
+            typer.echo("   (ispod je prvi; za ostale koristi `dokument #id`)")
+            typer.echo("")
 
-        jedinice = {u.id: u.code for u in session.scalars(select(BusinessUnit))}
         typer.echo(f"#{doc.id}  {doc.document_number or '?'}  {doc.document_type.value}")
         typer.echo(f"   dobavljač   {(doc.supplier_name or '')[:40]}  PIB {doc.supplier_vat or '-'}")
         typer.echo(f"   iznos       {doc.amount or 0:,.2f} {doc.currency or ''}")
@@ -2174,6 +2201,90 @@ def cmd_baza() -> None:
         )
         raise typer.Exit(1)
     typer.secho(f"\nPanel pamti {dana} dana — izgleda kao prava baza.", fg="green")
+
+
+@app.command("dvojnici")
+def cmd_dvojnici(
+    dana: int = typer.Option(60, "--dana", help="Koliko dana unazad po datumu izdavanja."),
+) -> None:
+    """Ista faktura zavedena dva puta u panelu.
+
+    Postoji zato što je Bane 08.10. tvrdio da je Systemsova 1386/26 bila na
+    Bogdanovom ekranu (088), a `dokument` je pokazivao jedan zapis, nerazvrstan,
+    nastao 07.10. Komanda je uzimala **prvi** zapis koji se poklopi i nije rekla
+    da ih ima više — pa sam gledao pogrešan i tvrdio da stari nije postojao.
+
+    Isti dobavljač i isti broj fakture su dva zapisa iste stvari: jedan nosi
+    razvrstavanje, potvrdu prijema i vezu sa kalkulacijom, drugi je prazan i
+    stoji nerazvrstan. Ništa ne menja — samo ispisuje.
+    """
+    _boot()
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+
+    from .models import BusinessUnit, Document, utcnow
+
+    granica = (utcnow() - timedelta(days=dana)).date()
+
+    with session_scope() as session:
+        jedinice = {u.id: u.code for u in session.scalars(_select(BusinessUnit))}
+        parovi = list(
+            session.execute(
+                _select(
+                    Document.supplier_vat,
+                    Document.document_number,
+                    _func.count().label("n"),
+                )
+                .where(
+                    Document.document_number.is_not(None),
+                    Document.supplier_vat.is_not(None),
+                    Document.issue_date >= granica,
+                )
+                .group_by(Document.supplier_vat, Document.document_number)
+                .having(_func.count() > 1)
+                .order_by(_func.count().desc())
+            )
+        )
+        if not parovi:
+            typer.secho(
+                f"Nema dvojnika među fakturama izdatim u poslednjih {dana} dana.", fg="green"
+            )
+            return
+
+        typer.secho(f"Faktura zavedenih više puta: {len(parovi)}", fg="yellow")
+        typer.echo("")
+        for pib, broj, n in parovi:
+            zapisi = list(
+                session.scalars(
+                    _select(Document)
+                    .where(Document.supplier_vat == pib, Document.document_number == broj)
+                    .order_by(Document.id)
+                )
+            )
+            ime = (zapisi[0].supplier_name or "")[:30]
+            typer.echo(f"{broj}  ({n})  {ime}")
+            for d in zapisi:
+                oznake = []
+                if d.archived:
+                    oznake.append("arhiviran")
+                if d.forwarded_at:
+                    oznake.append("prosleđen")
+                if d.received_at:
+                    oznake.append("prijem potvrđen")
+                typer.echo(
+                    f"   #{d.id:<6} SEF {d.sef_invoice_id or '-':<11}"
+                    f" {jedinice.get(d.business_unit_id, 'nerazvrstano'):<11}"
+                    f" {d.sef_status.value:<9} u panelu od {d.created_at:%d.%m. %H:%M}"
+                    + (f"  [{', '.join(oznake)}]" if oznake else "")
+                )
+            typer.echo("")
+
+        typer.echo(
+            "Dva zapisa iste fakture nastaju kad joj SEF promeni identifikator "
+            "(npr. ponovno obaveštavanje), pa je sinhronizacija zavede kao novu. "
+            "Onaj sa prosleđivanjem i prijemom je pravi; drugi treba arhivirati "
+            "da ne stoji nerazvrstan."
+        )
 
 
 @app.command("provera-prelaska")

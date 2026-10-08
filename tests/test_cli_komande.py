@@ -619,3 +619,58 @@ def test_baza_prijavljuje_bazu_bez_istorije(db):
         )
     izlaz = runner.invoke(app, ["baza"]).output
     assert "Panel pamti 60 dana" in izlaz
+
+
+def test_dokument_ne_skriva_da_ih_ima_vise(db):
+    """Komanda je uzimala prvi zapis i nije govorila da ih ima više.
+
+    Na Systemsovoj 1386/26 sam zato gledao pogrešan zapis i tvrdio da stari nikad
+    nije postojao, dok je Bane znao da je bila na Bogdanovom ekranu.
+    """
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import BusinessUnit, Document
+
+    with db.session_scope() as session:
+        jedinica = BusinessUnit(code="OFFICE-D", name="Uprava proba")
+        session.add(jedinica)
+        session.flush()
+        session.add_all([
+            Document(sef_invoice_id=996001, document_number="1386/26",
+                     supplier_vat="101867722", business_unit_id=jedinica.id),
+            Document(sef_invoice_id=996002, document_number="1386/26",
+                     supplier_vat="101867722"),
+        ])
+
+    izlaz = CliRunner().invoke(app, ["dokument", "1386/26"]).output
+    assert "2 zapisa" in izlaz
+    assert "OFFICE-D" in izlaz
+    assert "nerazvrstano" in izlaz
+
+
+def test_dvojnici_nalazi_istu_fakturu_dva_puta(db):
+    from datetime import date
+
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import Document
+
+    runner = CliRunner()
+    assert "Nema dvojnika" in runner.invoke(app, ["dvojnici"]).output
+
+    with db.session_scope() as session:
+        session.add_all([
+            Document(sef_invoice_id=996101, document_number="1386/26",
+                     supplier_vat="101867722", issue_date=date.today()),
+            Document(sef_invoice_id=996102, document_number="1386/26",
+                     supplier_vat="101867722", issue_date=date.today()),
+            # Isti broj, drugi dobavljac - nije dvojnik.
+            Document(sef_invoice_id=996103, document_number="1386/26",
+                     supplier_vat="999999999", issue_date=date.today()),
+        ])
+
+    izlaz = runner.invoke(app, ["dvojnici"]).output
+    assert "Faktura zavedenih više puta: 1" in izlaz
+    assert "#996101" not in izlaz  # ispisuje se nas id, ne SEF-ov
