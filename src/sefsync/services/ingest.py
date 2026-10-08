@@ -592,12 +592,25 @@ class IngestService:
                     line.erp_item_code, line.erp_mapping_source = ranije[line.line_no]
             return True
 
-    def reroute(self, doc_id: int) -> RoutingSource:
-        """Ponovo primenjuje pravila na postojeci dokument (posle izmene pravila)."""
+    def reroute(self, doc_id: int, *, i_vracene: bool = False) -> RoutingSource:
+        """Ponovo primenjuje pravila na postojeci dokument (posle izmene pravila).
+
+        **Vraceni dokument se preskace.** Kad covek iz jedinice klikne „Nije za
+        moju jedinicu“, dokument ostaje bez PJ i ceka operatera - a to je tacno
+        stanje koje `razvrstaj` trazi, pa ga je prvo sledece razvrstavanje istim
+        pravilom vracalo istom coveku. Bogdan je tako uporno dobijao LANGOS
+        fakture koje nisu njegove (Bane, 08.10.: „ako Bogdan vrati operateru onda
+        app mora rucno da gleda“).
+
+        `i_vracene=True` je za slucaj kad se svesno zeli i njih preracunati -
+        npr. posle ispravke pravila.
+        """
         with session_scope() as session:
             doc = session.get(Document, doc_id)
             if doc is None:
                 raise ValueError(f"Dokument {doc_id} ne postoji.")
+            if doc.routing_corrected and not i_vracene:
+                return RoutingSource.NONE
             self._route(session, doc)
             return doc.routing_source
 

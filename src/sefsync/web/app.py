@@ -674,6 +674,17 @@ def vrati_dokument(
 
         moja = _unit_for(session, user)
         odakle = moja.code if moja is not None else "?"
+        # Promasaj pravila se belezi PRE nego sto se veza obrise - posle toga
+        # `routing_rule_id` vise ne postoji. Kod rucne ispravke operatera ovo se
+        # vec belezilo (`workflow.dodeli`), a kod vracanja nije - pa je pravilo
+        # koje Bogdanu salje tudje fakture izgledalo besprekorno iako ga je
+        # jedinica vracala. `misses` je jedini pouzdan znak da pravilo ne valja.
+        if doc.routing_rule_id:
+            from ..models import RoutingRule
+
+            pravilo = session.get(RoutingRule, doc.routing_rule_id)
+            if pravilo is not None:
+                pravilo.misses += 1
         doc.business_unit_id = None
         doc.forwarded_at = None
         doc.forwarded_by = None

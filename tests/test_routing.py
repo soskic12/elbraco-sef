@@ -314,3 +314,65 @@ def test_obicna_faktura_ostaje_u_prodavnici(db, faktura_xml):
         decision = RoutingEngine.from_db(session).decide(parse_ubl(faktura_xml).routing_fields())
 
         assert decision.business_unit_id == mp_id
+
+
+# --------------------------------------------------------------------------- #
+# vraceni dokument se ne razvrstava ponovo
+# --------------------------------------------------------------------------- #
+
+def test_vracen_dokument_se_ne_vraca_istom_coveku(db):
+    """„Nije za moju jedinicu“ ostavlja dokument bez PJ — a to je stanje koje
+    razvrstavanje traži, pa ga je isto pravilo vraćalo istom čoveku.
+
+    Bogdan je tako uporno dobijao LANGOS fakture koje nisu njegove.
+    """
+    from sefsync.models import Document
+    from sefsync.services.ingest import IngestService
+
+    session_scope = db.session_scope
+
+    with session_scope() as session:
+        jedinica = BusinessUnit(code="OFFICE-T", name="UPRAVA proba")
+        session.add(jedinica)
+        session.flush()
+        session.add(
+            RoutingRule(
+                priority=10,
+                field=MatchField.SUPPLIER_VAT,
+                op=MatchOp.EQUALS,
+                pattern="106856812",
+                business_unit_id=jedinica.id,
+            )
+        )
+        doc = Document(
+            sef_invoice_id=881001,
+            document_number="429-1717-2026",
+            supplier_vat="106856812",
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    servis = IngestService()
+
+    # Prvo razvrstavanje pravilom radi kako treba. Pravilo po PIB-u daje izvor
+    # SUPPLIER_DEFAULT, isto kao #38 za LANGOS u produkciji.
+    assert servis.reroute(doc_id) is RoutingSource.SUPPLIER_DEFAULT
+    with session_scope() as session:
+        assert session.get(Document, doc_id).business_unit_id is not None
+
+    # Jedinica ga vrati: bez PJ, obelezen kao ispravljen.
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        doc.business_unit_id = None
+        doc.routing_source = RoutingSource.NONE
+        doc.routing_rule_id = None
+        doc.routing_corrected = True
+
+    # Sada ga pravilo NE sme ponovo da dodeli.
+    assert servis.reroute(doc_id) is RoutingSource.NONE
+    with session_scope() as session:
+        assert session.get(Document, doc_id).business_unit_id is None
+
+    # Sa izricitim zahtevom se preracunava.
+    assert servis.reroute(doc_id, i_vracene=True) is not RoutingSource.NONE

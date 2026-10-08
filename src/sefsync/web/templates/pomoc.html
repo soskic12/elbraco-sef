@@ -429,6 +429,12 @@
   <p>Ako neko klikne „Nije za moju jedinicu“, dokument ti se vraća u karticu
   <b>Nerazvrstano</b>, sa napomenom ko ga je vratio i odakle. Dodeli ga pravoj
   jedinici kao i svaki drugi.</p>
+  <p><b>Vraćen dokument aplikacija više ne razvrstava sama.</b> Čeka tebe, i kad
+  pravila ponovo prođu kroz nerazvrstane — njega preskaču. Bez toga bi ga isto
+  pravilo poslalo istom čoveku, pa bi vraćanje bilo besmisleno (Bogdan je tako
+  uporno dobijao LANGOS fakture koje nisu njegove).</p>
+  <p class="muted small">Pravilo koje je pogrešilo dobija <b>promašaj</b>, pa se
+  na spisku pravila vidi koje ne valja — isto kao kad ti ručno ispraviš jedinicu.</p>
 {% endcall %}
 
 {% call korak('Zaustavljene kalkulacije') %}
@@ -458,6 +464,8 @@
   tvojom napomenom i oni odlučuju.</p>
   <p class="muted small">Ne radi ako si već potvrdio prijem ili ako je
   kalkulacija u ERP-u — tada je nešto već urađeno, pa javi kancelariji.</p>
+  <p class="muted small">Kad vratiš, dokument <b>više ne može sam da ti se vrati</b>
+  — aplikacija ga ostavlja kancelariji i prestaje da ga razvrstava pravilima.</p>
 {% endcall %}
 
 {% call korak('Ako ti faktura nestane ili se pojavi niotkuda') %}

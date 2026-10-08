@@ -580,8 +580,17 @@ def cmd_reroute(
     odobrenja: bool = typer.Option(
         False, "--odobrenja", help="Samo knjižna odobrenja."
     ),
+    i_vracene: bool = typer.Option(
+        False, "--i-vracene",
+        help="Preračunaj i one koje je jedinica vratila (inače se preskaču).",
+    ),
 ) -> None:
-    """Primenjuje pravila na dokumente koji čekaju razvrstavanje."""
+    """Primenjuje pravila na dokumente koji čekaju razvrstavanje.
+
+    Dokument koji je jedinica vratila sa „Nije za moju jedinicu“ se **preskače** —
+    on čeka operatera. Bez toga bi ga isto pravilo poslalo istom čoveku, pa bi
+    vraćanje bilo besmisleno.
+    """
     _boot()
     from sqlalchemy import select as _select
 
@@ -598,6 +607,9 @@ def cmd_reroute(
             upit = upit.where(Document.document_type == DocumentType.CREDIT_NOTE)
         if not sve:
             upit = upit.where(Document.business_unit_id.is_(None))
+            if not i_vracene:
+                # Vracen dokument je bez PJ, dakle upada u isti upit - a ne sme.
+                upit = upit.where(Document.routing_corrected == False)  # noqa: E712
         else:
             # rucne odluke operatera se ne preispituju
             upit = upit.where(Document.routing_source != RoutingSource.MANUAL)
@@ -609,7 +621,7 @@ def cmd_reroute(
     ostali: list[int] = []
     for doc_id in ids:
         try:
-            if servis.reroute(doc_id) is not RoutingSource.NONE:
+            if servis.reroute(doc_id, i_vracene=i_vracene) is not RoutingSource.NONE:
                 razvrstano += 1
             else:
                 ostali.append(doc_id)
