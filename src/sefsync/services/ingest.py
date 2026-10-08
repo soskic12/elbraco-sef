@@ -544,6 +544,32 @@ class IngestService:
         engine = RoutingEngine.from_db(session)
         fields = doc.routing_fields()
         decision = engine.decide(fields)
+        # Promena postojece PJ ostavlja trag. Bez njega dokument moze da izadje
+        # sa necijeg ekrana bez ikakvog zapisa - a upravo to se trazilo 08.10.
+        # kod Systemsove 1386/26: ni jedan dogadjaj, pa se nije znalo da li je
+        # neko nesto uradio ili je app presla preko toga. Prvo razvrstavanje se
+        # ne belezi (to je redovan posao), samo promena i gubljenje PJ.
+        if doc.business_unit_id is not None and decision.business_unit_id != doc.business_unit_id:
+            from ..models import AuditLog, BusinessUnit
+
+            staro_ime = session.get(BusinessUnit, doc.business_unit_id)
+            novo_ime = (
+                session.get(BusinessUnit, decision.business_unit_id)
+                if decision.business_unit_id
+                else None
+            )
+            session.add(
+                AuditLog(
+                    actor="system",
+                    action="routing.promena" if novo_ime is not None else "routing.izgubljena",
+                    document_id=doc.id,
+                    detail=(
+                        f"{staro_ime.code if staro_ime else '?'} -> "
+                        f"{novo_ime.code if novo_ime else 'nerazvrstano'}: "
+                        f"{decision.note or 'nijedno pravilo'}"
+                    )[:2000],
+                )
+            )
         doc.business_unit_id = decision.business_unit_id
         doc.routing_source = decision.source
         doc.routing_rule_id = decision.rule_id

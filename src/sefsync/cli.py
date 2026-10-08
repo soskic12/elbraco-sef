@@ -1510,6 +1510,15 @@ def cmd_dokument(
         typer.echo(f"#{doc.id}  {doc.document_number or '?'}  {doc.document_type.value}")
         typer.echo(f"   dobavljač   {(doc.supplier_name or '')[:40]}  PIB {doc.supplier_vat or '-'}")
         typer.echo(f"   iznos       {doc.amount or 0:,.2f} {doc.currency or ''}")
+        # Tri datuma, i to ona prava tri. „Bogdan ju je dobio pre par dana“ a u
+        # panel je usla juce - bez ovih datuma se to ne vidi, pa se trazi naslepo
+        # (08.10., Systems 1386/26).
+        poslata = f"{doc.sent_date:%d.%m.%Y}" if doc.sent_date else "—"
+        u_panelu = f"{doc.created_at:%d.%m. %H:%M}" if doc.created_at else "—"
+        typer.echo(
+            f"   izdata      {doc.issue_date or '—'}"
+            f"   na SEF-u od {poslata}   u panelu od {u_panelu}"
+        )
         typer.echo(f"   jedinica    {jedinice.get(doc.business_unit_id, 'nerazvrstano')}"
                    f"   SEF: {doc.sef_status.value}   stanje: {doc.state.value}")
         typer.echo(f"   prosleđeno  {doc.forwarded_at or '—'}  {doc.forwarded_by or ''}")

@@ -1,3 +1,5 @@
+from sqlalchemy import select
+
 from sefsync.models import (
     BusinessUnit,
     DocumentType,
@@ -376,3 +378,63 @@ def test_vracen_dokument_se_ne_vraca_istom_coveku(db):
 
     # Sa izricitim zahtevom se preracunava.
     assert servis.reroute(doc_id, i_vracene=True) is not RoutingSource.NONE
+
+
+def test_gubljenje_jedinice_ostavlja_trag(db):
+    """Dokument ne sme da izađe sa nečijeg ekrana bez zapisa.
+
+    Kod Systemsove 1386/26 u istoriji nije bilo ni jednog događaja, pa se nije
+    znalo da li je neko nešto uradio ili je aplikacija prešla preko toga.
+    """
+    from sefsync.models import (
+        AuditLog,
+        BusinessUnit,
+        Document,
+        MatchField,
+        MatchOp,
+        RoutingRule,
+    )
+    from sefsync.services.ingest import IngestService
+
+    with db.session_scope() as session:
+        jedinica = BusinessUnit(code="OFFICE-Z", name="Uprava proba")
+        # Druga jedinica mora da postoji: kad je u sifarniku samo jedna, motor
+        # sve salje njoj i gasenje pravila se ne bi videlo.
+        session.add_all([jedinica, BusinessUnit(code="MP99", name="Objekat proba")])
+        session.flush()
+        pravilo = RoutingRule(
+            priority=10,
+            field=MatchField.SUPPLIER_VAT,
+            op=MatchOp.EQUALS,
+            pattern="101867722",
+            business_unit_id=jedinica.id,
+        )
+        session.add(pravilo)
+        doc = Document(
+            sef_invoice_id=881201, document_number="1386/26", supplier_vat="101867722"
+        )
+        session.add(doc)
+        session.flush()
+        doc_id, pravilo_id = doc.id, pravilo.id
+
+    servis = IngestService()
+    servis.reroute(doc_id)
+    with db.session_scope() as session:
+        assert session.get(Document, doc_id).business_unit_id is not None
+        # Prvo razvrstavanje je redovan posao i ne belezi se.
+        assert not [
+            a for a in session.scalars(select(AuditLog)) if a.action.startswith("routing.")
+        ]
+
+    # Pravilo se ugasi; sada vise nista ne hvata dokument.
+    with db.session_scope() as session:
+        session.get(RoutingRule, pravilo_id).active = False
+
+    servis.reroute(doc_id, i_vracene=True)
+    with db.session_scope() as session:
+        assert session.get(Document, doc_id).business_unit_id is None
+        tragovi = [
+            a for a in session.scalars(select(AuditLog)) if a.action == "routing.izgubljena"
+        ]
+        assert len(tragovi) == 1
+        assert "OFFICE-Z -> nerazvrstano" in tragovi[0].detail
