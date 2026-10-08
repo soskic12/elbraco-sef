@@ -56,6 +56,45 @@ Trenutni izvoz (`objava\pravila.json`) ima 233; na serveru stoji
 
 ---
 
+## 07.10.2026. oko 12:50 — panel je promenio bazu, i to niko nije primetio
+
+**Ovo je uzrok gotovo svega što se 08.10. činilo kao niz nepovezanih kvarova.**
+
+Izmereno:
+
+| | MS SQL `SefSync` | SQLite `data\sefsync.db` |
+|---|---|---|
+| poslednji dokument | **07.10. 12:29** | 08.10., i dalje raste |
+| poslednja sinhronizacija | **07.10. 12:44** (`sync_run` 2371) | traje |
+| dokumenata | 8.435 | 8.468 |
+| veza šifara | **2.176** | 22 (pre 08.10.) |
+| pravila | **338** | 53 (pre 08.10.) |
+| obaveštenja | 42 | 7 (pre 08.10.) |
+
+Panel je do 07.10. 12:44 radio nad **MS SQL** bazom. Tada je prestao i u 12:54
+počeo da puni **SQLite fajl koji je stajao pored, zaostao iz septembra**.
+Petnaestominutni ciklus je iz SEF-a dopunio sve što je u njemu falilo — otuda
+`document.created` za fakture izdate danima ranije.
+
+`DB_URL` nema ni u `.env`-u, ni u bekapima (`^DB_URL=` ne postoji ni u jednom), ni
+u okruženju (`Machine`, `User`, sesija — prazno), ni u zakazanom zadatku (pokreće
+`sefsync serve --worker` sa `SEFSYNC_HOME=C:\efakture`). Dakle red je u nekom
+trenutku **nestao iz `.env`-a**, a bekapi ne sežu pre 08.10. 09:13 pa se ne vidi
+kada ni kako.
+
+Posledice, sve objašnjene istim uzrokom:
+
+* `1386/26` „nestala" sa Bogdanovog ekrana — u MS SQL bazi je na 088, gde ju je i
+  video; u SQLite je nov zapis od 07.10., nerazvrstan. **Bogdan je bio u pravu.**
+* 81 odobrenje „bez obaveštenja" — zapisi su u MS SQL bazi.
+* Duletova gomila od 312 stavki — veze šifara su u MS SQL bazi (2.176).
+* 53 pravila umesto 338.
+* Nacrti „skoro prazni" u 14 h 07.10.
+
+**Sve što sam 08.10. „popravljao" radio sam nad zaostalom bazom.** Nalazi o tome
+šta „nikad nije pušteno na serveru" su netačni: `mapiranje --upisi` i
+`pravila-uvoz` **jesu** bili pušteni — u pravoj bazi.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
