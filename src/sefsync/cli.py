@@ -2097,6 +2097,85 @@ def cmd_uskladi_obavestenja(
         typer.secho("Ništa nije upisano — dodaj --stvarno.", fg="yellow")
 
 
+@app.command("baza")
+def cmd_baza() -> None:
+    """Koja je baza panela i ima li još istoriju.
+
+    Postoji zato što je 07.10. u 12:54 u panel „ušla“ gomila faktura izdatih
+    danima ranije, nacrti su bili skoro prazni, a 81 obaveštenje je izgledalo
+    nepostojeće — sve je to jedan uzrok: panel je radio nad bazom koja nije ona
+    prava. Ispis odgovara na to u pet sekundi.
+
+    Ništa ne menja.
+    """
+    _boot()
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+
+    from .db import get_engine
+    from .models import (
+        BusinessUnit,
+        Document,
+        ItemMapping,
+        NacrtKalkulacije,
+        ObavestenjeOPrethodnomPorezu,
+        RoutingRule,
+        utcnow,
+    )
+
+    url = get_engine().url
+    typer.echo(f"veza        : {url.render_as_string(hide_password=True)}")
+    if url.drivername.startswith("sqlite"):
+        typer.secho(
+            "   SQLite — na serveru se očekuje MS SQL (DB_URL u .env-u). "
+            "Ako DB_URL nije zadat, panel sam napravi praznu SQLite bazu i "
+            "popuni je iznova sa SEF-a, a sve što je samo u panelu se izgubi.",
+            fg="yellow",
+        )
+    typer.echo("")
+
+    with session_scope() as session:
+        def broj(model) -> int:
+            return session.scalar(_select(_func.count()).select_from(model)) or 0
+
+        redovi = [
+            ("dokumenata", broj(Document)),
+            ("veza šifara (nezamenljivo)", broj(ItemMapping)),
+            ("pravila razvrstavanja", broj(RoutingRule)),
+            ("poslovnih jedinica", broj(BusinessUnit)),
+            ("nacrta kalkulacija", broj(NacrtKalkulacije)),
+            ("obaveštenja o prethodnom porezu", broj(ObavestenjeOPrethodnomPorezu)),
+        ]
+        for ime, n in redovi:
+            typer.echo(f"   {ime:34} {n:>7}")
+
+        najstariji, najnoviji = session.execute(
+            _select(_func.min(Document.created_at), _func.max(Document.created_at))
+        ).one()
+
+    typer.echo("")
+    if najstariji is None:
+        typer.secho("Baza je prazna — nijedan dokument.", fg="red")
+        raise typer.Exit(1)
+
+    typer.echo(f"najstariji dokument u panelu od : {najstariji:%d.%m.%Y %H:%M}")
+    typer.echo(f"najnoviji                      : {najnoviji:%d.%m.%Y %H:%M}")
+
+    # Ako je i najstariji zapis od juce, panel ne pamti nista starije - a radi
+    # mesecima. To je najjasniji znak da baza nije ona prava ili da je nova.
+    dana = (utcnow().replace(tzinfo=None) - najstariji.replace(tzinfo=None)).days
+    if dana <= 3:
+        typer.secho(
+            f"\nPANIKA: najstariji dokument je star {dana} dan(a). Panel radi "
+            "mnogo duže, dakle ovo nije baza u kojoj je istorija — ili je "
+            "napravljena iznova. Veze šifara, razvrstavanje, potvrde prijema i "
+            "obaveštenja koja postoje samo u panelu nisu u njoj.",
+            fg="red",
+        )
+        raise typer.Exit(1)
+    typer.secho(f"\nPanel pamti {dana} dana — izgleda kao prava baza.", fg="green")
+
+
 @app.command("provera-prelaska")
 def cmd_provera_prelaska() -> None:
     """Šta još stoji na putu prelasku na novi način rada.
@@ -2117,6 +2196,7 @@ def cmd_provera_prelaska() -> None:
         ProcessState,
         StanjeNacrta,
         UnitKind,
+        utcnow,
     )
 
     podesavanja = get_settings()
@@ -2264,6 +2344,25 @@ def cmd_provera_prelaska() -> None:
             red(
                 spremnih == po_starom or podesavanja.novi_tok_od is not None,
                 opis,
+            )
+
+        # --- da li je ovo baza u kojoj je istorija ---
+        # 07.10. je panel radio nad bazom bez istorije: fakture izdate danima
+        # ranije „ušle“ su tog dana, veze šifara i obaveštenja nije bilo, a
+        # nijedna provera to nije rekla. Najjasniji znak je najstariji dokument.
+        from .models import ItemMapping as _Veza
+
+        najstariji = session.scalar(_select(_func.min(Document.created_at)))
+        veza = session.scalar(_select(_func.count()).select_from(_Veza)) or 0
+        if najstariji is None:
+            red(False, "Baza panela je prazna — nijedan dokument.")
+        else:
+            dana = (utcnow().replace(tzinfo=None) - najstariji.replace(tzinfo=None)).days
+            red(
+                dana > 3,
+                f"Panel pamti {dana} dana istorije, veza šifara {veza}"
+                + ("" if dana > 3 else " — ovo nije baza u kojoj je istorija, "
+                                       "proveri DB_URL u .env-u (`sefsync baza`)"),
             )
 
         # --- ista prijava uz vise jedinica ---

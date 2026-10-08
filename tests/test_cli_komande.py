@@ -581,3 +581,41 @@ def test_dokument_kaze_zasto_ga_nema_na_ekranu_jedinice(db):
 
     bez_pj = runner.invoke(app, ["dokument", "1387/26"]).output
     assert "NERAZVRSTAN" in bez_pj
+
+
+def test_baza_prijavljuje_bazu_bez_istorije(db):
+    """07.10. je panel radio nad bazom bez istorije i nijedna provera to nije rekla.
+
+    Fakture izdate danima ranije „ušle“ su tog dana, veza šifara i obaveštenja
+    nije bilo. Najjasniji znak je najstariji dokument: ako je od juče, panel ne
+    pamti ništa starije — a radi mesecima.
+    """
+    from datetime import timedelta
+
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import Document, utcnow
+
+    runner = CliRunner()
+
+    # Prazna baza.
+    assert "prazna" in runner.invoke(app, ["baza"]).output
+
+    # Sve od danas — ovo nije baza u kojoj je istorija.
+    with db.session_scope() as session:
+        session.add(Document(sef_invoice_id=995001, document_number="A"))
+    izlaz = runner.invoke(app, ["baza"]).output
+    assert "PANIKA" in izlaz
+
+    # Dokument od pre dva meseca — izgleda kao prava baza.
+    with db.session_scope() as session:
+        session.add(
+            Document(
+                sef_invoice_id=995002,
+                document_number="B",
+                created_at=utcnow().replace(tzinfo=None) - timedelta(days=60),
+            )
+        )
+    izlaz = runner.invoke(app, ["baza"]).output
+    assert "Panel pamti 60 dana" in izlaz
