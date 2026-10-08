@@ -109,9 +109,30 @@ koji sam video je „nema takvog objekta“ preko granice baze, ne uspešan ulaz
   poslala sama, posle četiri koja su pala 02.10.
 * Postavljani paketi tokom dana; zadnji potvrđen `08.10. 08:35`.
 
+### 08.10.2026. — veze šifara iz ERP istorije puštene ✔
+
+`mapiranje --upisi`, pa `nacrti --osvezi` (279 s), pa `nemapirane`. Ispisi viđeni:
+
+* **upisano 2.245** veza, već postojalo 20 (ništa nije pregaženo);
+* nacrti: `spreman 23`, `čeka šifru 60`, `problem 0`, `upisan 532`, `greška 0`;
+* stavke koje čekaju šifru: **397 → 134**, a najveća grupa („nema barkod, šifra
+  dobavljača nije viđena“) **312 → 98**.
+
+**Traži proveru:** `upisan` je skočio sa 434 na 532. Devedeset osam kalkulacija
+je time ili prepoznato kao već postojeće u ERP-u (razrešene veze omogućile su
+poklapanje), ili ih je petnaestominutni ciklus dopisao (`dovrsi-upise`, najviše
+20 po prolazu). Prvo je bezopasno, drugo je po dogovoru ali vredi pogledati
+očima. `izvestaj --dana 1` kaže šta je aplikacija radila danas.
+
+Šta je ostalo u redu, po uzroku: 98 stavki gde samo šifra dobavljača razlikuje
+varijante (biciklovi `CSM PONYE LITIJUM` 24/26/28" — naziv na fakturi ne nosi
+boju, pa čovek mora jednom po šifri); 17 servisnih redova bez EAN-a i bez šifre
+(Smeće, Kanalizacija, Mesečno održavanje); 15 sa barkodom kog nema u šifarniku
+(nova šifra, Duletov ekran); 4 koja nisu artikal. Po dobavljaču: CSM 24,
+Inženjering Servis 22, Vitel 17, Infocar 11.
+
 ### 08.10.2026. — šta je ostalo otvoreno
 
-* ✗ `mapiranje --upisi` (2.265 veza čeka)
 * ✗ 180 pravila razvrstavanja
 * ✗ `#8121` i `#8122` — obaveštenja koja treba poslati
 * ✗ `MAG010` nema mejl, a ima dokumente
