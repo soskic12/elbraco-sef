@@ -45,6 +45,18 @@ VEZA_AVANS = "CreditNoteReferenceToPrepaymentInvoice"
 KOD_AVANSA = "386"
 
 
+# Statusi u kojima SEF obavestenje NIJE poslao dalje. Tacan tekst ne znamo -
+# dokumentacija pominje samo „Greska u slanju“ i poseban poziv `mistake-status`
+# koji takve vraca - pa se prepoznaje po korenu reci, a svi vidjeni statusi se
+# ispisuju da se spisak moze dopuniti kad se pojavi nesto novo.
+KOREN_GRESKE = ("mistake", "error", "fail", "gres", "greš", "греш")
+
+
+def _status_je_greska(status: str) -> bool:
+    nisko = (status or "").lower()
+    return any(k in nisko for k in KOREN_GRESKE)
+
+
 class NeMozeObavestenje(RuntimeError):
     """Razlog zbog kog obavestenje ne moze da se posalje - ide coveku, ne u log."""
 
@@ -339,6 +351,8 @@ def uskladi_sa_sefom(
         "po_broju": 0,
         "nema_obavestenje": [],
         "zabelezeno": 0,
+        "statusi": {},
+        "sa_greskom": [],
     }
 
     with session_scope() as session:
@@ -352,6 +366,16 @@ def uskladi_sa_sefom(
                 kako = "po_broju"
             if nalaz is None:
                 ishod["nema_obavestenje"].append(doc.id)
+                continue
+            status = str(
+                nalaz.get("SendingStatus") or nalaz.get("sendingStatus") or "?"
+            )
+            ishod["statusi"][status] = ishod["statusi"].get(status, 0) + 1
+            if _status_je_greska(status):
+                # SEF ga ima, ali ga nije poslao dalje - dobavljac ga NEMA, pa
+                # ovo nije zavrseno. Bez ove provere bismo zatvorili obavestenje
+                # koje nikome nije stiglo.
+                ishod["sa_greskom"].append(doc.id)
                 continue
             ishod[kako] += 1
             if not stvarno:

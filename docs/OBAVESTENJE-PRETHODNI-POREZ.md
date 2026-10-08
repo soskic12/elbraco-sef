@@ -129,6 +129,18 @@ radio na portalu. Odgovor je sve vreme bio jedan HTTP poziv.
 panelu (`--stvarno` da upiše). Poklapanje se traži po `PurchaseInvoiceId`, a kad
 njega nema — po broju obaveštenja uz PIB dobavljača.
 
+**Status se gleda.** Obaveštenje u statusu greške SEF **nije poslao dalje** —
+dobavljač ga nema — pa se ne broji kao završeno, nego se prijavljuje posebno.
+Tačan tekst statusa ne znamo (dokumentacija pominje samo „Greška u slanju“ i
+poziv `mistake-status`), zato se prepoznaje po korenu reči, a svi viđeni statusi
+se ispisuju da se spisak dopuni kad se pojavi nešto novo.
+
+**Mereno 08.10.2026.** na periodu 01.01.2025.–08.10.2026.: SEF zna za **1.352**
+obaveštenja, **79 od 81** naših odobrenja već ima svoje (sva po
+`PurchaseInvoiceId`), a bez obaveštenja su ostala **dva**: `#8121` i `#8122`.
+Dakle uzbuna oko „81 odobrenja bez obaveštenja“ bila je gotovo cela posledica
+toga što panel vidi samo svoja slanja — Bogdan je posao odradio na portalu.
+
 ---
 
 ## 4. Kada se šalje iz aplikacije

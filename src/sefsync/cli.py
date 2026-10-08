@@ -2027,6 +2027,19 @@ def cmd_uskladi_obavestenja(
     typer.echo(f"   poklopljeno po dokumentu : {nalaz['po_dokumentu']}")
     typer.echo(f"   poklopljeno po broju     : {nalaz['po_broju']}")
     typer.echo(f"   nema obaveštenje nigde   : {len(nalaz['nema_obavestenje'])}")
+    if nalaz.get("statusi"):
+        typer.echo(
+            "   statusi na SEF-u         : "
+            + ", ".join(f"{s} {n}" for s, n in sorted(nalaz["statusi"].items()))
+        )
+    if nalaz.get("sa_greskom"):
+        typer.secho(
+            f"   SEF ih ima ali NIJE poslao: {len(nalaz['sa_greskom'])} — "
+            + ", ".join(f"#{i}" for i in nalaz["sa_greskom"][:20])
+            + "
+   Dobavljač ih nema; ne broje se kao završena.",
+            fg="yellow",
+        )
     if nalaz["nema_obavestenje"]:
         typer.echo(
             "   to su: "

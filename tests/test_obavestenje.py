@@ -319,3 +319,48 @@ def test_uskladjivanje_prepoznaje_obavestenje_poslato_sa_portala():
         assert red is not None and red.sef_notice_id == 11 and red.uspelo is True
         ostali = [d.id for d in bez_obavestenja(session)]
         assert ostali == [ids[2]]
+
+
+def test_obavestenje_u_statusu_greske_nije_zavrseno():
+    """SEF ga ima, ali ga nije poslao dalje — dobavljač ga nema."""
+    from datetime import date as _d
+
+    from sefsync.db import session_scope
+    from sefsync.models import Document, DocumentType, SefStatus
+    from sefsync.services.obavestenje import uskladi_sa_sefom
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=772001,
+            document_number="KO-G",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000009",
+            vat_amount=-900.0,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class LazniSef:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def poslata_obavestenja(self, od, do):
+            return [
+                {"Id": 99, "NoticeNumber": "KO-G", "PurchaseInvoiceId": 772001,
+                 "SendingStatus": "Mistake",
+                 "Recipient": {"VatRegistrationCode": "100000009"}},
+            ]
+
+    nalaz = uskladi_sa_sefom(
+        _d(2026, 1, 1), _d(2026, 12, 31), stvarno=True, klijent=LazniSef()
+    )
+
+    assert nalaz["sa_greskom"] == [doc_id]
+    assert nalaz["po_dokumentu"] == 0
+    assert nalaz["zabelezeno"] == 0
+    assert nalaz["statusi"] == {"Mistake": 1}
