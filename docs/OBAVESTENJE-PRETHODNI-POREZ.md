@@ -140,6 +140,17 @@ obaveštenja, **79 od 81** naših odobrenja već ima svoje (sva po
 `PurchaseInvoiceId`), a bez obaveštenja su ostala **dva**: `#8121` i `#8122`.
 Dakle uzbuna oko „81 odobrenja bez obaveštenja“ bila je gotovo cela posledica
 toga što panel vidi samo svoja slanja — Bogdan je posao odradio na portalu.
+Svih 79 je u statusu `Sent`.
+
+**Popravke iz ovog fajla su proverene u radu 08.10.2026.**: Bogdan je na
+Comtradeovom odobrenju `RS2604421` kliknuo slanje i obaveštenje je **prošlo** —
+prvo koje je aplikacija poslala sama, posle četiri koja su pala 02.10.
+
+**Status se proverava i za ono što smatramo završenim.** SEF obaveštenje koje je
+prošlo pri slanju ume **kasnije** da prebaci u status greške i tada ga ne pošalje
+dalje. Naš zapis o tome ne zna ništa, a `bez_obavestenja` takav dokument
+preskače jer je kod nas `uspelo` — pa ga niko više ne bi pogledao.
+`uskladi-obavestenja` zato proverava i njih i vraća ih u red (`naknadno_palo`).
 
 ---
 

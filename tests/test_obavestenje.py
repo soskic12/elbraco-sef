@@ -364,3 +364,64 @@ def test_obavestenje_u_statusu_greske_nije_zavrseno():
     assert nalaz["po_dokumentu"] == 0
     assert nalaz["zabelezeno"] == 0
     assert nalaz["statusi"] == {"Mistake": 1}
+
+
+def test_obavestenje_koje_je_proslo_pa_palo_kod_sefa_se_ponovo_otvara():
+    """SEF ume da ga posle prebaci u grešku i tada ga ne pošalje dalje.
+
+    Naš zapis o tome ne zna ništa, a `bez_obavestenja` takav dokument preskače
+    jer kod nas „uspelo“ — pa ga niko više ne bi pogledao.
+    """
+    from datetime import date as _d
+
+    from sefsync.db import session_scope
+    from sefsync.models import (
+        Document,
+        DocumentType,
+        ObavestenjeOPrethodnomPorezu,
+        SefStatus,
+    )
+    from sefsync.services.obavestenje import bez_obavestenja, uskladi_sa_sefom
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=773001,
+            document_number="KO-P",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000011",
+            vat_amount=-1100.0,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+        session.add(
+            ObavestenjeOPrethodnomPorezu(
+                document_id=doc_id, broj="KO-P", sef_notice_id=555, poslao="app"
+            )
+        )
+        session.flush()
+        # Za nas je zavrseno, pa se ne prijavljuje.
+        assert doc_id not in [d.id for d in bez_obavestenja(session)]
+
+    class LazniSef:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def poslata_obavestenja(self, od, do):
+            return [{"Id": 555, "NoticeNumber": "KO-P", "SendingStatus": "Mistake",
+                     "PurchaseInvoiceId": 773001,
+                     "Recipient": {"VatRegistrationCode": "100000011"}}]
+
+    nalaz = uskladi_sa_sefom(
+        _d(2026, 1, 1), _d(2026, 12, 31), stvarno=True, klijent=LazniSef()
+    )
+
+    assert nalaz["naknadno_palo"] == [doc_id]
+    with session_scope() as session:
+        red = session.get(ObavestenjeOPrethodnomPorezu, doc_id)
+        assert red.uspelo is False and "Mistake" in (red.greska or "")
+        assert doc_id in [d.id for d in bez_obavestenja(session)]

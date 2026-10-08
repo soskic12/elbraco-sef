@@ -310,7 +310,7 @@ def bez_obavestenja(session) -> list[Document]:
 
 def uskladi_sa_sefom(
     od: date, do: date, *, stvarno: bool = False, klijent=None
-) -> dict:
+) -> dict:  # noqa: C901 - jedan prolaz, dve provere nad istim odgovorom
     """Pita SEF koja obavestenja vec postoje i zabelezi ih u panelu.
 
     Panel vidi samo svoje pokusaje slanja. Covek je obavestenja godinu dana
@@ -324,6 +324,8 @@ def uskladi_sa_sefom(
 
     Bez `stvarno` samo prebroji; nista se ne salje ni u jednom slucaju.
     """
+    from sqlalchemy import select
+
     from ..sef.client import SefClient
 
     with (klijent or SefClient()) as sef:
@@ -353,7 +355,46 @@ def uskladi_sa_sefom(
         "zabelezeno": 0,
         "statusi": {},
         "sa_greskom": [],
+        "naknadno_palo": [],
     }
+
+    # Obavestenje koje je proslo pri slanju SEF ume kasnije da prebaci u
+    # „Greska u slanju“ i tada ga ne salje dalje. Nas zapis o tome ne zna nista,
+    # a `bez_obavestenja` takav dokument preskace jer kod nas „uspelo“ - pa ga
+    # niko nikad vise ne pogleda. Zato se uz uskladjivanje proveravaju i ona
+    # koja smatramo zavrsenim.
+    po_sef_broju = {
+        int(r.get("Id") or r.get("id") or 0): r
+        for r in redovi
+        if (r.get("Id") or r.get("id"))
+    }
+
+    with session_scope() as session:
+        for red in session.scalars(
+            select(ObavestenjeOPrethodnomPorezu).where(
+                ObavestenjeOPrethodnomPorezu.sef_notice_id.is_not(None)
+            )
+        ):
+            nalaz = po_sef_broju.get(red.sef_notice_id or 0)
+            if nalaz is None:
+                continue
+            status = str(
+                nalaz.get("SendingStatus") or nalaz.get("sendingStatus") or "?"
+            )
+            if not _status_je_greska(status):
+                continue
+            ishod["naknadno_palo"].append(red.document_id)
+            if stvarno and not red.greska:
+                red.status = status
+                red.greska = f"SEF ga je prebacio u status „{status}“ — nije poslat dalje."
+                session.add(
+                    AuditLog(
+                        actor="sef",
+                        action="obavestenje.naknadno_palo",
+                        document_id=red.document_id,
+                        detail=f"{red.broj}: status {status}",
+                    )
+                )
 
     with session_scope() as session:
         for doc in bez_obavestenja(session):

@@ -2039,6 +2039,13 @@ def cmd_uskladi_obavestenja(
             + "  — dobavljač ih nema, ne broje se kao završena.",
             fg="yellow",
         )
+    if nalaz.get("naknadno_palo"):
+        typer.secho(
+            f"   poslato pa palo kod SEF-a : {len(nalaz['naknadno_palo'])} — "
+            + ", ".join(f"#{i}" for i in nalaz["naknadno_palo"][:20])
+            + "  — treba ih poslati ponovo.",
+            fg="red",
+        )
     if nalaz["nema_obavestenje"]:
         typer.echo(
             "   to su: "
