@@ -2036,8 +2036,7 @@ def cmd_uskladi_obavestenja(
         typer.secho(
             f"   SEF ih ima ali NIJE poslao: {len(nalaz['sa_greskom'])} — "
             + ", ".join(f"#{i}" for i in nalaz["sa_greskom"][:20])
-            + "
-   Dobavljač ih nema; ne broje se kao završena.",
+            + "  — dobavljač ih nema, ne broje se kao završena.",
             fg="yellow",
         )
     if nalaz["nema_obavestenje"]:
