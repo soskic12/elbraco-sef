@@ -6,6 +6,8 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from pathlib import Path
+
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -27,6 +29,75 @@ _uzete: dict[int, tuple[float, str]] = {}
 _engine: Engine | None = None
 _SessionFactory: sessionmaker[Session] | None = None
 
+# Panel je 07.10.2026. oko 12:50 presao sa MS SQL baze na zaostali SQLite fajl -
+# iz `.env`-a je nestao red `DB_URL` (Bane ga je zamenio sa `ERP_DB_URL`, misleci
+# da je to ista stvar; ja sam mu rekao "zameni ako postoji", a nisam upozorio da
+# su to dve razlicite baze). Panel je mirno nastavio da radi nad drugom bazom i
+# **niko to nije primetio 26 sati**: Bogdanova faktura je "nestala", Duletov red
+# je eksplodirao, 81 obavestenje je izgledalo nepostojece. Zato se od sada pamti
+# koja je baza bila u upotrebi i svaka promena se prijavljuje dok je covek ne
+# potvrdi.
+IME_ZAPISA = "poslednja-baza.txt"
+_promena_baze: tuple[str, str] | None = None
+
+
+def _zapis_baze() -> Path:
+    return get_settings().storage_dir / IME_ZAPISA
+
+
+def _bez_lozinke(url: str) -> str:
+    from sqlalchemy.engine import make_url
+
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:  # noqa: BLE001 - zapis ne sme da obori pokretanje
+        return url
+
+
+def promena_baze() -> tuple[str, str] | None:
+    """(ranija, sadasnja) ako se baza promenila bez potvrde, inace None."""
+    return _promena_baze
+
+
+def potvrdi_bazu() -> str:
+    """Covek prihvata trenutnu bazu kao ispravnu; upozorenje prestaje."""
+    global _promena_baze
+
+    sadasnja = _bez_lozinke(get_settings().db_url)
+    zapis = _zapis_baze()
+    zapis.parent.mkdir(parents=True, exist_ok=True)
+    zapis.write_text(sadasnja + chr(10), encoding="utf-8")
+    _promena_baze = None
+    return sadasnja
+
+
+def _proveri_zapis(url: str) -> None:
+    """Uporedi bazu sa onom koja je poslednja potvrdjena."""
+    global _promena_baze
+
+    sadasnja = _bez_lozinke(url)
+    zapis = _zapis_baze()
+    try:
+        ranija = zapis.read_text(encoding="utf-8").strip() if zapis.exists() else ""
+    except OSError:
+        return
+    if not ranija:
+        try:
+            zapis.parent.mkdir(parents=True, exist_ok=True)
+            zapis.write_text(sadasnja + chr(10), encoding="utf-8")
+        except OSError as exc:
+            log.debug("Zapis o bazi nije snimljen: %s", exc)
+        return
+    if ranija == sadasnja:
+        return
+    _promena_baze = (ranija, sadasnja)
+    log.error(
+        "BAZA PANELA JE PROMENJENA. Ranije: %s. Sada: %s. Ako ovo nije namerno, "
+        "panel radi nad drugom bazom i rad ljudi ide na pogrešno mesto — proveri "
+        "DB_URL u .env-u. Ako jeste namerno, potvrdi sa `sefsync baza --potvrdi`.",
+        ranija, sadasnja,
+    )
+
 
 def get_engine() -> Engine:
     global _engine
@@ -43,6 +114,7 @@ def get_engine() -> Engine:
             kwargs["pool_recycle"] = s.db_pool_recycle
         _engine = create_engine(s.db_url, **kwargs)
         _prati_veze(_engine)
+        _proveri_zapis(s.db_url)
         # SQLite zaklju(c)ava celu bazu pri upisu. Dok je jedan covek i par
         # hiljada dokumenata godisnje - dovoljno je, i tako je i odluceno
         # 21.09. u `.env.server`. Kad je ukljucen upis u produkciju, znaci da

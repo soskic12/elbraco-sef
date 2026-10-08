@@ -139,7 +139,7 @@ def test_komanda_staje_umesto_da_radi_nad_praznom_bazom(tmp_path, monkeypatch):
     assert izlaz.value.exit_code == 2
 
 
-def test_sqlite_u_produkciji_pise_u_log(caplog, monkeypatch):
+def test_sqlite_u_produkciji_pise_u_log(caplog, monkeypatch, tmp_path):
     """SQLite sa uključenim upisom u produkciju mora da se vidi u logu.
 
     `.env.server` je 21.09. rekao da je SQLite dovoljan — „jedan operater,
@@ -155,6 +155,7 @@ def test_sqlite_u_produkciji_pise_u_log(caplog, monkeypatch):
         db_url = "sqlite:///C:/efakture/data/sefsync.db"
         db_echo = False
         erp_allow_production_write = True
+        storage_dir = tmp_path
 
     monkeypatch.setattr(db_module, "_engine", None)
     monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
@@ -167,7 +168,7 @@ def test_sqlite_u_produkciji_pise_u_log(caplog, monkeypatch):
     monkeypatch.setattr(db_module, "_engine", None)
 
 
-def test_sqlite_bez_upisa_u_produkciju_ne_dize_uzbunu(caplog, monkeypatch):
+def test_sqlite_bez_upisa_u_produkciju_ne_dize_uzbunu(caplog, monkeypatch, tmp_path):
     """Razvojna mašina radi na SQLite i to je u redu."""
     import logging
 
@@ -177,6 +178,7 @@ def test_sqlite_bez_upisa_u_produkciju_ne_dize_uzbunu(caplog, monkeypatch):
         db_url = "sqlite:///data/sefsync.db"
         db_echo = False
         erp_allow_production_write = False
+        storage_dir = tmp_path
 
     monkeypatch.setattr(db_module, "_engine", None)
     monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
@@ -186,4 +188,65 @@ def test_sqlite_bez_upisa_u_produkciju_ne_dize_uzbunu(caplog, monkeypatch):
         db_module.get_engine()
 
     assert not [r for r in caplog.records if "SQLite" in r.message]
+    monkeypatch.setattr(db_module, "_engine", None)
+
+
+def test_promena_baze_se_prijavljuje(tmp_path, monkeypatch, caplog):
+    """Panel je 07.10. presao na drugu bazu i to niko nije primetio 26 sati.
+
+    Iz `.env`-a je nestao red DB_URL, panel je mirno nastavio nad zaostalim
+    SQLite fajlom, a rad ljudi je isao na pogresno mesto.
+    """
+    import logging
+
+    from sefsync import db as db_module
+
+    class Lazna:
+        db_url = "sqlite:///novo.db"
+        db_echo = False
+        erp_allow_production_write = False
+        storage_dir = tmp_path
+
+    monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
+    monkeypatch.setattr(db_module, "_prati_veze", lambda eng: None)
+    monkeypatch.setattr(db_module, "_promena_baze", None)
+
+    # Panel je ranije radio nad drugom bazom.
+    (tmp_path / db_module.IME_ZAPISA).write_text(
+        "mssql+pyodbc://sefsync_app:***@server/SefSync" + chr(10), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(db_module, "_engine", None)
+    with caplog.at_level(logging.ERROR, logger="sefsync.db"):
+        db_module.get_engine()
+
+    promena = db_module.promena_baze()
+    assert promena is not None
+    assert "SefSync" in promena[0] and "novo.db" in promena[1]
+    assert any("PROMENJENA" in r.message for r in caplog.records)
+
+    # Dok se ne potvrdi, prijava stoji; potvrda je gasi.
+    assert db_module.potvrdi_bazu().endswith("novo.db")
+    assert db_module.promena_baze() is None
+    monkeypatch.setattr(db_module, "_engine", None)
+
+
+def test_ista_baza_ne_dize_uzbunu(tmp_path, monkeypatch):
+    from sefsync import db as db_module
+
+    class Lazna:
+        db_url = "sqlite:///isto.db"
+        db_echo = False
+        erp_allow_production_write = False
+        storage_dir = tmp_path
+
+    monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
+    monkeypatch.setattr(db_module, "_prati_veze", lambda eng: None)
+    monkeypatch.setattr(db_module, "_promena_baze", None)
+    (tmp_path / db_module.IME_ZAPISA).write_text("sqlite:///isto.db" + chr(10), encoding="utf-8")
+
+    monkeypatch.setattr(db_module, "_engine", None)
+    db_module.get_engine()
+
+    assert db_module.promena_baze() is None
     monkeypatch.setattr(db_module, "_engine", None)

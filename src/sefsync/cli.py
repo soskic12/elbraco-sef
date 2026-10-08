@@ -2156,7 +2156,11 @@ def cmd_uskladi_obavestenja(
 
 
 @app.command("baza")
-def cmd_baza() -> None:
+def cmd_baza(
+    potvrdi: bool = typer.Option(
+        False, "--potvrdi", help="Prihvati trenutnu bazu kao ispravnu (gasi upozorenje)."
+    ),
+) -> None:
     """Koja je baza panela i ima li još istoriju.
 
     Postoji zato što je 07.10. u 12:54 u panel „ušla“ gomila faktura izdatih
@@ -2183,6 +2187,26 @@ def cmd_baza() -> None:
 
     url = get_engine().url
     typer.echo(f"veza        : {url.render_as_string(hide_password=True)}")
+
+    from .db import potvrdi_bazu, promena_baze
+
+    promena = promena_baze()
+    if promena is not None:
+        ranija, sadasnja = promena
+        if potvrdi:
+            typer.secho(f"Potvrđeno: od sada je ispravna baza {potvrdi_bazu()}", fg="green")
+        else:
+            typer.secho("BAZA JE PROMENJENA", fg="red")
+            typer.secho(f"   ranije: {ranija}", fg="red")
+            typer.secho(f"   sada  : {sadasnja}", fg="red")
+            typer.secho(
+                "   Ako ovo nije namerno, panel radi nad drugom bazom i rad ljudi "
+                "ide na pogrešno mesto — proveri DB_URL u .env-u.",
+                fg="red",
+            )
+            typer.secho("   Ako jeste namerno: sefsync baza --potvrdi", fg="red")
+    elif potvrdi:
+        typer.secho("Nema promene koju treba potvrditi.", fg="green")
     if url.drivername.startswith("sqlite"):
         typer.secho(
             "   SQLite. To nije greška i ništa se ne gubi — tako je odlučeno "
@@ -2490,6 +2514,18 @@ def cmd_provera_prelaska() -> None:
                 spremnih == po_starom or podesavanja.novi_tok_od is not None,
                 opis,
             )
+
+        # --- baza se promenila bez potvrde ---
+        from .db import promena_baze as _promena
+
+        _p = _promena()
+        red(
+            _p is None,
+            "Baza panela je ona koja je i bila"
+            if _p is None
+            else f"BAZA JE PROMENJENA: ranije {_p[0]}, sada {_p[1]} — "
+                 "proveri DB_URL u .env-u ili potvrdi sa `sefsync baza --potvrdi`",
+        )
 
         # --- SQLite u produkciji ---
         # `.env.server` je 21.09. rekao „SQLite u data\ je dovoljan: jedan
