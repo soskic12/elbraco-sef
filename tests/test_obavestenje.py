@@ -120,3 +120,42 @@ def test_rucno_napravljeno_nije_propalo(tmp_path, monkeypatch):
         zapis.rucno_u = utcnow()
         session.flush()
         assert bez_obavestenja(session) == []
+
+
+def test_rucna_potvrda_i_kad_slanje_nije_pokusano():
+    """Odobrenje prihvaceno na portalu nema zapis - dugme je i tad potrebno.
+
+    81 odobrenje je 08.10. stajalo bez ikakvog zapisa, pa je `zabelezi_rucno`
+    pucala bas na onome cemu je namenjena.
+    """
+    from sefsync.db import session_scope
+    from sefsync.models import (
+        Document,
+        DocumentType,
+        ObavestenjeOPrethodnomPorezu,
+        SefStatus,
+    )
+    from sefsync.services.obavestenje import bez_obavestenja, zabelezi_rucno
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=991002,
+            document_number="KO-991002",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            vat_amount=-330.0,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+        assert session.get(ObavestenjeOPrethodnomPorezu, doc_id) is None
+
+    poruka = zabelezi_rucno(doc_id, "bogdan")
+
+    assert "KO-991002" in poruka
+    with session_scope() as session:
+        red = session.get(ObavestenjeOPrethodnomPorezu, doc_id)
+        assert red is not None and red.rucno_potvrdio == "bogdan"
+        assert red.iznos_pdv == 330.0
+        assert red.uspelo is False and red.zavrseno is True
+        assert doc_id not in [d.id for d in bez_obavestenja(session)]

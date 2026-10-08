@@ -71,7 +71,7 @@
             {{ doc.received_at.strftime('%d.%m.%Y %H:%M') }}
             <div class="muted small" style="font-weight:400">{{ doc.received_note or '' }}</div>
           {% else %}<span class="muted" style="font-weight:400">čeka se</span>{% endif %}</dd>
-      {% if obavestenje %}
+      {% if obavestenje or treba_obavestenje %}
       <dt>Obaveštenje o prethodnom porezu</dt>
       <dd style="font-weight:400">
         {% if obavestenje.rucno_u %}
@@ -83,6 +83,26 @@
           <div class="muted small">{{ obavestenje.poslao }},
             {{ obavestenje.poslato_u.strftime('%d.%m.%Y %H:%M') }}
             {%- if obavestenje.iznos_pdv %} · PDV {{ '%.2f'|format(obavestenje.iznos_pdv) }}{% endif %}</div>
+        {% elif not obavestenje %}
+          <div class="small" style="padding:5px 8px;border-left:3px solid #b45309;background:#fffbeb">
+            <b>Obaveštenje još nije poslato.</b> Odobrenje je prihvaćeno na SEF-u,
+            ali ne kroz aplikaciju — prihvatanje se desilo na portalu ili pre
+            prelaska, pa aplikacija nije imala kad da ga pošalje.
+            {% if user.is_operator %}
+              <div class="muted" style="margin:4px 0">
+                Ako ga je neko već napravio na portalu, klikni desno dugme —
+                slanje bi tada dobavljaču poslalo <b>drugo</b> obaveštenje.
+              </div>
+              <form class="inline" method="post" action="/dokument/{{ doc.id }}/obavestenje"
+                    onsubmit="return confirm('Šalje se dobavljaču i ne može da se povuče. Ako je obaveštenje već napravljeno na portalu, ovo bi poslalo DRUGO. Nastaviti?')">
+                <button type="submit">Pošalji obaveštenje</button>
+              </form>
+              <form class="inline" method="post"
+                    action="/dokument/{{ doc.id }}/obavestenje-rucno">
+                <button class="ghost" type="submit">Već sam ga napravio na portalu</button>
+              </form>
+            {% endif %}
+          </div>
         {% else %}
           <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
             <b>Obaveštenje nije poslato.</b> Prihvatanje na SEF-u jeste prošlo.

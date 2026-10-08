@@ -91,7 +91,21 @@ def zabelezi_rucno(document_id: int, korisnik: str) -> str:
     with session_scope() as session:
         red = session.get(ObavestenjeOPrethodnomPorezu, document_id)
         if red is None:
-            raise NeMozeObavestenje("Za ovaj dokument nema zapisa o obaveštenju.")
+            # Nema zapisa znaci da slanje nikad nije pokusano - tako stoji svako
+            # odobrenje koje nije prihvaceno kroz aplikaciju (na portalu ili pre
+            # prelaska). Takvih je 08.10. bilo 81, i bas njima ovo dugme treba
+            # najvise, pa se zapis napravi sada.
+            doc = session.get(Document, document_id)
+            if doc is None:
+                raise NeMozeObavestenje("Nema takvog dokumenta.")
+            red = ObavestenjeOPrethodnomPorezu(
+                document_id=document_id,
+                broj=doc.document_number or str(document_id),
+                iznos_pdv=abs(doc.vat_amount or 0) or None,
+                poslao=korisnik,
+            )
+            session.add(red)
+            session.flush()
         if red.uspelo:
             return f"Obaveštenje {red.broj} je app već poslala — nema šta da se beleži."
         red.rucno_potvrdio = korisnik

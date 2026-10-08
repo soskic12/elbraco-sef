@@ -620,6 +620,16 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                 "nacrt": nacrt,
                 "manjak": session.get(PrijavaManjka, doc.id),
                 "obavestenje": session.get(ObavestenjeOPrethodnomPorezu, doc.id),
+                # Prihvaceno knjizno odobrenje sa PDV-om duguje obavestenje i
+                # kad slanje nikad nije pokusano - a to je slucaj za svako koje
+                # nije prihvaceno kroz aplikaciju (npr. prihvaceno na portalu
+                # ili pre prelaska). Bez ovoga se na dokumentu nije videlo
+                # nista: 08.10. je tako stajalo 81 odobrenje.
+                "treba_obavestenje": (
+                    doc.document_type == DocumentType.CREDIT_NOTE
+                    and doc.sef_status == SefStatus.APPROVED
+                    and abs(doc.vat_amount or 0) > 0
+                ),
                 "upis_ukljucen": get_settings().erp_upis_kalkulacije,
                 "units": units,
                 "notifications": notifications,
