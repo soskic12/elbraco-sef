@@ -551,3 +551,33 @@ def test_spisak_nacrta_preskace_arhivu(db):
 
     assert "FA-ZIV" in ishod.stdout
     assert "FA-ARHIVA" not in ishod.stdout
+
+
+def test_dokument_kaze_zasto_ga_nema_na_ekranu_jedinice(db):
+    """Bogdan je prijavio da mu je faktura „nestala“ sa ekrana.
+
+    Ekran jedinice prikazuje samo nearhivirane dokumente svoje PJ, pa dokument
+    iz ekrana izlazi na dva nacina: arhiviran je, ili je ostao bez PJ. Ispis to
+    do 08.10. nije pominjao, pa se trazilo naslepo.
+    """
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import BusinessUnit, Document
+
+    with db.session_scope() as session:
+        jedinica = BusinessUnit(code="OFFICE-X", name="Uprava proba")
+        session.add(jedinica)
+        session.flush()
+        session.add_all([
+            Document(sef_invoice_id=991101, document_number="1386/26",
+                     business_unit_id=jedinica.id, archived=True),
+            Document(sef_invoice_id=991102, document_number="1387/26"),
+        ])
+
+    runner = CliRunner()
+    arhiviran = runner.invoke(app, ["dokument", "1386/26"]).output
+    assert "ARHIVIRAN" in arhiviran
+
+    bez_pj = runner.invoke(app, ["dokument", "1387/26"]).output
+    assert "NERAZVRSTAN" in bez_pj

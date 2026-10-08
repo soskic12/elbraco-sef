@@ -1514,6 +1514,23 @@ def cmd_dokument(
                    f"   SEF: {doc.sef_status.value}   stanje: {doc.state.value}")
         typer.echo(f"   prosleđeno  {doc.forwarded_at or '—'}  {doc.forwarded_by or ''}")
         typer.echo(f"   prijem      {doc.received_at or '—'}  {doc.received_by or ''}")
+        if doc.routing_note:
+            typer.echo(f"   razvrstano  {doc.routing_note[:88]}")
+        # Zasto dokumenta nema na ekranu jedinice. Bez ovoga se ne vidi: Bogdan
+        # je 08.10. prijavio da je 1386/26 „nestala“ sa njegovog ekrana, a ispis
+        # nije pominjao ni arhivu ni promenu jedinice (Bane, 08.10.).
+        if doc.archived:
+            typer.secho(
+                "   ARHIVIRAN   zato ga nema na ekranu jedinice; vidi se pod „Arhiva“",
+                fg="yellow",
+            )
+        if doc.business_unit_id is None:
+            typer.secho(
+                "   NERAZVRSTAN nije ni na jednom ekranu jedinice — čeka operatera",
+                fg="yellow",
+            )
+        if doc.routing_corrected:
+            typer.echo("   vraćen      razvrstavanje je čovek ispravljao; pravila ga preskaču")
         if doc.po_starom:
             typer.secho("   stiglo pre prelaska — kalkulaciju pravi čovek u ERP-u",
                         fg="yellow")
