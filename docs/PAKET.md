@@ -187,6 +187,10 @@ istoriji). Na dokumentu, ispod razloga, veza „otvori komitenta u šifarniku“
   drugi projekat; ostaje da mu se, kad novi nalog odradi nekoliko dana, oduzme
   INSERT na `DARTIKLI` (ne koristi ga nijedan projekat). Vidi
   [PRELAZAK.md](PRELAZAK.md), merenje u [FAZA-2.md](FAZA-2.md).
+* **Obaveštenje o prethodnom porezu kod storna.** Propis ga traži i za storno
+  fakture, avansa i dokumenta o povećanju (poslovno pravilo 2) — mi te tri vrste
+  **ne pokrivamo nikako**. Prvo izmeriti koliko ih je. Sve činjenice su u
+  [OBAVESTENJE-PRETHODNI-POREZ.md](OBAVESTENJE-PRETHODNI-POREZ.md).
 * **Automatsko prosleđivanje** — pustiti `analiza-razvrstavanja` posle nekoliko
   dana sa očišćenim pravilima, pa videti gde je app sigurna.
 * **Veza po nazivu na odobrenjima.** Ako neko čekira „zapamti vezu“, naziv može

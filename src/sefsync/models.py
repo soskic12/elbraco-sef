@@ -291,6 +291,11 @@ class Document(Base):
     # finansijsko odobrenje na promet (088). Mereno: 234 odluke, 85 % tacnih.
     billing_reference: Mapped[str | None] = mapped_column(String(500), default=None)
     billing_reference_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Period na koji se dokument odnosi (cac:InvoicePeriod). Potreban je kod
+    # obavestenja o prethodnom porezu: kad odobrenje pokriva vise faktura, SEF
+    # trazi pocetak i kraj perioda kao OBAVEZNA polja - bez njih vraca 400.
+    period_start: Mapped[date | None] = mapped_column(Date, default=None)
+    period_end: Mapped[date | None] = mapped_column(Date, default=None)
     # Ziro racun dobavljaca. Kod javnih preduzeca SEF salje identifikator koji
     # nije maticni broj (Srbijagas: 86132 umesto 20084600), pa je racun jedini
     # pouzdan nacin da se dobavljac nadje u NAZIVI - popunjen je na 37.411 od

@@ -2001,6 +2001,45 @@ def cmd_obavestenja(
             typer.echo(f"   {n:>4}  {ime}")
 
 
+@app.command("uskladi-obavestenja")
+def cmd_uskladi_obavestenja(
+    od: str = typer.Option(None, "--od", help="Od kog datuma (GGGG-MM-DD). Podrazumevano 1.1. prošle godine."),
+    do: str = typer.Option(None, "--do", help="Do kog datuma. Podrazumevano danas."),
+    stvarno: bool = typer.Option(False, "--stvarno", help="Upiši nalaz u panel."),
+) -> None:
+    """Pita SEF koja obaveštenja o prethodnom porezu već postoje.
+
+    Panel vidi samo svoja slanja, a čovek je obaveštenja pravio na portalu — pa
+    je izgledalo da 81 odobrenje duguje obaveštenje. Ovo ne šalje ništa: samo
+    pročita šta SEF zna i, sa `--stvarno`, zabeleži to.
+    """
+    _boot()
+    from .services.obavestenje import uskladi_sa_sefom
+
+    danas = date.today()
+    pocetak = date.fromisoformat(od) if od else date(danas.year - 1, 1, 1)
+    kraj = date.fromisoformat(do) if do else danas
+
+    typer.echo(f"Pitam SEF za obaveštenja od {pocetak} do {kraj}...")
+    nalaz = uskladi_sa_sefom(pocetak, kraj, stvarno=stvarno)
+
+    typer.echo(f"SEF zna za obaveštenja: {nalaz['sa_sefa']}")
+    typer.echo(f"   poklopljeno po dokumentu : {nalaz['po_dokumentu']}")
+    typer.echo(f"   poklopljeno po broju     : {nalaz['po_broju']}")
+    typer.echo(f"   nema obaveštenje nigde   : {len(nalaz['nema_obavestenje'])}")
+    if nalaz["nema_obavestenje"]:
+        typer.echo(
+            "   to su: "
+            + ", ".join(f"#{i}" for i in nalaz["nema_obavestenje"][:20])
+            + (" ..." if len(nalaz["nema_obavestenje"]) > 20 else "")
+        )
+    if stvarno:
+        typer.secho(f"Zabeleženo u panelu: {nalaz['zabelezeno']}", fg="green")
+    else:
+        typer.echo("")
+        typer.secho("Ništa nije upisano — dodaj --stvarno.", fg="yellow")
+
+
 @app.command("provera-prelaska")
 def cmd_provera_prelaska() -> None:
     """Šta još stoji na putu prelasku na novi način rada.

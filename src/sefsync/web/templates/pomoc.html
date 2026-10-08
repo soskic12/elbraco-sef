@@ -354,7 +354,10 @@
   poslato“, sa ista ta dva dugmeta. Do 08.10. tu nije stajalo ništa, pa je 81
   odobrenje stajalo bez obaveštenja a da se to na dokumentu nije videlo.</p>
   <p class="muted small">Spisak takvih ide komandom <code>sefsync obavestenja</code>
-  — po danu, po dobavljaču i po tome da li je slanje ikad pokušano.</p>
+  — po danu, po dobavljaču i po tome da li je slanje ikad pokušano. Pre slanja se
+  pusti <code>sefsync uskladi-obavestenja</code>: ono pita <b>SEF</b> koja
+  obaveštenja već postoje, pa i ona napravljena na portalu, i zabeleži ih. Tako se
+  ne šalje drugo obaveštenje za nešto što je odavno urađeno.</p>
   <p class="muted small">Odobrenje sa nultim PDV-om nema obaveštenje — propis
   traži iznos veći od nule.</p>
 {% endcall %}

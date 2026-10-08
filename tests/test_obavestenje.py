@@ -159,3 +159,163 @@ def test_rucna_potvrda_i_kad_slanje_nije_pokusano():
         assert red.iznos_pdv == 330.0
         assert red.uspelo is False and red.zavrseno is True
         assert doc_id not in [d.id for d in bez_obavestenja(session)]
+
+
+# --------------------------------------------------------------------------- #
+# telo zahteva po dokumentaciji (API dokumentacija 31.07.2026, str. 174-178)
+# --------------------------------------------------------------------------- #
+
+def _odobrenje(**polja):
+    from datetime import date as _d
+
+    from sefsync.models import Document, DocumentType
+
+    osnovno = dict(
+        sef_invoice_id=1,
+        document_number="KO-1",
+        document_type=DocumentType.CREDIT_NOTE,
+        supplier_vat="101599656",
+        issue_date=_d(2026, 10, 2),
+        vat_amount=-1200.0,
+    )
+    osnovno.update(polja)
+    return Document(**osnovno)
+
+
+def test_period_je_obavezan_kad_odobrenje_pokriva_vise_faktura():
+    """Tabela polja, str. 177: Mandatory when CreditNoteReferenceToPeriod.
+
+    U proznom delu (pravilo 12 i 13) stoji „опционо“ i zato je ovo promaseno —
+    cetiri obavestenja su 02.10. pala sa 400, sva na vise faktura.
+    """
+    from datetime import date as _d
+
+    from sefsync.services.obavestenje import telo_zahteva
+
+    doc = _odobrenje(
+        billing_reference_count=3,
+        period_start=_d(2026, 9, 1),
+        period_end=_d(2026, 9, 30),
+    )
+    telo = telo_zahteva(doc)
+
+    assert telo["documentReferenceType"] == "CreditNoteReferenceToPeriod"
+    assert telo["relatedInvoicePeriodStartDate"] == "2026-09-01"
+    assert telo["relatedInvoicePeriodEndDate"] == "2026-09-30"
+
+
+def test_bez_perioda_u_ublu_pada_na_datum_odobrenja():
+    """Bez ikakvog perioda zahtev sigurno pada, pa je i gruba procena bolja."""
+    from sefsync.services.obavestenje import telo_zahteva
+
+    telo = telo_zahteva(_odobrenje(billing_reference_count=2))
+
+    assert telo["relatedInvoicePeriodStartDate"] == "2026-10-02"
+    assert telo["relatedInvoicePeriodEndDate"] == "2026-10-02"
+
+
+def test_jedna_faktura_ne_nosi_period():
+    from sefsync.services.obavestenje import telo_zahteva
+
+    telo = telo_zahteva(_odobrenje(billing_reference_count=1))
+
+    assert telo["documentReferenceType"] == "CreditNoteReferenceToInvoice"
+    assert "relatedInvoicePeriodStartDate" not in telo
+
+
+def test_odobrenje_na_avans_ima_svoju_vrstu_veze():
+    """Poslovno pravilo 5 dopusta i CreditNoteReferenceToPrepaymentInvoice."""
+    from datetime import date as _d
+
+    from sefsync.services.obavestenje import telo_zahteva
+
+    telo = telo_zahteva(_odobrenje(billing_reference_count=1, prepayment_date=_d(2026, 9, 15)))
+
+    assert telo["documentReferenceType"] == "CreditNoteReferenceToPrepaymentInvoice"
+
+
+def test_jbkjs_ili_maticni_ide_u_registrationCode():
+    """Pravilo 17: obavezno za korisnika javnih sredstava; SEF nam tu i salje JBKJS."""
+    from sefsync.services.obavestenje import telo_zahteva
+
+    telo = telo_zahteva(_odobrenje(supplier_reg_no="82080"))
+    assert telo["recipient"]["registrationCode"] == "82080"
+
+    bez = telo_zahteva(_odobrenje(supplier_reg_no=None))
+    assert "registrationCode" not in bez["recipient"]
+
+
+def test_uskladjivanje_prepoznaje_obavestenje_poslato_sa_portala():
+    """SEF zna i za ono što je čovek poslao rukom — to je dokaz, ne pretpostavka."""
+    from datetime import date as _d
+
+    from sefsync.db import session_scope
+    from sefsync.models import (
+        Document,
+        DocumentType,
+        ObavestenjeOPrethodnomPorezu,
+        SefStatus,
+    )
+    from sefsync.services.obavestenje import bez_obavestenja, uskladi_sa_sefom
+
+    with session_scope() as session:
+        po_dokumentu = Document(
+            sef_invoice_id=771001,
+            document_number="KO-A",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000001",
+            vat_amount=-500.0,
+        )
+        po_broju = Document(
+            sef_invoice_id=771002,
+            document_number="KO-B",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000002",
+            vat_amount=-600.0,
+        )
+        nema = Document(
+            sef_invoice_id=771003,
+            document_number="KO-C",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000003",
+            vat_amount=-700.0,
+        )
+        session.add_all([po_dokumentu, po_broju, nema])
+        session.flush()
+        ids = (po_dokumentu.id, po_broju.id, nema.id)
+
+    class LazniSef:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def poslata_obavestenja(self, od, do):
+            return [
+                {"Id": 11, "NoticeNumber": "KO-A", "PurchaseInvoiceId": 771001,
+                 "SendingStatus": "Sent", "Recipient": {"VatRegistrationCode": "100000001"}},
+                {"Id": 12, "NoticeNumber": "KO-B", "PurchaseInvoiceId": None,
+                 "SendingStatus": "Sent", "Recipient": {"VatRegistrationCode": "100000002"}},
+            ]
+
+    nalaz = uskladi_sa_sefom(_d(2026, 1, 1), _d(2026, 12, 31), klijent=LazniSef())
+
+    assert nalaz["po_dokumentu"] == 1
+    assert nalaz["po_broju"] == 1
+    assert nalaz["nema_obavestenje"] == [ids[2]]
+    assert nalaz["zabelezeno"] == 0  # bez --stvarno se nista ne upisuje
+
+    nalaz = uskladi_sa_sefom(
+        _d(2026, 1, 1), _d(2026, 12, 31), stvarno=True, klijent=LazniSef()
+    )
+
+    assert nalaz["zabelezeno"] == 2
+    with session_scope() as session:
+        red = session.get(ObavestenjeOPrethodnomPorezu, ids[0])
+        assert red is not None and red.sef_notice_id == 11 and red.uspelo is True
+        ostali = [d.id for d in bez_obavestenja(session)]
+        assert ostali == [ids[2]]

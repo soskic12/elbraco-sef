@@ -145,6 +145,8 @@ class UblDocument:
     despatch_reference: str | None = None
     project_reference: str | None = None
     billing_references: list[str] = field(default_factory=list)  # KO/KZ -> broj originalne fakture
+    period_start: date | None = None   # cac:InvoicePeriod/StartDate
+    period_end: date | None = None     # cac:InvoicePeriod/EndDate
     # cac:AdditionalDocumentReference/cbc:ID - neki dobavljaci tu upisuju objekat
     # (KIM-TEC: "Elbraco - Sombor"). Do sada se gledao samo prilog unutar njega.
     additional_references: list[str] = field(default_factory=list)
@@ -208,6 +210,8 @@ class UblDocument:
             "document_number": self.document_number,
             "additional_reference": " | ".join(self.additional_references) or None,
             "billing_reference": " | ".join(self.billing_references) or None,
+            "period_start": self.period_start,
+            "period_end": self.period_end,
             "billing_reference_kind": self.billing_reference_kind,
             "attachment_text": self.attachment_text,
             "item_text": self.item_text or None,
@@ -500,6 +504,13 @@ def parse_ubl(data: bytes | str) -> UblDocument:
         for v in (_text(n, "InvoiceDocumentReference/ID") for n in _find_all(root, "BillingReference"))
         if v
     ]
+    # Period je nosac podatka kod odobrenja koje pokriva vise faktura; bez njega
+    # obavestenje o prethodnom porezu pada na SEF-u.
+    period = _find(root, "InvoicePeriod")
+    if period is not None:
+        doc.period_start = _date(period, "StartDate")
+        doc.period_end = _date(period, "EndDate")
+
     doc.additional_references = [
         v
         for v in (_text(n, "ID") for n in _find_all(root, "AdditionalDocumentReference"))

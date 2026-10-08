@@ -23,6 +23,7 @@ PDV-om - za takvo obavestenje ni ne postoji, jer iznos mora biti veci od nule.
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from ..db import session_scope
 from ..models import (
@@ -39,6 +40,9 @@ PORAKLO_SEF = "DocumentIssuedViaSef"
 OSNOV_ODOBRENJE = "CreditNoteIssued"
 VEZA_FAKTURA = "CreditNoteReferenceToInvoice"
 VEZA_PERIOD = "CreditNoteReferenceToPeriod"
+VEZA_AVANS = "CreditNoteReferenceToPrepaymentInvoice"
+# Avansni racun po UBL-u (InvoiceTypeCode 386).
+KOD_AVANSA = "386"
 
 
 class NeMozeObavestenje(RuntimeError):
@@ -65,20 +69,98 @@ def _proveri(doc: Document) -> None:
         )
 
 
+def vrsta_veze(doc: Document) -> str:
+    """Koji je izvorni dokument odobrenja - faktura, avansna faktura ili period.
+
+    Dokumentacija (poslovno pravilo 5) dopusta tri vrednosti uz
+    `CreditNoteIssued`, a mi smo do 08.10. koristili dve: avansna faktura je
+    isla kao obicna. Odobrenje na avans je redak slucaj ali postoji, i SEF za
+    njega trazi svoju vrednost.
+    """
+    if (doc.billing_reference_count or 0) > 1:
+        return VEZA_PERIOD
+    if doc.prepayment_date is not None or doc.invoice_type_code == KOD_AVANSA:
+        return VEZA_AVANS
+    return VEZA_FAKTURA
+
+
+def period_veze(doc: Document) -> tuple[date, date] | None:
+    """Pocetak i kraj perioda na koji se odobrenje odnosi.
+
+    SEF ovo trazi kao **obavezno** kad je vrsta veze `CreditNoteReferenceToPeriod`
+    (tabela polja, strana 177) - u proznom delu stoji „опционо“, i zato je ovo
+    dugo promaseno. Cetiri obavestenja su 02.10. pala sa `400`, sva cetiri bas
+    na vise faktura.
+
+    Izvori, po pouzdanosti: period iz UBL-a odobrenja, pa datumi izdavanja
+    faktura na koje se poziva, pa datum samog odobrenja kao poslednja odbrana -
+    jer bez ikakvog perioda zahtev sigurno pada.
+    """
+    if doc.period_start and doc.period_end:
+        return doc.period_start, doc.period_end
+
+    datumi = _datumi_povezanih_faktura(doc)
+    if datumi:
+        return min(datumi), max(datumi)
+    return (doc.issue_date, doc.issue_date) if doc.issue_date else None
+
+
+def _datumi_povezanih_faktura(doc: Document) -> list[date]:
+    """Datumi faktura na koje se odobrenje poziva, iz naseg sopstvenog spiska."""
+    from sqlalchemy import select
+
+    from ..db import session_scope as _scope
+
+    brojevi = [b.strip() for b in (doc.billing_reference or "").split("|") if b.strip()]
+    if not brojevi:
+        return []
+    with _scope() as session:
+        return [
+            d
+            for (d,) in session.execute(
+                select(Document.issue_date).where(
+                    Document.supplier_vat == doc.supplier_vat,
+                    Document.document_number.in_(brojevi),
+                    Document.issue_date.is_not(None),
+                )
+            )
+        ]
+
+
 def telo_zahteva(doc: Document) -> dict:
     """Telo poziva ka SEF-u, sklopljeno iz samog odobrenja."""
     _proveri(doc)
-    vise_faktura = (doc.billing_reference_count or 0) > 1
-    return {
+    vrsta = vrsta_veze(doc)
+    telo = {
         "noticeNumber": doc.document_number.strip()[:200],
         "totalVatAmount": round(abs(doc.vat_amount or 0), 2),
         "documentIssueOrigin": PORAKLO_SEF,
         "basisOfNotice": OSNOV_ODOBRENJE,
-        "documentReferenceType": VEZA_PERIOD if vise_faktura else VEZA_FAKTURA,
+        "documentReferenceType": vrsta,
         "relatedDocumentNumber": doc.document_number.strip(),
         "relatedDocumentIssueDate": doc.issue_date.isoformat(),
         "recipient": {"vatRegistrationCode": doc.supplier_vat.strip()},
     }
+
+    # Poslovno pravilo 17: `registrationCode` je OBAVEZAN kad je primalac
+    # korisnik javnih sredstava (tada je to JBKJS), a opcion za privredni
+    # subjekat (matični broj). SEF nam za javna preduzeca u polju matičnog i
+    # salje JBKJS, pa je ono što imamo ujedno i ono što treba.
+    sifra = (doc.supplier_reg_no or "").strip()
+    if sifra:
+        telo["recipient"]["registrationCode"] = sifra
+
+    if vrsta == VEZA_PERIOD:
+        period = period_veze(doc)
+        if period is None:
+            raise NeMozeObavestenje(
+                "Odobrenje pokriva više faktura, a period se ne može odrediti — "
+                "SEF ga tada traži kao obavezan."
+            )
+        telo["relatedInvoicePeriodStartDate"] = period[0].isoformat()
+        telo["relatedInvoicePeriodEndDate"] = period[1].isoformat()
+
+    return telo
 
 
 def zabelezi_rucno(document_id: int, korisnik: str) -> str:
@@ -212,3 +294,91 @@ def bez_obavestenja(session) -> list[Document]:
         )
         if d.id not in poslata and abs(d.vat_amount or 0) > 0
     ]
+
+
+def uskladi_sa_sefom(
+    od: date, do: date, *, stvarno: bool = False, klijent=None
+) -> dict:
+    """Pita SEF koja obavestenja vec postoje i zabelezi ih u panelu.
+
+    Panel vidi samo svoje pokusaje slanja. Covek je obavestenja godinu dana
+    pravio na portalu, pa je 08.10. izgledalo da 81 odobrenje duguje obavestenje
+    - a Bane kaze da je "sve stare poslao peske". Nagadjati se ne mora: SEF na
+    `sender/date-range` vraca sva obavestenja koja smo poslali, bilo kako.
+
+    Poklapanje se trazi po `PurchaseInvoiceId` (to je dokument na koji se
+    obavestenje odnosi, pa je dokaz), a kad njega nema - po broju obavestenja
+    uz PIB dobavljaca, jer broj obavestenja kod nas jeste broj odobrenja.
+
+    Bez `stvarno` samo prebroji; nista se ne salje ni u jednom slucaju.
+    """
+    from ..sef.client import SefClient
+
+    with (klijent or SefClient()) as sef:
+        redovi = sef.poslata_obavestenja(od, do)
+
+    po_sef_id: dict[int, dict] = {}
+    po_broju: dict[tuple[str, str], dict] = {}
+    for r in redovi:
+        sef_doc = r.get("PurchaseInvoiceId") or r.get("purchaseInvoiceId")
+        if sef_doc:
+            po_sef_id[int(sef_doc)] = r
+        broj = (r.get("NoticeNumber") or r.get("noticeNumber") or "").strip()
+        primalac = r.get("Recipient") or r.get("recipient") or {}
+        pib = (
+            primalac.get("VatRegistrationCode")
+            or primalac.get("vatRegistrationCode")
+            or ""
+        ).strip()
+        if broj:
+            po_broju[(broj, pib)] = r
+
+    ishod = {
+        "sa_sefa": len(redovi),
+        "po_dokumentu": 0,
+        "po_broju": 0,
+        "nema_obavestenje": [],
+        "zabelezeno": 0,
+    }
+
+    with session_scope() as session:
+        for doc in bez_obavestenja(session):
+            nalaz = po_sef_id.get(doc.sef_invoice_id or 0)
+            kako = "po_dokumentu"
+            if nalaz is None:
+                nalaz = po_broju.get(
+                    ((doc.document_number or "").strip(), (doc.supplier_vat or "").strip())
+                )
+                kako = "po_broju"
+            if nalaz is None:
+                ishod["nema_obavestenje"].append(doc.id)
+                continue
+            ishod[kako] += 1
+            if not stvarno:
+                continue
+            red = session.get(ObavestenjeOPrethodnomPorezu, doc.id)
+            if red is None:
+                red = ObavestenjeOPrethodnomPorezu(
+                    document_id=doc.id,
+                    broj=(nalaz.get("NoticeNumber") or nalaz.get("noticeNumber") or "")[:200]
+                    or (doc.document_number or str(doc.id)),
+                    poslao="sef",
+                )
+                session.add(red)
+                session.flush()
+            red.sef_notice_id = nalaz.get("Id") or nalaz.get("id")
+            red.status = nalaz.get("SendingStatus") or nalaz.get("sendingStatus")
+            red.greska = None
+            if red.iznos_pdv is None:
+                red.iznos_pdv = abs(doc.vat_amount or 0) or None
+            session.add(
+                AuditLog(
+                    actor="sef",
+                    action="obavestenje.nadjeno",
+                    document_id=doc.id,
+                    detail=f"{red.broj}: nađeno na SEF-u ({kako})",
+                )
+            )
+            ishod["zabelezeno"] += 1
+
+    return ishod

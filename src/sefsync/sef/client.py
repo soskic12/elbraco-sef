@@ -255,6 +255,31 @@ class SefClient:
         )
         return resp.content
 
+    def poslata_obavestenja(
+        self, od: date | str, do: date | str
+    ) -> list[dict[str, Any]]:
+        """GET /recipients-notice-on-input-vat/sender/date-range - sva poslata obavestenja.
+
+        Vraca ono sto SEF zna da smo poslali, bez obzira na to da li je poslato
+        kroz aplikaciju ili rukom na portalu. Zato je ovo jedini pouzdan odgovor
+        na pitanje „da li ovo odobrenje vec ima obavestenje“ - panel vidi samo
+        svoje pokusaje, a covek je godinu dana radio na portalu.
+
+        Svaki red nosi `NoticeNumber`, `NoticeDate`, `SendingStatus`,
+        `PurchaseInvoiceId` i PIB primaoca, pa se poklapanje moze naci i po
+        dokumentu i po broju.
+        """
+        resp = self._request(
+            "GET",
+            f"{API}/recipients-notice-on-input-vat/sender/date-range",
+            params={
+                "dateFrom": od.isoformat() if hasattr(od, "isoformat") else str(od),
+                "dateTo": do.isoformat() if hasattr(do, "isoformat") else str(do),
+            },
+            headers={"accept": "application/json"},
+        )
+        return resp.json() or []
+
     def obavestenja_sa_greskom(self) -> list[dict[str, Any]]:
         """GET /recipients-notice-on-input-vat/sender/mistake-status.
 
