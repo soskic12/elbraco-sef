@@ -24,6 +24,38 @@ i preračunava nacrte — bore se za istu datoteku. Zato se prebacuje.
 `provera-prelaska` prijavlja SQLite kao grešku kad je upis u produkciju uključen,
 a panel o tome piše u log pri svakom pokretanju.
 
+## Prvo: šta je u `SefSync` na MS SQL-u — **ne preskakati**
+
+Baza `SefSync` **postoji** na `CLELBRACO` (vidi se u spisku baza), ali joj panelovi
+ERP nalozi nemaju pristup, pa se iz aplikacije ne zna šta je u njoj. To je jedino
+što deli bezbednu seobu od mešane baze:
+
+* **ako je prazna** — seoba ide bez razmišljanja;
+* **ako u njoj ima podataka** — seoba se **odbija**. Tabela koja u cilju već ima
+  redova bila bi preskočena, pa bi deo podataka bio iz nje a deo iz SQLite, sa
+  stranim ključevima koji pokazuju u prazno. To je gore od neurađene seobe i
+  teško se prepoznaje.
+
+Od 08.10. aplikacija to **ne dopušta**: `prebaci-bazu` prvo pogleda cilj i staje
+ako nije prazan. Suvi prolaz ispiše „Cilj je prazan — seoba može“ ili spisak
+tabela koje ga sprečavaju.
+
+Provera u SSMS-u, samo čita:
+
+```sql
+USE [SefSync];
+SELECT t.name AS tabela, SUM(p.rows) AS redova
+FROM sys.tables t
+JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+GROUP BY t.name
+ORDER BY redova DESC;
+```
+
+* **Ne vrati ništa** → baza je prazna, idi dalje.
+* **Vrati tabele sa nulama** → šema postoji ali podataka nema; isto je u redu.
+* **Vrati tabele sa redovima** → stani i javi šta piše. Tada se ne seli u nju
+  nego u novu (`SefSync2`), pa se stara preimenuje kad se nova potvrdi.
+
 ## Šta treba pre početka
 
 1. **Baza `SefSync` na MS SQL-u** (`CLELBRACO`, `194.146.57.216:1433`). Panelovi

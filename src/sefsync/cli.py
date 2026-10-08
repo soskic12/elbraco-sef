@@ -515,12 +515,39 @@ def cmd_migrate_db(
     from .models import Base
     from .services.seoba import prebaci_na
 
+    from .services.seoba import SeobaNijeBezbedna, pregled_odredista
+
     if not stvarno:
         izvor = create_engine(iz) if iz else get_engine()
         inspektor = _inspect(izvor)
+        cilj = create_engine(u)
         typer.echo(f"Izvor: {izvor.url.render_as_string(hide_password=True)}")
-        typer.echo(f"Cilj : {create_engine(u).url.render_as_string(hide_password=True)}")
+        typer.echo(f"Cilj : {cilj.url.render_as_string(hide_password=True)}")
         typer.echo("")
+
+        # Prvo sta je u CILJU. Ako tamo vec ima podataka, seoba ne sme da krene -
+        # mesana baza je gore od neuradjene seobe.
+        try:
+            u_cilju = pregled_odredista(cilj)
+        except Exception as exc:  # noqa: BLE001 - cilj ume da ne postoji
+            typer.secho(f"Ne mogu da pogledam cilj: {str(exc).splitlines()[0][:160]}", fg="red")
+            raise typer.Exit(1) from exc
+        if u_cilju:
+            typer.secho("Cilj NIJE prazan:", fg="red")
+            for tabela, broj in sorted(u_cilju.items()):
+                typer.echo(f"   {tabela:<18} {broj:>7}")
+            typer.secho(
+                "Seoba u ovakav cilj se odbija — preskočila bi te tabele i "
+                "ostavila mešanu bazu. Isprazni cilj, uzmi drugu bazu, ili "
+                "svesno dodaj --prepisi.",
+                fg="red",
+            )
+            typer.echo("")
+        else:
+            typer.secho("Cilj je prazan — seoba može.", fg="green")
+            typer.echo("")
+
+        typer.echo("Šta bi prešlo iz izvora:")
         with izvor.connect() as veza:
             for tabela in Base.metadata.sorted_tables:
                 if not inspektor.has_table(tabela.name):
@@ -532,7 +559,11 @@ def cmd_migrate_db(
         typer.echo("Ovo je bio suvi prolaz. Za stvarno prebacivanje dodaj --stvarno")
         return
 
-    izvestaj = prebaci_na(u, iz, prepisi=prepisi)
+    try:
+        izvestaj = prebaci_na(u, iz, prepisi=prepisi)
+    except SeobaNijeBezbedna as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1) from exc
     typer.echo(izvestaj.tekst())
     typer.echo("")
     typer.echo("Sada upiši novu vezu u .env kao DB_URL i restartuj servis.")

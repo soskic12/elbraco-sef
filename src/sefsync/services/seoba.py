@@ -45,12 +45,44 @@ def _je_mssql(engine: Engine) -> bool:
     return engine.dialect.name == "mssql"
 
 
+class SeobaNijeBezbedna(RuntimeError):
+    """Cilj nije prazan - prepisivanje bi dalo mesanu bazu."""
+
+
+def pregled_odredista(odrediste: Engine) -> dict[str, int]:
+    """Koliko redova cilj vec ima, po tabeli. Samo cita (i napravi semu ako je nema)."""
+    Base.metadata.create_all(odrediste)
+    nalaz: dict[str, int] = {}
+    with odrediste.connect() as veza:
+        for tabela in Base.metadata.sorted_tables:
+            broj = veza.execute(select(func.count()).select_from(tabela)).scalar_one()
+            if broj:
+                nalaz[tabela.name] = broj
+    return nalaz
+
+
 def prebaci(izvor: Engine, odrediste: Engine, prepisi: bool = False) -> Izvestaj:
     """Prepisuje sve tabele iz jedne baze u drugu.
 
-    `prepisi=False` znaci da se u tabelu koja vec ima redova ne dira - da se
-    slucajno pokretanje dvaput ne udvostruci podatke.
+    **Staje ako cilj nije prazan.** Do 08.10. je tabelu koja vec ima redova tiho
+    preskakala, pa bi se dobila mesana baza: deo tabela iz stare, deo iz nove, a
+    strani kljucevi pokazuju na id-ove kojih u drugoj tabeli nema. To je gore od
+    neuradjene seobe i tesko se prepoznaje. Bane, 08.10.: "NE SMEMO UCI U
+    REGRESIJU".
+
+    `prepisi=True` je izricit pristanak da se cilj obrise i upise iznova.
     """
+    if not prepisi:
+        vec_ima = pregled_odredista(odrediste)
+        if vec_ima:
+            spisak = ", ".join(f"{t} ({n})" for t, n in sorted(vec_ima.items()))
+            raise SeobaNijeBezbedna(
+                "Ciljna baza nije prazna: " + spisak + ". Seoba bi preskočila te "
+                "tabele i ostavila mešanu bazu — deo podataka iz stare, deo iz "
+                "nove, sa vezama koje pokazuju u prazno. Isprazni cilj ili uzmi "
+                "drugu bazu; „--prepisi“ briše i upisuje iznova, ali tek kad si "
+                "siguran da u cilju nema ničega što ti treba."
+            )
     Base.metadata.create_all(odrediste)
     izvestaj = Izvestaj()
     inspektor = inspect(izvor)
