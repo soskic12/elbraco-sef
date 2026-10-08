@@ -131,6 +131,19 @@ boju, pa čovek mora jednom po šifri); 17 servisnih redova bez EAN-a i bez šif
 (nova šifra, Duletov ekran); 4 koja nisu artikal. Po dobavljaču: CSM 24,
 Inženjering Servis 22, Vitel 17, Infocar 11.
 
+### 08.10.2026. — `izvestaj --dana 1`, provera posle upisa veza ✔
+
+* `kalkulacija.upisana 65`, od toga **`dovrsi-upise` 12** — ostalo su ljudi. Skok
+  `upisan` sa 434 na 537 je dakle najvećim delom **prepoznavanje kalkulacija koje
+  su već u ERP-u**, ne masovno dopisivanje. Pitanje zatvoreno.
+* **`obavestenje.poslato 7`** — ispravka zahteva ne radi slučajno jednom nego
+  ponovljivo (uz `sef.accept 64`).
+* **`document.vracen 18` i `routing.rule.miss 19` u jednom danu**, plus
+  `routing.manual 37`. Pedeset pet ručnih intervencija u razvrstavanju dnevno —
+  to je cena 180 pravila koja nisu na serveru.
+* `document.created 723` u 24 h. Prosek od 11.09. je oko 310 dnevno, pa je ovo
+  dvostruko, ali ne vanredno.
+
 ### 08.10.2026. — šta je ostalo otvoreno
 
 * ✗ 180 pravila razvrstavanja
