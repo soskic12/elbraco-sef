@@ -108,3 +108,42 @@ def test_prazna_vrednost_iz_izvora_ne_brise_rucni_unos(db):
         pub = session.scalar(select(BusinessUnit).where(BusinessUnit.code == "MP071"))
         assert pub.city == "Sombor"              # ručni unos sačuvan
         assert pub.address == "Matije Gupca 55"  # nova vrednost iz izvora upisana
+
+
+# --------------------------------------------------------------------------- #
+# dvostruko kodiranje u imenu jedinice
+# --------------------------------------------------------------------------- #
+
+def test_razmotava_dvostruko_kodirano_ime():
+    """„UPRAVA â€” FINANSIJE“ je ono što je Bogdan video, dvaput.
+
+    Izvor (BU_SOURCE_SQL u .env-u na serveru) drži već pokvaren tekst, pa ga je
+    svaki pj-sync ponovo upisivao a pravila-uvoz --i-jedinice popravljao.
+    """
+    from sefsync.services.units import ispravi_mojibake
+
+    assert ispravi_mojibake("UPRAVA \u00e2\u20ac\u201d FINANSIJE") == "UPRAVA \u2014 FINANSIJE"
+    assert ispravi_mojibake("\u00c5\u00a0ljiva") == "\u0160ljiva"
+    assert ispravi_mojibake("Vrba\u00c5\u00a1") == "Vrba\u0161"
+
+
+def test_ispravan_tekst_se_ne_dira():
+    """Srpska latinica i obične reči moraju da prođu nedirnute."""
+    from sefsync.services.units import ispravi_mojibake
+
+    for tekst in (
+        "UPRAVA \u2014 FINANSIJE",
+        "Ma\u0161ina za \u0161ivenje",
+        "Save Kova\u010devi\u0107a 1B",
+        "Old Brick Pub",
+        "\u0110ur\u0111evi\u0107",
+        "MAG010",
+        "",
+    ):
+        assert ispravi_mojibake(tekst) == tekst
+
+
+def test_ime_jedinice_se_cisti_pri_uvozu():
+    from sefsync.services.units import _clean
+
+    assert _clean("  UPRAVA \u00e2\u20ac\u201d FINANSIJE  ") == "UPRAVA \u2014 FINANSIJE"

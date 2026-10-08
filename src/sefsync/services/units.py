@@ -59,10 +59,40 @@ class ImportResult:
         return f"novih {self.created}, ažurirano {self.updated}, preskočeno {self.skipped}"
 
 
+# Tragovi dvostrukog kodiranja: UTF-8 bajtovi procitani kao cp1252. Em-crta
+# (U+2014, bajtovi E2 80 94) tako postane "a€"" - to je ono sto je Bogdan video
+# kao „UPRAVA a€" FINANSIJE“.
+# "Ã", "Ä" i "Å" pokrivaju slova sa dijakritikom (c, c, z, s, dj),
+# "â€" interpunkciju (crte, navodnike), "Â" nerazdvojni razmak.
+# Lazna uzbuna nije moguca: ispravno "Å" za kojim ide obicno slovo ne cini
+# ispravan UTF-8 niz, pa razmotavanje pukne i tekst se vrati nedirnut.
+_TRAGOVI_MOJIBAKE = ("Ã", "Ä", "Å", "â€", "Â")
+
+
+def ispravi_mojibake(tekst: str) -> str:
+    """Vraca tekst kome je dvostruko kodiranje razmotano, ako je bezbedno.
+
+    Ime „UPRAVA — FINANSIJE“ se pokvarilo u izvoru (`BU_SOURCE_SQL` u `.env`-u na
+    serveru drzi vec pokvaren tekst), pa ga je svaki `pj-sync` ponovo upisivao -
+    a `pravila-uvoz --i-jedinice` popravljao. Krpili smo isto dvaput.
+
+    Razmotava se samo kad se bajtovi vrate bez greske i kad je rezultat zaista
+    drugaciji; inace se tekst vraca nedirnut. Srpska latinica (c, c, z, s, dj) se
+    u cp1252 ne kodira, pa ispravan tekst ovde ne moze da prodje.
+    """
+    if not any(t in tekst for t in _TRAGOVI_MOJIBAKE):
+        return tekst
+    try:
+        razmotano = tekst.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return tekst
+    return razmotano if razmotano != tekst else tekst
+
+
 def _clean(value: Any) -> str | None:
     if value is None:
         return None
-    text_value = str(value).strip()
+    text_value = ispravi_mojibake(str(value)).strip()
     return text_value or None
 
 
