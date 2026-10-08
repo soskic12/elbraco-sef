@@ -162,6 +162,32 @@ kućni aparati 4, CSM 2017 4, Linkom 4, Preduzeće za spoljnu i unutrašnju 4.
 Dva od njih su **poznate odluke koje čekaju**, ne propust: FORMA PLUS čeka
 pravilo po napomeni, Radmilo Aleksić PR Sky isto (Nina).
 
+### 08.10.2026. — Optibox dao spisak objekata ✔
+
+`96785 Optibox doo` (PIB 105504820) na upit je poslao kojoj prodavnici pripada
+koja faktura, i obećao da će ubuduće stavljati oznaku **MPO** u napomenu. LANGOS
+je obećao isto. Prevod u naše jedinice:
+
+| faktura | njihov opis | jedinica |
+|---|---|---|
+| `RV-4008-26/1` | Subotica | **MP009** |
+| `RV-4015-26/1` | Bačka Palanka | **MP005** |
+| `RV-4016-26/1` | Sombor, Staparski put | **MP001** |
+| `RV-4017-26/1` | Vrbas | **MP007** |
+| `RV-4018-26/1` | Sombor, Vojvođanska | **MP008** |
+| `RV-4019-26/1` | Sombor, Staparski put | **MP001** |
+| `RV-4020-26/1` | Vrbas | **MP007** |
+| `RV-4021-26/1` | Apatin | **MP002** |
+| `RV-4022-26/1` | Odžaci | **MP003** |
+| `RV-4023-26/1` | Kula | **MP004** |
+
+**`RV-4045-26/1` nije na njihovom spisku**, a čeka u panelu — treba pitati.
+
+Kad počne da stiže oznaka u napomeni, pravilo ide po polju `note` i ovo više
+nikad nije ručni posao. **Dotle se ne pravi pravilo po dobavljaču** — Optiboxova
+roba ide u svih devet objekata (69 kalkulacija u istoriji), pa bi pravilo po PIB-u
+sve slalo na jedno mesto.
+
 ### 08.10.2026. — šta je ostalo otvoreno
 
 * ✗ `#8121` i `#8122` — obaveštenja koja treba poslati
