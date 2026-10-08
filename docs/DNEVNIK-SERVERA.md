@@ -194,6 +194,13 @@ sve slalo na jedno mesto.
 * ✗ `MAG010` nema mejl, a ima dokumente
 * ✗ em-crta u `BU_SOURCE_SQL` u serverskom `.env`-u (ime jedinice dvostruko
   kodirano; aplikacija to od 08.10. razmotava, ali izvor ostaje pokvaren)
+* ✗ **panel radi na SQLite.** Nije greška — `.env.server` je 21.09. to izričito
+  odlučio („jedan operater, nekoliko hiljada dokumenata godišnje“) i nijedan
+  podatak nije izgubljen. Ali pretpostavka je pala: 8.467 dokumenata u 27 dana,
+  95 jedinica, nekoliko ljudi istovremeno, IIS i ciklus. Uputstvo:
+  [PREBACI-NA-MSSQL.md](PREBACI-NA-MSSQL.md). Da se ne ponovi: `.env.server` sada
+  traži `DB_URL`, `provera-prelaska` to prijavljuje kao grešku kad je upis u
+  produkciju uključen, i panel piše red u log pri svakom pokretanju.
 * ✗ obaveštenje kod **storna** — propis traži, ne pokrivamo (tri slučaja)
 * ? zašto je Systemsova `1386/26` (na SEF-u od 30.09.) u panel ušla 07.10. u
   12:57, a Bane tvrdi da je bila na Bogdanovom ekranu na 088. Komanda `dokument`

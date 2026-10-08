@@ -2300,6 +2300,7 @@ def cmd_provera_prelaska() -> None:
     from sqlalchemy import text as _text
 
     from .erp.connection import get_erp_engine
+    from .db import get_engine
     from .models import (
         BusinessUnit,
         Document,
@@ -2456,6 +2457,25 @@ def cmd_provera_prelaska() -> None:
                 spremnih == po_starom or podesavanja.novi_tok_od is not None,
                 opis,
             )
+
+        # --- SQLite u produkciji ---
+        # `.env.server` je 21.09. rekao „SQLite u data\ je dovoljan: jedan
+        # operater, nekoliko hiljada dokumenata godisnje“. Mereno 08.10.: 8.467
+        # dokumenata u 27 dana, 95 jedinica i nekoliko ljudi istovremeno, plus
+        # IIS i petnaestominutni ciklus. SQLite zaklju(c)ava celu bazu pri upisu,
+        # pa to vise nije „dovoljno“ - a nigde nije pisalo.
+        vrsta_baze = get_engine().dialect.name
+        red(
+            vrsta_baze != "sqlite" or not podesavanja.erp_allow_production_write,
+            f"Baza panela: {vrsta_baze}"
+            + (
+                ""
+                if vrsta_baze != "sqlite" or not podesavanja.erp_allow_production_write
+                else " — SQLite, a upis u produkciju je uključen. Više ljudi "
+                     "istovremeno i ciklus se bore za istu datoteku; prebaci na "
+                     "MS SQL (`prebaci-bazu`, pa DB_URL u .env)"
+            ),
+        )
 
         # --- da li je ovo baza u kojoj je istorija ---
         # 07.10. je panel radio nad bazom bez istorije: fakture izdate danima

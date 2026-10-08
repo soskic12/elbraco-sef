@@ -137,3 +137,53 @@ def test_komanda_staje_umesto_da_radi_nad_praznom_bazom(tmp_path, monkeypatch):
         cli._boot()
 
     assert izlaz.value.exit_code == 2
+
+
+def test_sqlite_u_produkciji_pise_u_log(caplog, monkeypatch):
+    """SQLite sa uključenim upisom u produkciju mora da se vidi u logu.
+
+    `.env.server` je 21.09. rekao da je SQLite dovoljan — „jedan operater,
+    nekoliko hiljada dokumenata godišnje“. Mereno 08.10.: 8.467 dokumenata u 27
+    dana i nekoliko ljudi istovremeno. Odluka je ostala nezapažena mesec dana jer
+    nigde nije pisala.
+    """
+    import logging
+
+    from sefsync import db as db_module
+
+    class Lazna:
+        db_url = "sqlite:///C:/efakture/data/sefsync.db"
+        db_echo = False
+        erp_allow_production_write = True
+
+    monkeypatch.setattr(db_module, "_engine", None)
+    monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
+    monkeypatch.setattr(db_module, "_prati_veze", lambda eng: None)
+
+    with caplog.at_level(logging.WARNING, logger="sefsync.db"):
+        db_module.get_engine()
+
+    assert any("SQLite" in r.message for r in caplog.records)
+    monkeypatch.setattr(db_module, "_engine", None)
+
+
+def test_sqlite_bez_upisa_u_produkciju_ne_dize_uzbunu(caplog, monkeypatch):
+    """Razvojna mašina radi na SQLite i to je u redu."""
+    import logging
+
+    from sefsync import db as db_module
+
+    class Lazna:
+        db_url = "sqlite:///data/sefsync.db"
+        db_echo = False
+        erp_allow_production_write = False
+
+    monkeypatch.setattr(db_module, "_engine", None)
+    monkeypatch.setattr(db_module, "get_settings", lambda: Lazna())
+    monkeypatch.setattr(db_module, "_prati_veze", lambda eng: None)
+
+    with caplog.at_level(logging.WARNING, logger="sefsync.db"):
+        db_module.get_engine()
+
+    assert not [r for r in caplog.records if "SQLite" in r.message]
+    monkeypatch.setattr(db_module, "_engine", None)

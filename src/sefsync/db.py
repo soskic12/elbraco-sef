@@ -43,6 +43,19 @@ def get_engine() -> Engine:
             kwargs["pool_recycle"] = s.db_pool_recycle
         _engine = create_engine(s.db_url, **kwargs)
         _prati_veze(_engine)
+        # SQLite zaklju(c)ava celu bazu pri upisu. Dok je jedan covek i par
+        # hiljada dokumenata godisnje - dovoljno je, i tako je i odluceno
+        # 21.09. u `.env.server`. Kad je ukljucen upis u produkciju, znaci da
+        # radi cela firma: 08.10. je bilo 8.467 dokumenata u 27 dana, 95
+        # jedinica i petnaestominutni ciklus uz IIS. Zato ovde stoji red u logu
+        # pri svakom pokretanju - da odluka ne ostane neprimecena kao do sada.
+        if s.db_url.startswith("sqlite") and s.erp_allow_production_write:
+            log.warning(
+                "Panel radi na SQLite (%s), a upis u produkciju je uključen. "
+                "Više ljudi i ciklus se bore za istu datoteku — prebaci na MS SQL "
+                "(`sefsync prebaci-bazu`, pa DB_URL u .env).",
+                s.db_url.split("///")[-1],
+            )
     return _engine
 
 

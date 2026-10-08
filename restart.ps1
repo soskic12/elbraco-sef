@@ -10,7 +10,11 @@
 param(
     [string]$Servis    = 'ElbracoEfakture',
     [string]$Odrediste = 'C:\efakture',
-    [int]$Port         = 8088
+    [int]$Port         = 8088,
+    # Samo zaustavi, bez paljenja. Treba kad baza mora da stoji - npr. pri
+    # prebacivanju na MS SQL: ako panel radi, u staru bazu se upisuje ono sto
+    # u novu nece preci.
+    [switch]$Zaustavi
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +56,11 @@ foreach ($cekanje in 1..10) {
     Ugasi-Na-Portu $Port
     Start-Sleep 1
     if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) { break }
+}
+
+if ($Zaustavi) {
+    Write-Host 'Zaustavljeno. Panel NE radi - upali ga sa restart.ps1 bez -Zaustavi.' -ForegroundColor Yellow
+    exit 0
 }
 
 Write-Host 'Palim...'
