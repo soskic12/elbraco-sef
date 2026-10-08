@@ -75,3 +75,48 @@ def test_bez_zapisa_nema_sta_da_se_belezi(db):
 
     with pytest.raises(NeMozeObavestenje):
         zabelezi_rucno(999, "bogdan")
+
+
+def test_rucno_napravljeno_nije_propalo(tmp_path, monkeypatch):
+    """Obavestenje koje je covek napravio na portalu dobavljac ima - ne prijavljuj ga.
+
+    Do 08.10. je `bez_obavestenja` gledala `uspelo`, pa su ona cetiri koja je
+    Bogdan napravio rucno zauvek ulazila u spisak propalih i naduvavala broj u
+    `provera-prelaska`.
+    """
+    from sefsync.db import session_scope
+    from sefsync.models import (
+        Document,
+        DocumentType,
+        ObavestenjeOPrethodnomPorezu,
+        SefStatus,
+        utcnow,
+    )
+    from sefsync.services.obavestenje import bez_obavestenja
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=991001,
+            document_number="KO-991001",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            vat_amount=-1200.0,
+        )
+        session.add(doc)
+        session.flush()
+
+        # Bez ikakvog zapisa - jeste propalo.
+        assert [d.id for d in bez_obavestenja(session)] == [doc.id]
+
+        zapis = ObavestenjeOPrethodnomPorezu(
+            document_id=doc.id, broj="KO-991001", poslao="app", greska="SEF 400"
+        )
+        session.add(zapis)
+        session.flush()
+        assert [d.id for d in bez_obavestenja(session)] == [doc.id]
+
+        # Covek ga napravio na portalu - vise nije propalo.
+        zapis.rucno_potvrdio = "bogdan"
+        zapis.rucno_u = utcnow()
+        session.flush()
+        assert bez_obavestenja(session) == []

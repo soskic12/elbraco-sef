@@ -1934,6 +1934,73 @@ def _ispisi_stavke(docs, broj: str) -> None:
         typer.echo("")
 
 
+@app.command("obavestenja")
+def cmd_obavestenja(
+    limit: int = typer.Option(40, help="Najviše toliko redova."),
+) -> None:
+    """Prihvaćena knjižna odobrenja bez obaveštenja o prethodnom porezu.
+
+    `provera-prelaska` kaže samo koliko ih je. Kad ih je 81 umesto jednog, broj
+    ne govori ništa — treba videti od kad su, čiji su i da li je slanje uopšte
+    pokušano. Bez toga se ne zna da li je zaostatak ili nešto ne radi.
+    """
+    _boot()
+    from collections import Counter
+
+    from sqlalchemy import select as _select
+
+    from .models import ObavestenjeOPrethodnomPorezu
+    from .services.obavestenje import bez_obavestenja
+
+    with session_scope() as session:
+        propalo = bez_obavestenja(session)
+        if not propalo:
+            typer.secho("Nema takvih — sva prihvaćena odobrenja imaju obaveštenje.", fg="green")
+            return
+
+        pokusaji = {
+            o.document_id: o
+            for o in session.scalars(_select(ObavestenjeOPrethodnomPorezu))
+        }
+        typer.echo(f"Bez obaveštenja o prethodnom porezu: {len(propalo)}")
+        typer.echo("")
+
+        po_danu = Counter()
+        po_dobavljacu = Counter()
+        bez_pokusaja = 0
+        for d in propalo:
+            po_danu[str(d.issue_date or "?")[:10]] += 1
+            po_dobavljacu[(d.supplier_name or "?")[:34]] += 1
+            if d.id not in pokusaji:
+                bez_pokusaja += 1
+
+        for d in sorted(propalo, key=lambda x: (x.issue_date or date.min), reverse=True)[:limit]:
+            o = pokusaji.get(d.id)
+            if o is None:
+                stanje = "slanje nije ni pokušano"
+            elif o.greska:
+                stanje = f"palo: {o.greska[:60]}"
+            elif o.rucno_u:
+                stanje = f"ručno na portalu ({o.rucno_potvrdio})"
+            else:
+                stanje = "poslato, bez id-a sa SEF-a"
+            typer.echo(
+                f"   #{d.id:<6} {d.issue_date}  {(d.document_number or '?'):<20}"
+                f" {(d.supplier_name or '')[:26]:<26} {abs(d.vat_amount or 0):>10,.2f}  {stanje}"
+            )
+
+        typer.echo("")
+        typer.echo(f"Slanje nije ni pokušano: {bez_pokusaja} od {len(propalo)}")
+        typer.echo("")
+        typer.echo("Po danu izdavanja:")
+        for dan, n in sorted(po_danu.items(), reverse=True)[:12]:
+            typer.echo(f"   {dan}  {n}")
+        typer.echo("")
+        typer.echo("Po dobavljaču:")
+        for ime, n in po_dobavljacu.most_common(10):
+            typer.echo(f"   {n:>4}  {ime}")
+
+
 @app.command("provera-prelaska")
 def cmd_provera_prelaska() -> None:
     """Šta još stoji na putu prelasku na novi način rada.
@@ -1947,7 +2014,14 @@ def cmd_provera_prelaska() -> None:
     from sqlalchemy import text as _text
 
     from .erp.connection import get_erp_engine
-    from .models import BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta, UnitKind
+    from .models import (
+        BusinessUnit,
+        Document,
+        NacrtKalkulacije,
+        ProcessState,
+        StanjeNacrta,
+        UnitKind,
+    )
 
     podesavanja = get_settings()
     nalazi: list[tuple[bool, str]] = []
@@ -2065,12 +2139,36 @@ def cmd_provera_prelaska() -> None:
                 )
                 if n.document is not None and n.document.po_starom
             )
-        red(
-            spremnih == po_starom or podesavanja.novi_tok_od is not None,
+        # Posle postavljanja se nacrti racunaju iznova i tabela je neko vreme
+        # skoro prazna. 07.10. je provera tada ispisala "ceka sifru 0, upisanih
+        # 0" i to kao `ok` - zeleno nad praznom tabelom, dok je 94 stavke
+        # cekalo. Zato se broj nacrta uporedi sa brojem dokumenata koji nacrt
+        # treba da imaju: ako ih je znatno manje, to nije stanje nego racunanje
+        # u toku.
+        za_nacrt = session.scalar(
+            _select(_func.count()).select_from(Document)
+            .where(Document.archived == False,  # noqa: E712
+                   Document.business_unit_id.is_not(None),
+                   Document.state != ProcessState.ERROR)
+        ) or 0
+        ukupno_nacrta = sum(stanja.values())
+        opis = (
             f"Nacrti: spremnih {spremnih} (od toga {po_starom} po starom), "
             f"čeka šifru {stanja.get('ceka_sifru', 0)}, "
-            f"upisanih {stanja.get('upisan', 0)}, problema {stanja.get('problem', 0)}",
+            f"upisanih {stanja.get('upisan', 0)}, problema {stanja.get('problem', 0)}"
         )
+        if za_nacrt and ukupno_nacrta * 2 < za_nacrt:
+            red(
+                False,
+                f"{opis} — ali nacrta je samo {ukupno_nacrta} na {za_nacrt} dokumenata. "
+                "Računaju se u ovom trenutku; brojevi iznad još ne znače ništa. "
+                "Pokreni `sefsync nacrti --osvezi` pa ponovi proveru.",
+            )
+        else:
+            red(
+                spremnih == po_starom or podesavanja.novi_tok_od is not None,
+                opis,
+            )
 
         # --- ista prijava uz vise jedinica ---
         dvosmislene: dict[str, list[str]] = {}

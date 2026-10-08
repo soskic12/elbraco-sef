@@ -179,10 +179,13 @@ def bez_obavestenja(session) -> list[Document]:
 
     from ..models import SefStatus
 
+    # `zavrseno`, ne `uspelo`: obavestenje koje je covek napravio na portalu
+    # dobavljac ima, pa ga nema sta da prijavljujemo kao propalo. Do 08.10. je
+    # ovde stajalo `uspelo`, pa su ona cetiri rucna zauvek ulazila u spisak.
     poslata = {
         o.document_id
         for o in session.scalars(select(ObavestenjeOPrethodnomPorezu))
-        if o.uspelo
+        if o.zavrseno
     }
     return [
         d
