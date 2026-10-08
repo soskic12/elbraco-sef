@@ -2185,9 +2185,11 @@ def cmd_baza() -> None:
     typer.echo(f"veza        : {url.render_as_string(hide_password=True)}")
     if url.drivername.startswith("sqlite"):
         typer.secho(
-            "   SQLite — na serveru se očekuje MS SQL (DB_URL u .env-u). "
-            "Ako DB_URL nije zadat, panel sam napravi praznu SQLite bazu i "
-            "popuni je iznova sa SEF-a, a sve što je samo u panelu se izgubi.",
+            "   SQLite. To nije greška i ništa se ne gubi — tako je odlučeno "
+            "21.09. u .env.server („jedan operater, nekoliko hiljada dokumenata "
+            "godišnje“). Ali SQLite pri upisu zaključava celu bazu, pa kad radi "
+            "cela firma (više ljudi + ciklus + IIS) treba MS SQL: vidi "
+            "docs/PREBACI-NA-MSSQL.md.",
             fg="yellow",
         )
     typer.echo("")
