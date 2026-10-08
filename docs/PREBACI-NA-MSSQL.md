@@ -58,9 +58,9 @@ ORDER BY redova DESC;
 
 ## Šta treba pre početka
 
-1. **Baza `SefSync` na MS SQL-u** (`CLELBRACO`, `194.146.57.216:1433`). Panelovi
-   ERP nalozi je **ne vide** (`HAS_DBACCESS` = 0), pa se ne zna da li već postoji
-   — proveriti u SSMS-u. Ako je nema, napraviti je.
+1. **Baza `SefSync` na MS SQL-u** (`CLELBRACO`, `194.146.57.216:1433`) —
+   **postoji**, vidi se u spisku baza; panelovi ERP nalozi joj samo nemaju
+   pristup. Šta je u njoj kaže upit iz odeljka iznad.
 2. **Nalog koji sme da pravi tabele u njoj** — panel pri prvom pokretanju sam
    napravi šemu, pa mu treba `db_owner` **u toj bazi** (i ničemu drugom):
 
@@ -112,8 +112,8 @@ obaveštenja. **Ako neki broj izgleda premalo, stani.**
 
 **2. Stvarno prebacivanje** — isti red plus `--stvarno`. Identifikatori se
 zadržavaju (`IDENTITY_INSERT`), pa veze između dokumenata, stavki i obaveštenja
-ostaju iste. Tabela koja u cilju već ima redove se **ne dira**, da ponovno
-pokretanje ne udvostruči podatke.
+ostaju iste. **Ako cilj u međuvremenu nije prazan, seoba staje** i ne upiše ništa —
+tako i ponovno pokretanje ne može da napravi mešanu bazu.
 
 **3. `DB_URL` u `C:\efakture\.env`**, isti URL kao gore.
 
