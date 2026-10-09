@@ -2405,6 +2405,54 @@ def cmd_dvojnici(
         )
 
 
+@app.command("provera-upisa")
+def cmd_provera_upisa() -> None:
+    """Da li kalkulacije koje panel smatra upisanim još postoje u ERP-u.
+
+    Čovek u ERP-u sme da obriše kalkulaciju i to radi kad je napravljena
+    greškom. Panel to ne sazna: dokument stoji kao „upisan", ne može da se vrati,
+    i niko ga više ne obrađuje — a oslobođeni broj kalkulacije s vremenom dobije
+    neko drugi, pa panel pokazuje na tuđi dokument.
+
+    Ništa ne menja. Za oslobađanje: `sefsync zaboravi-upis <id> --stvarno`.
+    """
+    _boot()
+    from .services.provera_upisa import proveri
+
+    nalaz = proveri()
+    typer.echo(f"Provereno nacrta u stanju „upisan“: {nalaz.provereno}")
+    typer.echo(f"   u redu                        : {nalaz.u_redu}")
+    typer.echo(f"   kalkulacije NEMA u ERP-u      : {len(nalaz.nema_je)}")
+    typer.echo(f"   broj pokazuje na TUĐI dokument: {len(nalaz.tudja)}")
+    if nalaz.nepotpun_zapis:
+        typer.echo(f"   bez zapisanog broja           : {len(nalaz.nepotpun_zapis)}")
+    typer.echo("")
+
+    for red in nalaz.nema_je[:30]:
+        typer.secho(
+            f"   #{red['id']:<6} {(red['broj'] or '?')[:24]:<24} "
+            f"{(red['dobavljac'] or '')[:26]:<26} {red['erp']} — nema je "
+            f"(upisao {red['upisao'] or '?'})",
+            fg="yellow",
+        )
+    for red in nalaz.tudja[:30]:
+        typer.secho(
+            f"   #{red['id']:<6} {(red['broj'] or '?')[:24]:<24} {red['erp']} → "
+            f"tamo stoji „{red['tamo_stoji']}“ dobavljača {red['tamo_dobavljac']} "
+            f"(naš je {red['nas_dobavljac']})",
+            fg="red",
+        )
+
+    if nalaz.sumnjivih:
+        typer.echo("")
+        typer.echo(
+            "Za svaki od njih: proveri u ERP-u, pa ako kalkulacije stvarno nema — "
+            "`sefsync zaboravi-upis <id> --stvarno`, i operater ga dodeli kome treba."
+        )
+    else:
+        typer.secho("Svaka upisana kalkulacija je tamo gde panel kaže.", fg="green")
+
+
 @app.command("provera-prelaska")
 def cmd_provera_prelaska() -> None:
     """Šta još stoji na putu prelasku na novi način rada.
