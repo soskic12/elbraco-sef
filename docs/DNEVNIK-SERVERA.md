@@ -108,6 +108,22 @@ pravila, 95 jedinica, 694 nacrta, 42 obaveštenja**, najnoviji dokument
 Nova brava je proradila iz prve: pri pokretanju je ispisala
 `BAZA PANELA JE PROMENJENA. Ranije: sqlite… Sada: mssql…`.
 
+### 09.10.2026. — rupa od 26 sati dopunjena ✔
+
+`sync --dana 3`: pregledano 139, **novih 46**, ažurirano 46, grešaka 0.
+
+Taj broj je dokaz: u zaostaloj SQLite bazi je 07–08.10. „stiglo" **723**
+dokumenta, a prava baza ih je već imala — 46 je stvarni dotok za 26 sati.
+Jučerašnja „poplava" nije bila dotok nego ponovno čitanje istog sa SEF-a.
+
+Posle `razvrstaj` i `nacrti --osvezi` (286 s): `spreman 42`, `čeka šifru 18`,
+`problem 0`, `upisan 421`, nerazvrstano 11. Za poređenje, u zaostaloj bazi je
+čekalo 58 nacrta i 134 stavke.
+
+`uskladi-obavestenja`: 14 poklopljeno po dokumentu, bez obaveštenja ostala dva
+(`#8071`, `#8072` — isti KIM-TEC koji je u zaostaloj bazi nosio brojeve
+`#8121`/`#8122`).
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
