@@ -808,12 +808,17 @@ def zatvori_manjak(doc_id: int, user: Korisnik, kako: Annotated[str, Form()] = "
 
 
 @app.get("/dokument/{doc_id}/pdf")
-def dokument_pdf(doc_id: int, user: Korisnik) -> Response:
+def dokument_pdf(doc_id: int, user: Korisnik, sazeto: int = 0) -> Response:
     """Zvanicni PDF prikaz fakture sa SEF-a, za stampu.
 
     Bogdanu i drugima ponekad treba faktura na papiru. Uzima se SEF-ov prosireni
     prikaz (`purchase-invoice/pdf`), a ne nas ekran - na papiru treba da stoji
     ono sto je dobavljac poslao, ne nasa obrada.
+
+    `sazeto=1` odseca strukturirani deo i ostavlja samo fakturu. SEF za ulazne
+    fakture nema poseban poziv za sazetak, ali ga ni ne treba: prva strana
+    prosirenog PDF-a **jeste** sazetak - provereno 09.10. na `26-30F-100058`,
+    tekst se poklapa 100 %.
     """
     from ..sef.client import SefClient
 
@@ -838,6 +843,11 @@ def dokument_pdf(doc_id: int, user: Korisnik) -> Response:
     if sadrzaj[:5] != b"%PDF-":
         log.warning("SEF za dokument %s nije vratio PDF: %r", doc_id, sadrzaj[:200])
         return _back(f"/dokument/{doc_id}", "SEF još nije napravio PDF — probaj ponovo.", False)
+    if sazeto:
+        from ..sef.sazetak import samo_sazetak
+
+        sadrzaj = samo_sazetak(sadrzaj)
+        ime += "-sazetak"
     return Response(
         content=sadrzaj,
         media_type="application/pdf",

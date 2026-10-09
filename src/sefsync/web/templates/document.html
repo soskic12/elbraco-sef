@@ -10,8 +10,13 @@
   <span class="muted small">· SEF #{{ doc.sef_invoice_id }}</span>
   {% if doc.archived %}<span class="tag">arhivirano</span>{% endif %}
   {# Stampa se SEF-ov zvanicni prikaz, ne nas ekran. #}
-  <a class="small" href="/dokument/{{ doc.id }}/pdf" target="_blank"
-     style="font-weight:400;margin-left:8px">Štampaj</a>
+  <a class="small" href="/dokument/{{ doc.id }}/pdf?sazeto=1" target="_blank"
+     style="font-weight:400;margin-left:8px"
+     title="Faktura bez strukturiranog dela — jedna strana">Štampaj</a>
+  <a class="small muted" href="/dokument/{{ doc.id }}/pdf" target="_blank"
+     style="font-weight:400;margin-left:8px"
+     title="SEF-ov prošireni prikaz, sa strukturiranim ispisom svakog polja">
+     Štampaj sve</a>
   {% if doc.ima_prilog %}
   {# Kod MTS-a i racuna za struju potrosnje po objektima stoje bas u prilogu. #}
   <a class="small" href="/dokument/{{ doc.id }}/prilog" target="_blank"
