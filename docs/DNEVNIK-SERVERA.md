@@ -124,6 +124,23 @@ Posle `razvrstaj` i `nacrti --osvezi` (286 s): `spreman 42`, `čeka šifru 18`,
 (`#8071`, `#8072` — isti KIM-TEC koji je u zaostaloj bazi nosio brojeve
 `#8121`/`#8122`).
 
+### 09.10.2026. — panel radi na pravoj bazi ✔
+
+`provera-prelaska` posle paljenja: sve `ok`, uključujući tri reda koja su
+uvedena zbog ovog kvara — „Baza panela je ona koja je i bila“, „Baza panela:
+mssql“, „Panel pamti 26 dana istorije, veza šifara 2176“.
+
+Nacrti: spremnih 44, čeka šifru 35, upisanih 654, problema 1.
+
+Ostalo otvoreno posle oporavka:
+
+* **7 odobrenja bez obaveštenja** — `90002972`, `90002975` (KIM-TEC, Ilijanina),
+  `RS2604381`, `RS2604388`, `26-2248-239699` i još dva. Šalju se po jedno,
+  dugmetom na dokumentu.
+* `MAG010` nema mejl, a ima dokumente.
+* 1 nacrt u stanju „problem“, 1 predlog „možda je već u ERP-u“ (`sumnje`).
+* 11 nerazvrstanih, među njima Dunav osiguranje (2) i Radmilo Aleksić PR Sky.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
