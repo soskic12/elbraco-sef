@@ -141,6 +141,26 @@ Ostalo otvoreno posle oporavka:
 * 1 nacrt u stanju „problem“, 1 predlog „možda je već u ERP-u“ (`sumnje`).
 * 11 nerazvrstanih, među njima Dunav osiguranje (2) i Radmilo Aleksić PR Sky.
 
+### 09.10.2026. — obaveštenje o prethodnom porezu konačno prolazi ✔
+
+KIM-TEC `90002972` (`#8071`) je prošao iz aplikacije. Time je zatvorena greška
+od 02.10. Bila su **dva** uzroka, i nijedan se nije mogao pročitati iz
+specifikacije:
+
+1. `relatedDocumentNumber` mora biti **doslovan** — KIM-TEC šalje `90002972  `
+   sa dva razmaka, SEF ga tako čuva, a mi smo ga skraćivali;
+2. `relatedDocumentIssueDate` nije datum izdavanja nego **pun trenutak prijema
+   na SEF** (`SentDate`, do milisekunde) — mi smo slali goli `2026-09-28`.
+
+Oba se sada uzimaju iz SEF-ovog pregleda nabavki pri slanju, ne iz naše baze.
+
+Put do rešenja: tri pokušaja su pala sa istom porukom, a jedan od njih zato što
+**nova verzija nije bila postavljena** (pravio sam pakete na isto ime, pa je
+digao stariji). Zbog toga se uz svaki neuspeh sada zapisuje telo zahteva
+(`obavestenje.telo`), pa se „popravka ne radi" razlikuje od „popravka nije ni
+postavljena". Odgovor je došao tek kad sam pitao SEF kako izgleda obaveštenje
+koje je **prošlo** (`GET …/sender/date-range`), umesto da čitam uputstvo.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
@@ -275,7 +295,6 @@ sve slalo na jedno mesto.
 
 ### 08.10.2026. — šta je ostalo otvoreno
 
-* ✗ `#8121` i `#8122` — obaveštenja koja treba poslati
 * ✗ `MAG010` nema mejl, a ima dokumente
 * ✗ em-crta u `BU_SOURCE_SQL` u serverskom `.env`-u (ime jedinice dvostruko
   kodirano; aplikacija to od 08.10. razmotava, ali izvor ostaje pokvaren)
