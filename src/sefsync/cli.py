@@ -727,6 +727,58 @@ def cmd_mapiranje(
     typer.echo(f"Upisano: {nalaz.upisano}, već postojalo: {nalaz.vec_postojalo}")
 
 
+@app.command("faktori")
+def cmd_faktori(
+    dana: int = typer.Option(365, "--dana", help="Dokumenti iz poslednjih N dana."),
+    upisi: bool = typer.Option(False, "--upisi", help="Stvarno upiši (inače samo ispis)."),
+) -> None:
+    """Izvodi faktor pakovanja iz istorije: koliko je čovek stvarno uneo.
+
+    Bure od 20 l ulazi kao 20 litara, kutija čaja kao 40 kesica, kilogram kafe
+    kao 1000 grama. To je poslovođa godinama radio rukom, pa taj posao već
+    postoji u ERP-u i ne mora da se pogađa.
+
+    Upisuje se samo ono što je viđeno bar dvaput bez ijednog drugačijeg, ili
+    viđeno jednom a naziv stavke kaže isto. Postojeći faktor se ne menja.
+    """
+    _boot()
+    from .services.faktori import izvedi
+    from .services.faktori import upisi as upisi_u_bazu
+
+    nalaz = izvedi(dana=dana)
+    typer.echo(f"Dokumenata uparenih sa kalkulacijom: {nalaz.dokumenata}")
+    typer.echo(f"Stavki sa poznatim artiklom:         {nalaz.uparenih_stavki}")
+    typer.echo(f"Veza sa izvedenim faktorom:          {len(nalaz.vidjeno)}")
+    typer.echo(f"  pouzdanih za upis:                 {nalaz.za_upis}")
+    typer.echo(f"  kolebljivih (odbačeno):            {len(nalaz.kolebljivi)}")
+    typer.echo("")
+
+    if nalaz.pouzdani:
+        typer.echo("Pouzdani faktori:")
+        for (pib, sifra), (faktor, razlog) in sorted(
+            nalaz.pouzdani.items(), key=lambda x: -x[1][0]
+        )[:40]:
+            typer.echo(f"   PIB {pib:<12} šifra {sifra:<9} ×{faktor:<8g} {razlog}")
+        typer.echo("")
+
+    if nalaz.kolebljivi:
+        typer.secho("Kolebljivi — ne upisuju se, čovek odlučuje:", fg="yellow")
+        for (pib, sifra), brojac in list(nalaz.kolebljivi.items())[:15]:
+            vrednosti = ", ".join(f"×{f:g} ({n})" for f, n in brojac.most_common())
+            typer.echo(f"   PIB {pib:<12} šifra {sifra:<9} {vrednosti}")
+        typer.echo("")
+
+    if not upisi:
+        typer.echo("Nije upisano ništa. Za upis: sefsync faktori --upisi")
+        return
+
+    nalaz = upisi_u_bazu(nalaz)
+    typer.secho(
+        f"Upisano: {nalaz.upisano}, već postojalo: {nalaz.vec_postojalo}", fg="green"
+    )
+    typer.echo("Za primenu na postojeće nacrte: sefsync nacrti --osvezi")
+
+
 @app.command("sifre-slobodne")
 def cmd_slobodne_sifre(
     koliko: int = typer.Option(12, help="Koliko rupa da ispiše."),
