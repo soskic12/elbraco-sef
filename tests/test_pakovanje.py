@@ -81,7 +81,7 @@ def test_litar_u_litar_se_ne_dira():
 # nepotvrdjeno pakovanje zadrzava stavku
 # --------------------------------------------------------------------------- #
 
-def test_potvrda_upisuje_faktor_uz_vezu(db):
+def test_potvrda_upisuje_faktor_uz_vezu(db, monkeypatch):
     """Potvrđeno vredi i za sve sledeće fakture tog dobavljača za taj artikal."""
     from sefsync.models import (
         Document,
@@ -111,8 +111,9 @@ def test_potvrda_upisuje_faktor_uz_vezu(db):
             ),
         ])
 
-    # `osvezi` trazi ERP; za ovaj test je dovoljno da se ne poziva.
-    modul.osvezi = lambda *a, **k: None
+    # `osvezi` trazi ERP; kroz monkeypatch, da se vrati posle testa - inace
+    # curi u ostale testove (test_web je pao bas zbog toga).
+    monkeypatch.setattr(modul, "osvezi", lambda *a, **k: None)
 
     poruka = modul.potvrdi_pakovanje(doc_id, 1, 20.0, korisnik="nina")
 
