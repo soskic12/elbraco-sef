@@ -118,3 +118,40 @@ def test_razlika_u_velicini_slova_nije_greska(db, monkeypatch):
 
     assert nalaz.u_redu == 1
     assert nalaz.sumnjivih == 0
+
+
+def test_zapis_koji_nosi_ime_tabele_se_razlaze(db, monkeypatch):
+    """Kad app prepozna kalkulaciju koju je čovek uneo, zapis glasi
+    „ULKALKUL 010/00620" — sa imenom tabele ispred.
+
+    Prvo izvođenje provere je cepalo samo po „/" i tražilo magacin
+    „ULKALKUL 010", pa je prijavilo 106 nepostojećih kalkulacija kojih nema
+    jer ih nije ni tražilo gde treba.
+    """
+    _nacrt(db, doc_id=5, broj="26-3RF-003125", pib="100042618",
+           erp_broj="ULKALKUL 010/00620")
+    monkeypatch.setattr(
+        "sefsync.erp.kalkulacija._analitika_dobavljaca", lambda *a, **k: "01234"
+    )
+
+    erp = LazniErp({("010", "00620"): LazniRed("01234", "26-3RF-003125")})
+    nalaz = proveri(engine=erp)
+
+    assert nalaz.u_redu == 1
+    assert nalaz.sumnjivih == 0
+
+
+def test_broj_skracen_u_ERP_u_nije_tudji(db, monkeypatch):
+    """ERP čuva broj u varchar(20), pa ljudi izbacuju crtice i seku kraj:
+    `SAODSO1002/2026-06256_Garden` postane `SAODSO1002202606256G`."""
+    _nacrt(db, doc_id=6, broj="SAODSO1002/2026-06256_Garden", pib="100000001",
+           erp_broj="088/03195")
+    monkeypatch.setattr(
+        "sefsync.erp.kalkulacija._analitika_dobavljaca", lambda *a, **k: "50041"
+    )
+
+    erp = LazniErp({("088", "03195"): LazniRed("50041", "SAODSO1002202606256G")})
+    nalaz = proveri(engine=erp)
+
+    assert nalaz.u_redu == 1
+    assert nalaz.sumnjivih == 0

@@ -25,10 +25,34 @@ from sqlalchemy import select, text
 
 from ..db import session_scope
 from ..models import Document, NacrtKalkulacije, StanjeNacrta
+from .mapiranje import kljuc_racuna
 
 log = logging.getLogger(__name__)
 
 STAVKE_ZA = {"ULKALKUL": "PRULKALK", "MKALKUL": "MPRULK"}
+TABELE = tuple(STAVKE_ZA)
+
+
+def _razlozi(erp_broj: str | None, tabela: str | None) -> tuple[str, str, str]:
+    """Iz zapisa „ULKALKUL 010/00620" vadi tabelu, magacin i broj.
+
+    Zapis ima dva oblika: kad app upise kalkulaciju stoji samo `088/03205`, a
+    kad je prepozna kao vec unetu rukom stoji i ime tabele ispred. Prvo
+    izvodjenje ove provere je cepalo samo po `/` i trazilo magacin
+    „ULKALKUL 010" - pa je prijavilo 106 nepostojecih kalkulacija kojih nema
+    jer ih nije ni trazilo gde treba (09.10.).
+    """
+    zapis = (erp_broj or "").strip()
+    nadjena = (tabela or "").strip().upper()
+    for ime in TABELE:
+        if zapis.upper().startswith(ime):
+            nadjena = ime
+            zapis = zapis[len(ime):].strip()
+            break
+    if "/" not in zapis:
+        return nadjena or "ULKALKUL", "", ""
+    magacin, kalk = zapis.split("/", 1)
+    return nadjena or "ULKALKUL", magacin.strip(), kalk.strip()
 
 
 @dataclass
@@ -66,14 +90,14 @@ def proveri(engine=None) -> Nalaz:
         with eng.connect() as conn:
             analitike: dict[str, str | None] = {}
             for red, doc in redovi:
-                broj = (red.erp_broj or "").strip()
-                tabela = (red.tabela or "").strip() or "ULKALKUL"
-                if not broj or "/" not in broj:
+                tabela, magacin, kalk = _razlozi(red.erp_broj, red.tabela)
+                if not magacin:
                     nalaz.nepotpun_zapis.append(
-                        {"id": doc.id, "broj": doc.document_number, "erp": broj}
+                        {"id": doc.id, "broj": doc.document_number,
+                         "erp": (red.erp_broj or "").strip()}
                     )
                     continue
-                magacin, kalk = broj.split("/", 1)
+                broj = f"{magacin}/{kalk}"
                 nalaz.provereno += 1
 
                 r = conn.execute(
@@ -103,9 +127,17 @@ def proveri(engine=None) -> Nalaz:
                 # Broj racuna je dokaz; sifra dobavljaca je potvrda. Oboje se
                 # poredi bez razmaka i bez obzira na velicinu slova - u ERP-u se
                 # kuca rukom (vidi `26-fa001011891` naspram `26-FA001011891`).
-                nas_broj = (doc.document_number or "").replace(" ", "").upper()
-                erp_broj_racuna = (r.rn or "").replace(" ", "").upper()
-                if erp_broj_racuna and nas_broj and erp_broj_racuna != nas_broj:
+                nas_broj = kljuc_racuna(doc.document_number)
+                erp_broj_racuna = kljuc_racuna(r.rn)
+                # ERP broj je `varchar(20)`, pa ljudi izbacuju crtice i secku
+                # kraj. Zato se poredi isto kao svuda u aplikaciji, i priznaje
+                # se i kad je jedan pocetak drugog.
+                poklapa = bool(erp_broj_racuna) and bool(nas_broj) and (
+                    erp_broj_racuna == nas_broj
+                    or nas_broj.startswith(erp_broj_racuna)
+                    or erp_broj_racuna.startswith(nas_broj)
+                )
+                if erp_broj_racuna and nas_broj and not poklapa:
                     nalaz.tudja.append(
                         {
                             "id": doc.id,
