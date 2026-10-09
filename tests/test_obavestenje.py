@@ -493,3 +493,42 @@ def test_broj_izvornog_dokumenta_se_ne_skracuje():
     assert telo["relatedDocumentNumber"] == "90002972  "
     # Nas broj obavestenja ostaje uredan.
     assert telo["noticeNumber"] == "90002972"
+
+
+def test_izvorni_dokument_se_opisuje_SEF_ovim_vrednostima():
+    """Obaveštenje koje je prošlo (90002975) nosi broj sa razmacima i pun SentDate.
+
+    Mi smo slali skraćen broj i samo datum (`2026-09-28`), pa je SEF vraćao
+    `400 Source document not found`. Izmereno 09.10. na stvarnom obaveštenju.
+    """
+    from sefsync.services.obavestenje import telo_zahteva
+
+    zapis = {
+        "InvoiceId": 477455255,
+        "DocumentNumber": "90002975  ",
+        "SentDate": "2026-09-28T19:28:39.7198357+00:00",
+    }
+    telo = telo_zahteva(
+        _odobrenje(document_number="90002975", billing_reference_count=1), zapis
+    )
+
+    assert telo["relatedDocumentNumber"] == "90002975  "
+    assert telo["relatedDocumentIssueDate"] == "2026-09-28T19:28:39.7198357+00:00"
+    assert telo["noticeNumber"] == "90002975"
+
+
+def test_bez_SEF_ovog_zapisa_salje_se_nas_trenutak_prijema():
+    """Rezerva kad pregled ne stigne: pun ISO trenutak, ne goli datum."""
+    from datetime import datetime
+
+    from sefsync.services.obavestenje import telo_zahteva
+
+    doc = _odobrenje(
+        document_number="KO-9",
+        billing_reference_count=1,
+        sent_date=datetime(2026, 9, 28, 19, 28, 39, 720000),
+    )
+    telo = telo_zahteva(doc)
+
+    assert telo["relatedDocumentIssueDate"].startswith("2026-09-28T19:28:39.720000")
+    assert telo["relatedDocumentIssueDate"].endswith("+00:00")

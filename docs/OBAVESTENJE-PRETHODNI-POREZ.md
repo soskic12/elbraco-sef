@@ -100,8 +100,30 @@ dokument. Datum je sve vreme bio tačan (`cbc:IssueDate` = `2026-09-28`, isto š
 smo slali), a vrsta veze takođe — odobrenje pokazuje na jednu fakturu
 (`34944/23 ` od 2023-06-06), dakle `CreditNoteReferenceToInvoice`.
 
-**Pravilo:** `relatedDocumentNumber` ide doslovno, kako SEF drži.
-`noticeNumber` ostaje skraćen — to je naš broj obaveštenja, ne pokazivač.
+Skraćeni broj je bio **jedan** od dva uzroka. Drugi je datum. Kad je i posle
+ispravke broja vraćalo istu grešku, pitao sam SEF kako izgleda obaveštenje koje
+je **prošlo** (`GET …/sender/date-range`) — za `90002975`, poslato 09.10.:
+
+```json
+"NoticeNumber":            "90002975",
+"RelatedDocumentNumber":   "90002975  ",
+"RelatedDocumentIssueDate":"2026-09-28T19:28:39.7200000+00:00",
+"DocumentReferenceType":   "CreditNoteReferenceToInvoice"
+```
+
+`RelatedDocumentIssueDate` **nije datum izdavanja** nego **pun trenutak prijema
+na SEF** (`SentDate` iz pregleda nabavki: `…39.7198357+00:00`, SEF ga zaokruži na
+milisekundu). Mi smo slali goli datum `2026-09-28`.
+
+**Pravilo:** oba polja koja opisuju izvorni dokument uzimaju se **iz SEF-ovog
+pregleda**, ne iz naše baze — `DocumentNumber` i `SentDate`, doslovno
+(`sef_zapis_dokumenta`). Razlog što ne iz naše: `sent_date` se pri upisu
+zaokružuje (MS SQL `DateTime` ide do ~3 ms). `noticeNumber` ostaje skraćen — to
+je naš broj obaveštenja, ne pokazivač.
+
+**Pouka:** kad servis kaže „ne nalazim", najbrži put nije čitanje specifikacije
+nego **pogledati zapis koji je prošao**. Ovde je `date-range` dao tačan oblik za
+pet sekundi, posle dva dana pogađanja.
 
 ### Zašto je padalo sa 400 (zapisano 08.10., pre merenja)
 

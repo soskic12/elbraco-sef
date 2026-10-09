@@ -69,6 +69,17 @@ def _samo_cifre(vrednost: str) -> str:
     return "".join(z for z in str(vrednost) if z.isdigit())
 
 
+def _trenutak(kad) -> str | None:
+    """Nas `sent_date` kao pun ISO trenutak u UTC - rezerva kad SEF-ov zapis ne stigne."""
+    if kad is None:
+        return None
+    from datetime import timezone
+
+    if getattr(kad, "tzinfo", None) is None:
+        kad = kad.replace(tzinfo=timezone.utc)
+    return kad.isoformat()
+
+
 def _kljuc_broja(broj: str) -> str:
     """Broj obavestenja za poredjenje - bez razmaka, velikim slovima."""
     return "".join(str(broj).split()).upper()
@@ -156,9 +167,46 @@ def _datumi_povezanih_faktura(doc: Document) -> list[date]:
         ]
 
 
-def telo_zahteva(doc: Document) -> dict:
-    """Telo poziva ka SEF-u, sklopljeno iz samog odobrenja."""
+def sef_zapis_dokumenta(doc: Document, klijent=None) -> dict | None:
+    """SEF-ov sopstveni zapis o dokumentu: broj i trenutak prijema, doslovno.
+
+    Obavestenje koje je proslo (`90002975`, 09.10.) nosi:
+
+        RelatedDocumentNumber    "90002975  "
+        RelatedDocumentIssueDate "2026-09-28T19:28:39.7200000+00:00"
+
+    Dakle broj **sa razmacima** i **pun trenutak prijema na SEF** (`SentDate`),
+    ne datum izdavanja. Mi smo slali skracen broj i samo datum, pa je SEF vracao
+    `400 Source document not found`.
+
+    Vrednosti se uzimaju iz SEF-ovog pregleda umesto iz nase baze zato sto se
+    `sent_date` kod nas zaokruzuje pri upisu (MS SQL `DateTime` ide do ~3 ms), a
+    ovde treba doslovno ono sto SEF drzi.
+    """
+    from ..sef.client import SefClient
+
+    if not doc.sef_invoice_id or doc.sent_date is None:
+        return None
+    dan = doc.sent_date.date()
+    try:
+        if klijent is not None:
+            redovi = klijent.purchase_overview(dan, dan)
+        else:
+            with SefClient() as sef:
+                redovi = sef.purchase_overview(dan, dan)
+    except Exception as exc:  # noqa: BLE001 - radimo sa onim sto imamo
+        log.warning("SEF-ov zapis za #%s nije procitan: %s", doc.id, exc)
+        return None
+    for r in redovi or []:
+        if int(r.get("InvoiceId") or r.get("invoiceId") or 0) == doc.sef_invoice_id:
+            return r
+    return None
+
+
+def telo_zahteva(doc: Document, sef_zapis: dict | None = None) -> dict:
+    """Telo poziva ka SEF-u. `sef_zapis` je SEF-ov red o dokumentu, ako ga imamo."""
     _proveri(doc)
+    zapis = sef_zapis or {}
     vrsta = vrsta_veze(doc)
     telo = {
         "noticeNumber": doc.document_number.strip()[:200],
@@ -171,8 +219,15 @@ def telo_zahteva(doc: Document) -> dict:
         # 09.10. u SEF-ovom pregledu i u samom UBL-u), pa je skraceni broj davao
         # `400 Source document not found` - SEF nije nalazio izvorni dokument.
         # `noticeNumber` ostaje skracen: to je nas broj obavestenja, ne pokazivac.
-        "relatedDocumentNumber": doc.document_number,
-        "relatedDocumentIssueDate": doc.issue_date.isoformat(),
+        "relatedDocumentNumber": (
+            zapis.get("DocumentNumber") or zapis.get("documentNumber") or doc.document_number
+        ),
+        "relatedDocumentIssueDate": (
+            zapis.get("SentDate")
+            or zapis.get("sentDate")
+            or _trenutak(doc.sent_date)
+            or doc.issue_date.isoformat()
+        ),
         "recipient": {"vatRegistrationCode": doc.supplier_vat.strip()},
     }
 
@@ -250,8 +305,14 @@ def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str
         if vec is not None and vec.uspelo:
             return False, f"Obaveštenje {vec.broj} je već poslato ({vec.poslato_u:%d.%m.%Y})."
         doc = session.get(Document, document_id)
+        # Broj i trenutak izvornog dokumenta se uzimaju od SEF-a, ne iz nase
+        # baze - vidi `sef_zapis_dokumenta`.
         try:
-            telo = telo_zahteva(doc)
+            zapis = sef_zapis_dokumenta(doc, klijent)
+        except Exception:  # noqa: BLE001 - bez zapisa se salje iz nasih podataka
+            zapis = None
+        try:
+            telo = telo_zahteva(doc, zapis)
         except NeMozeObavestenje as exc:
             return False, str(exc)
         broj = telo["noticeNumber"]
