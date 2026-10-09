@@ -354,6 +354,21 @@ def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str
                 + (f", greška: {greska[:200]}" if greska else f", status {status or '-'}"),
             )
         )
+        if greska:
+            # Telo zahteva se zapisuje uz svaki neuspeh. Bez toga se posle ne zna
+            # sta je tacno otislo, pa se poredi po secanju - a greska
+            # `Source document not found` je 09.10. tri puta izgledala isto iako
+            # je kod bio razlicit. U telu nema nicega tajnog.
+            import json as _json
+
+            session.add(
+                AuditLog(
+                    actor=korisnik,
+                    action="obavestenje.telo",
+                    document_id=document_id,
+                    detail=_json.dumps(telo, ensure_ascii=False)[:2000],
+                )
+            )
 
     if greska:
         return False, f"Obaveštenje nije poslato: {greska[:160]}"

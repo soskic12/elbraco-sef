@@ -532,3 +532,58 @@ def test_bez_SEF_ovog_zapisa_salje_se_nas_trenutak_prijema():
 
     assert telo["relatedDocumentIssueDate"].startswith("2026-09-28T19:28:39.720000")
     assert telo["relatedDocumentIssueDate"].endswith("+00:00")
+
+
+def test_neuspeh_zapisuje_telo_zahteva(db):
+    """Bez zapisa se posle ne zna šta je tačno otišlo.
+
+    Greška `Source document not found` je 09.10. tri puta izgledala isto iako je
+    kod bio različit — pa se nije moglo razlikovati „popravka ne radi“ od
+    „popravka nije ni postavljena“.
+    """
+    from datetime import date as _d
+
+    from sqlalchemy import select
+
+    from sefsync.db import session_scope
+    from sefsync.models import AuditLog, Document, DocumentType, SefStatus
+    from sefsync.services.obavestenje import posalji
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=775001,
+            document_number="90002972  ",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="103574264",
+            issue_date=_d(2026, 9, 28),
+            vat_amount=-6111.0,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class LazniSef:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def purchase_overview(self, od, do):
+            return []
+
+        def posalji_obavestenje_o_prethodnom_porezu(self, telo):
+            raise RuntimeError("SEF greska 400: Source document not found")
+
+    ok, poruka = posalji(doc_id, korisnik="nina", klijent=LazniSef())
+
+    assert ok is False
+    with session_scope() as session:
+        zapisi = [
+            a for a in session.scalars(select(AuditLog))
+            if a.action == "obavestenje.telo" and a.document_id == doc_id
+        ]
+        assert len(zapisi) == 1
+        assert "90002972  " in zapisi[0].detail
+        assert "relatedDocumentIssueDate" in zapisi[0].detail
