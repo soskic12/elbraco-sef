@@ -674,3 +674,32 @@ def test_dvojnici_nalazi_istu_fakturu_dva_puta(db):
     izlaz = runner.invoke(app, ["dvojnici"]).output
     assert "Faktura zavedenih više puta: 1" in izlaz
     assert "#996101" not in izlaz  # ispisuje se nas id, ne SEF-ov
+
+
+def test_provera_prelaska_ne_broji_arhivirane_nacrte(db):
+    """Arhivirani dokument niko ne radi — ne sme u brojeve „šta čeka čoveka“.
+
+    09.10. je provera prijavljivala „problema 1“ dok je `nacrti --spisak`
+    pokazivao nulu, pa smo tražili nacrt koga nema. `nacrti` i `izvestaj` su
+    arhivu dobili 07.10., ova provera je propuštena.
+    """
+    from typer.testing import CliRunner
+
+    from sefsync.cli import app
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+
+    with db.session_scope() as session:
+        ziv = Document(sef_invoice_id=997001, document_number="A")
+        arhiviran = Document(sef_invoice_id=997002, document_number="B", archived=True)
+        session.add_all([ziv, arhiviran])
+        session.flush()
+        session.add_all([
+            NacrtKalkulacije(document_id=ziv.id, stanje=StanjeNacrta.SPREMAN),
+            NacrtKalkulacije(document_id=arhiviran.id, stanje=StanjeNacrta.PROBLEM),
+        ])
+
+    izlaz = CliRunner().invoke(app, ["provera-prelaska"]).output
+    red = [r for r in izlaz.splitlines() if "Nacrti:" in r][0]
+
+    assert "problema 0" in red
+    assert "spremnih 1" in red

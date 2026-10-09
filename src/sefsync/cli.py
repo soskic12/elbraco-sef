@@ -2475,10 +2475,17 @@ def cmd_provera_prelaska() -> None:
         red(not bez_mejla, "Sve jedinice sa dokumentima imaju mejl"
             if not bez_mejla else "Bez mejla, a imaju dokumente: " + ", ".join(sorted(bez_mejla)))
 
+        # Arhivirani dokument niko ne radi, pa ne sme da ulazi u brojeve koji
+        # kazu „sta ceka coveka“. `nacrti` i `izvestaj` su to dobili 07.10., ova
+        # provera je propustena - pa je 09.10. prijavljivala „problema 1“ dok je
+        # `nacrti --spisak` pokazivao nulu, i trazili smo nacrt koga nema.
         stanja = {
             s.value: session.scalar(
                 _select(_func.count()).select_from(NacrtKalkulacije)
-                .where(NacrtKalkulacije.stanje == s)
+                .where(
+                    NacrtKalkulacije.stanje == s,
+                    NacrtKalkulacije.document.has(Document.archived == False),  # noqa: E712
+                )
             ) or 0
             for s in StanjeNacrta
         }
@@ -2489,7 +2496,11 @@ def cmd_provera_prelaska() -> None:
                 1
                 for n in session.scalars(
                     _select(NacrtKalkulacije)
-                    .where(NacrtKalkulacije.stanje == StanjeNacrta.SPREMAN)
+                    .where(
+                        NacrtKalkulacije.stanje == StanjeNacrta.SPREMAN,
+                        NacrtKalkulacije.document.has(
+                            Document.archived == False),  # noqa: E712
+                    )
                 )
                 if n.document is not None and n.document.po_starom
             )
