@@ -57,6 +57,23 @@ def _status_je_greska(status: str) -> bool:
     return any(k in nisko for k in KOREN_GRESKE)
 
 
+def _samo_cifre(vrednost: str) -> str:
+    """PIB bez prefiksa i razmaka.
+
+    SEF u odgovoru ume da vrati `RS100000104`, a mi cuvamo `100000104`. Zbog te
+    razlike poklapanje obavestenja po broju **nikad nije proradilo** (`po_broju: 0`
+    na 1.358 obavestenja), pa je komanda prijavljivala kao neposlata ona koja na
+    SEF-u postoje - a to vodi pravo u drugo obavestenje dobavljacu, koje se ne
+    moze povuci. Bane je to uhvatio rucnom proverom 09.10.
+    """
+    return "".join(z for z in str(vrednost) if z.isdigit())
+
+
+def _kljuc_broja(broj: str) -> str:
+    """Broj obavestenja za poredjenje - bez razmaka, velikim slovima."""
+    return "".join(str(broj).split()).upper()
+
+
 class NeMozeObavestenje(RuntimeError):
     """Razlog zbog kog obavestenje ne moze da se posalje - ide coveku, ne u log."""
 
@@ -333,19 +350,21 @@ def uskladi_sa_sefom(
 
     po_sef_id: dict[int, dict] = {}
     po_broju: dict[tuple[str, str], dict] = {}
+    samo_broj: dict[str, list[dict]] = {}
     for r in redovi:
         sef_doc = r.get("PurchaseInvoiceId") or r.get("purchaseInvoiceId")
         if sef_doc:
             po_sef_id[int(sef_doc)] = r
-        broj = (r.get("NoticeNumber") or r.get("noticeNumber") or "").strip()
+        broj = _kljuc_broja(r.get("NoticeNumber") or r.get("noticeNumber") or "")
         primalac = r.get("Recipient") or r.get("recipient") or {}
-        pib = (
+        pib = _samo_cifre(
             primalac.get("VatRegistrationCode")
             or primalac.get("vatRegistrationCode")
             or ""
-        ).strip()
+        )
         if broj:
             po_broju[(broj, pib)] = r
+            samo_broj.setdefault(broj, []).append(r)
 
     ishod = {
         "sa_sefa": len(redovi),
@@ -401,9 +420,14 @@ def uskladi_sa_sefom(
             nalaz = po_sef_id.get(doc.sef_invoice_id or 0)
             kako = "po_dokumentu"
             if nalaz is None:
-                nalaz = po_broju.get(
-                    ((doc.document_number or "").strip(), (doc.supplier_vat or "").strip())
-                )
+                kljuc = _kljuc_broja(doc.document_number or "")
+                nalaz = po_broju.get((kljuc, _samo_cifre(doc.supplier_vat or "")))
+                if nalaz is None:
+                    # Broj obavestenja je broj odobrenja i jedinstven je medju
+                    # nasim dokumentima, pa kad se poklopi tacno jedan - to je on.
+                    kandidati = samo_broj.get(kljuc, [])
+                    if len(kandidati) == 1:
+                        nalaz = kandidati[0]
                 kako = "po_broju"
             if nalaz is None:
                 ishod["nema_obavestenje"].append(doc.id)

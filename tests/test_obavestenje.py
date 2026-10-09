@@ -425,3 +425,55 @@ def test_obavestenje_koje_je_proslo_pa_palo_kod_sefa_se_ponovo_otvara():
         red = session.get(ObavestenjeOPrethodnomPorezu, doc_id)
         assert red.uspelo is False and "Mistake" in (red.greska or "")
         assert doc_id in [d.id for d in bez_obavestenja(session)]
+
+
+def test_poklapanje_po_broju_trpi_RS_prefiks_i_razmake(db):
+    """SEF vraća PIB kao „RS100000104“, mi čuvamo „100000104“.
+
+    Zbog te razlike poklapanje po broju nikad nije proradilo (`po_broju: 0` na
+    1.358 obaveštenja), pa je komanda prijavljivala kao neposlata ona koja na
+    SEF-u postoje — a to vodi u drugo obaveštenje dobavljaču, koje se ne može
+    povući. Bane je to uhvatio ručnom proverom 09.10.
+    """
+    from datetime import date as _d
+
+    from sefsync.db import session_scope
+    from sefsync.models import Document, DocumentType, SefStatus
+    from sefsync.services.obavestenje import bez_obavestenja, uskladi_sa_sefom
+
+    with session_scope() as session:
+        doc = Document(
+            sef_invoice_id=774001,
+            document_number="RS2604421",
+            document_type=DocumentType.CREDIT_NOTE,
+            sef_status=SefStatus.APPROVED,
+            supplier_vat="100000104",
+            vat_amount=-289.99,
+        )
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class LazniSef:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def poslata_obavestenja(self, od, do):
+            # Bez PurchaseInvoiceId, PIB sa prefiksom, broj sa razmacima.
+            return [{
+                "Id": 777, "NoticeNumber": " rs2604421 ", "PurchaseInvoiceId": None,
+                "SendingStatus": "Sent",
+                "Recipient": {"VatRegistrationCode": "RS100000104"},
+            }]
+
+    nalaz = uskladi_sa_sefom(
+        _d(2026, 1, 1), _d(2026, 12, 31), stvarno=True, klijent=LazniSef()
+    )
+
+    assert nalaz["po_broju"] == 1
+    assert nalaz["nema_obavestenje"] == []
+    with session_scope() as session:
+        assert doc_id not in [d.id for d in bez_obavestenja(session)]
