@@ -7,6 +7,7 @@ gde se zna i šta je na fakturi i šta je čovek upisao u ERP.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
 from sefsync.erp.pakovanje import predlozi_faktor
 
@@ -74,3 +75,59 @@ def test_zapremina_pred_L_nije_bure():
 
 def test_litar_u_litar_se_ne_dira():
     assert predlozi_faktor("Vranac 13.jul 1l", "LTR", "l")[0] == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# nepotvrdjeno pakovanje zadrzava stavku
+# --------------------------------------------------------------------------- #
+
+def test_potvrda_upisuje_faktor_uz_vezu(db):
+    """Potvrđeno vredi i za sve sledeće fakture tog dobavljača za taj artikal."""
+    from sefsync.models import (
+        Document,
+        ItemMapping,
+        NacrtKalkulacije,
+        StanjeNacrta,
+    )
+    from sefsync.services import nacrti as modul
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=881301, document_number="F-1", supplier_vat="100777")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+        session.add_all([
+            ItemMapping(
+                supplier_vat="100777", supplier_item_id="KEG20",
+                erp_item_code="9999970", active=True,
+            ),
+            NacrtKalkulacije(
+                document_id=doc_id,
+                stanje=StanjeNacrta.CEKA_SIFRU,
+                nemapirane=[{
+                    "line_no": 1, "naziv": "HEINEKEN DAVID KEG 20L", "sifra": "9999970",
+                    "predlog_faktora": 20.0, "objasnjenje_faktora": "bure od 20 l",
+                }],
+            ),
+        ])
+
+    # `osvezi` trazi ERP; za ovaj test je dovoljno da se ne poziva.
+    modul.osvezi = lambda *a, **k: None
+
+    poruka = modul.potvrdi_pakovanje(doc_id, 1, 20.0, korisnik="nina")
+
+    assert "×20" in poruka
+    with db.session_scope() as session:
+        veza = session.scalars(select(ItemMapping)).first()
+        assert veza.unit_factor == 20.0
+
+
+def test_neuverljiv_faktor_se_odbija(db):
+    import pytest
+
+    from sefsync.services import nacrti as modul
+
+    with pytest.raises(ValueError):
+        modul.potvrdi_pakovanje(1, 1, 0, korisnik="nina")
+    with pytest.raises(ValueError):
+        modul.potvrdi_pakovanje(1, 1, 99999, korisnik="nina")

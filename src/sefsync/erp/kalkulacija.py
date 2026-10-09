@@ -883,6 +883,37 @@ def pripremi(
             # ili koji je izveden iz istorije. Kad ga nema, mnozenja nema i sve
             # ostaje kako je bilo. Vidi `docs/PUB-071.md`.
             faktor = veze.faktori.get((doc.supplier_vat or "", sifra), 1.0) if veze else 1.0
+            if faktor == 1.0:
+                # Naucenog faktora nema. Ako naziv stavke kaze da je pakovanje
+                # drugacije (bure, kutija kesica, kilogram u gramima), upis sa
+                # x1 bi tiho upisao pogresnu zalihu - a to se vidi tek kad
+                # proizvodnja ode u minus. Zato stavka ceka coveka, sa predlogom.
+                from .pakovanje import predlozi_faktor
+
+                predlog_faktora, objasnjenje = predlozi_faktor(
+                    linija.name or "", linija.unit_code, art["jm"]
+                )
+                if predlog_faktora != 1.0:
+                    nacrt.nemapirane.append(
+                        {
+                            "line_no": linija.line_no,
+                            "naziv": linija.name or "",
+                            "sifra_dobavljaca": linija.sellers_item_id or "",
+                            "ean": linija.standard_item_id or "",
+                            "kolicina": linija.quantity,
+                            "cena": linija.price,
+                            "jedinica": linija.unit_code or "",
+                            "predlog": None,
+                            "sifra": sifra,
+                            "predlog_faktora": predlog_faktora,
+                            "objasnjenje_faktora": objasnjenje,
+                            "razlog": (
+                                f"pakovanje nije potvrđeno — {objasnjenje}; "
+                                f"artikal {sifra} se vodi u „{art['jm'] or '?'}“"
+                            ),
+                        }
+                    )
+                    continue
             kolicina = float(linija.quantity or 0) * predznak * faktor
             kol_abs = abs(kolicina) or 1.0
 

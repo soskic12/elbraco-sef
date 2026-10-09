@@ -1799,6 +1799,23 @@ def sifre_nije_artikal(
     return _back("/sifre", "Stavka je označena — ne traži se šifra za nju.")
 
 
+@app.post("/sifre/pakovanje")
+def sifre_pakovanje(
+    user: Operater,
+    document_id: int = Form(...),
+    line_no: int = Form(...),
+    faktor: float = Form(...),
+) -> RedirectResponse:
+    """Covek potvrdjuje koliko jedinica stoji iza jednog komada sa fakture."""
+    from ..services.nacrti import potvrdi_pakovanje
+
+    try:
+        poruka = potvrdi_pakovanje(document_id, line_no, faktor, korisnik=user.login)
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back("/sifre", str(exc), False)
+    return _back("/sifre", poruka)
+
+
 @app.post("/sifre/osvezi")
 def sifre_osvezi(user: Operater, background: BackgroundTasks) -> RedirectResponse:
     from ..services.nacrti import osvezi_sve

@@ -454,6 +454,21 @@
   barkod, roba se prelepljuje; ne otvara se druga šifra.</p>
 {% endcall %}
 
+{% call korak('Pakovanje — kad stavka čeka iako šifru ima') %}
+  <p>Neka roba se kupuje u pakovanju a <b>vodi u jedinici posluživanja</b>: bure
+  od 20 l ulazi kao <b>20 litara</b>, kutija čaja kao <b>40 kesica</b>, kilogram
+  kafe kao <b>1000 grama</b>. Bez toga bi u ERP ušlo jedno bure umesto dvadeset
+  litara, a proizvodnja bi otišla u minus.</p>
+  <p>Kad aplikacija vidi takvu stavku a ne zna faktor, <b>ne upisuje je</b> nego
+  je stavi na ekran <b>Šifre</b> sa žutim okvirom <b>„Pakovanje nije
+  potvrđeno“</b> i predlogom pročitanim iz naziva. Proveri broj i klikni
+  <span class="tag">Potvrdi pakovanje</span>.</p>
+  <p class="muted small">Potvrđeno važi i za sve sledeće fakture tog dobavljača
+  za taj artikal — isto kao veza šifre. Faktor aplikacija <b>nikad ne upisuje
+  sama</b>: ili ga je čovek potvrdio, ili je izveden iz onoga što je poslovođa
+  već unosio u ERP.</p>
+{% endcall %}
+
 {% endif %}
 
 {# ------------------------------------------------------- važi za sve uloge #}

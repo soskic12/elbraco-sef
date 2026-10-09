@@ -505,6 +505,62 @@ def osvezi_sve(*, samo_razvrstane: bool = True, limit: int | None = None, engine
     return brojac
 
 
+def potvrdi_pakovanje(
+    document_id: int, line_no: int, faktor: float, *, korisnik: str
+) -> str:
+    """Covek potvrdjuje koliko jedinica stoji iza jednog komada sa fakture.
+
+    Faktor se upisuje uz vezu, pa vazi i za sve sledece fakture tog dobavljaca
+    za taj artikal - isto kao sto se pamti sifra. Mnozi kolicinu koja ulazi u
+    ERP, pa se ne pogadja: app ga samo predlozi iz naziva, upisuje ga covek.
+    """
+    from ..erp.kalkulacija import zaboravi_veze
+
+    if faktor <= 0 or faktor > 5000:
+        raise ValueError("Faktor mora biti veći od nule i manji od 5000.")
+
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise ValueError("Dokument ne postoji.")
+        red = session.get(NacrtKalkulacije, document_id)
+        stavka = next(
+            (s for s in (red.nemapirane or []) if s.get("line_no") == line_no),
+            None,
+        ) if red is not None else None
+        sifra = (stavka or {}).get("sifra")
+        if not sifra:
+            raise ValueError("Za tu stavku se ne zna naša šifra.")
+
+        veze = list(
+            session.scalars(
+                select(ItemMapping).where(
+                    ItemMapping.supplier_vat == (doc.supplier_vat or ""),
+                    ItemMapping.erp_item_code == sifra,
+                    ItemMapping.active == True,  # noqa: E712
+                )
+            )
+        )
+        if not veze:
+            raise ValueError(
+                "Za taj artikal nema zapamćene veze, pa faktor nema uz šta da stoji."
+            )
+        for v in veze:
+            v.unit_factor = float(faktor)
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="pakovanje.potvrdjeno",
+                document_id=document_id,
+                detail=f"stavka {line_no}, artikal {sifra}, faktor x{faktor:g}",
+            )
+        )
+
+    zaboravi_veze()
+    osvezi(document_id)
+    return f"Pakovanje potvrđeno: ×{faktor:g} za artikal {sifra}."
+
+
 def oznaci_nije_artikal(
     document_id: int, line_no: int, *, korisnik: str, vrati: bool = False, engine=None
 ) -> NacrtKalkulacije | None:

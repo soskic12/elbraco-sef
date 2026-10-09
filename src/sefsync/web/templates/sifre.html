@@ -88,6 +88,28 @@
       <td>{{ '%g'|format(s.kolicina) if s.kolicina is not none else '—' }} {{ s.jedinica }}</td>
       <td>{{ '%.2f'|format(s.cena) if s.cena is not none else '—' }}</td>
       <td>
+        {% if s.predlog_faktora %}
+        <div class="small" style="margin-bottom:6px;padding:5px 8px;
+                                  border-left:3px solid #b45309;background:#fffbeb">
+          <b>Pakovanje nije potvrđeno.</b> Šifra je poznata ({{ s.sifra }}), ali
+          se artikal vodi u drugoj jedinici nego što faktura kaže.<br>
+          <span class="muted">{{ s.objasnjenje_faktora }} — predlog je da
+            {{ '%g'|format(s.kolicina) if s.kolicina is not none else '?' }}
+            {{ s.jedinica }} uđe kao
+            <b>{{ '%g'|format((s.kolicina or 0) * s.predlog_faktora) }}</b>
+            u jedinici artikla.</span>
+          <form class="inline" method="post" action="/sifre/pakovanje" style="margin-top:5px">
+            <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
+            <input type="hidden" name="line_no" value="{{ s.line_no }}">
+            <input type="number" name="faktor" step="0.0001" min="0.0001"
+                   value="{{ '%g'|format(s.predlog_faktora) }}" size="6" style="width:90px">
+            <button type="submit">Potvrdi pakovanje</button>
+          </form>
+          <div class="muted small" style="margin-top:3px">
+            Potvrđeno vredi i za sve sledeće fakture tog dobavljača za ovaj artikal.
+          </div>
+        </div>
+        {% endif %}
         <form class="inline" method="post" action="/sifre/povezi">
           <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
           <input type="hidden" name="line_no" value="{{ s.line_no }}">
