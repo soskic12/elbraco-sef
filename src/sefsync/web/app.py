@@ -845,6 +845,49 @@ def dokument_pdf(doc_id: int, user: Korisnik) -> Response:
     )
 
 
+@app.get("/dokument/{doc_id}/prilog")
+def dokument_prilog(doc_id: int, user: Korisnik, redni: int = 0) -> Response:
+    """PDF prilog iz same fakture (UBL), ne SEF-ov prikaz.
+
+    Kod MTS-a i racuna za struju potrosnje po objektima stoje bas u prilogu, pa
+    se on stampa odvojeno od fakture. Mereno 09.10.: prilog ima 47 % faktura i
+    svaki je PDF.
+
+    Prilog se ne cuva posebno - cita se iz UBL-a na zahtev, a `ubl_bajtovi` ga
+    po potrebi skine ponovo sa SEF-a. Zato ovo radi i za arhivirane fakture.
+    """
+    from ..services.arhiva import ubl_bajtovi
+    from ..ubl import parse_ubl
+
+    with session_scope() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+        ime = (doc.document_number or str(doc_id)).replace("/", "-")
+        sadrzaj_ubl = ubl_bajtovi(doc)
+
+    if not sadrzaj_ubl:
+        return _back(f"/dokument/{doc_id}", "UBL ove fakture nije dostupan.", False)
+    try:
+        prilozi = parse_ubl(sadrzaj_ubl).attachments
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku
+        return _back(f"/dokument/{doc_id}", f"UBL se ne može pročitati: {exc}", False)
+    if not prilozi:
+        return _back(f"/dokument/{doc_id}", "Ova faktura nema prilog.", False)
+
+    prilog = prilozi[min(max(redni, 0), len(prilozi) - 1)]
+    naziv = (prilog.filename or f"{ime}-prilog").rsplit("/", 1)[-1]
+    if not naziv.lower().endswith(".pdf") and (prilog.content or b"")[:5] == b"%PDF-":
+        naziv += ".pdf"
+    return Response(
+        content=prilog.content,
+        media_type=prilog.mime_type or "application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{quote(naziv)}"'},
+    )
+
+
 @app.post("/dokument/{doc_id}/sumnja")
 def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> RedirectResponse:
     """Covek presudjuje predlog „možda je već u ERP-u”.

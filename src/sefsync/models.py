@@ -294,6 +294,10 @@ class Document(Base):
     # Period na koji se dokument odnosi (cac:InvoicePeriod). Potreban je kod
     # obavestenja o prethodnom porezu: kad odobrenje pokriva vise faktura, SEF
     # trazi pocetak i kraj perioda kao OBAVEZNA polja - bez njih vraca 400.
+    # Ima li faktura PDF prilog u UBL-u. Kod MTS-a i racuna za struju su bas u
+    # njemu potrosnje po objektima, pa se prilog stampa posebno. Mereno 09.10.:
+    # prilog ima 47 % faktura, i svaki je PDF.
+    ima_prilog: Mapped[bool] = mapped_column(Boolean, default=False)
     period_start: Mapped[date | None] = mapped_column(Date, default=None)
     period_end: Mapped[date | None] = mapped_column(Date, default=None)
     # Ziro racun dobavljaca. Kod javnih preduzeca SEF salje identifikator koji

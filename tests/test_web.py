@@ -1980,3 +1980,20 @@ def test_sifre_nude_otvaranje_nove_sifre(client, db, podaci, monkeypatch):
 
     assert "otvori šifru" in tekst
     assert f"/sifre/predlog/{doc_id}/1" in tekst
+
+
+def test_dugme_za_prilog_samo_kad_prilog_postoji(db, client):
+    """Kod MTS-a i struje potrošnje po objektima stoje baš u prilogu."""
+    from sefsync.models import Document
+
+    prijavi(client, OPERATER)
+
+    with db.session_scope() as session:
+        bez = Document(sef_invoice_id=995501, document_number="BEZ")
+        sa = Document(sef_invoice_id=995502, document_number="SA", ima_prilog=True)
+        session.add_all([bez, sa])
+        session.flush()
+        id_bez, id_sa = bez.id, sa.id
+
+    assert "Štampaj prilog" not in client.get(f"/dokument/{id_bez}").text
+    assert "Štampaj prilog" in client.get(f"/dokument/{id_sa}").text

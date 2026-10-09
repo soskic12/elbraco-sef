@@ -454,6 +454,15 @@
   barkod, roba se prelepljuje; ne otvara se druga šifra.</p>
 {% endcall %}
 
+{% call korak('Štampaj prilog') %}
+  <p>Pored <b>Štampaj</b> ponekad stoji i <b>Štampaj prilog</b> — to je PDF koji
+  je dobavljač <b>priložio uz fakturu</b>. Kod MTS-a i računa za struju baš su
+  tu <b>potrošnje po objektima</b>, kojih na samoj fakturi nema.</p>
+  <p class="muted small">Dugme se pojavljuje samo kad prilog postoji; ima ga
+  otprilike svaka druga faktura. Radi i za arhivirane — prilog se čita iz
+  fakture, a ako je sklonjena sa diska, skine se ponovo sa SEF-a.</p>
+{% endcall %}
+
 {% call korak('Pakovanje — kad stavka čeka iako šifru ima') %}
   <p>Neka roba se kupuje u pakovanju a <b>vodi u jedinici posluživanja</b>: bure
   od 20 l ulazi kao <b>20 litara</b>, kutija čaja kao <b>40 kesica</b>, kilogram

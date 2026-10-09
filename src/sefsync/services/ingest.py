@@ -468,6 +468,7 @@ class IngestService:
         doc.invoice_type_code = ubl.type_code
         if ubl.document_type:
             doc.document_type = to_enum(DocumentType, ubl.document_type, doc.document_type)
+        doc.ima_prilog = bool(ubl.attachments)
         doc.issue_date = doc.issue_date or ubl.issue_date
         doc.delivery_date = doc.delivery_date or ubl.delivery_date
         doc.due_date = doc.due_date or ubl.due_date

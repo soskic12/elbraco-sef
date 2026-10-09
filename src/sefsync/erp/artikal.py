@@ -289,12 +289,20 @@ ZAOKRUZI_NA = 100         # 86 % maloprodajnih cena je zaokruzeno na 100 dinara
 
 
 def kategorije(conn: Connection) -> list[tuple[str, str]]:
-    """Sifarnik kategorija (`KATARTIK`) - sifra i citljivo ime, za izbor."""
+    """Sifarnik kategorija (`KATARTIK`) - sifra i citljivo ime, za izbor.
+
+    Prikazuju se **KAT2 i KAT3**, ne KAT1 i KAT2. Prva dva nivoa su preopsta -
+    „Alati / Akumulatorski alati" ne kaze koji je uredjaj, a `KAT3` kaze: „Aku
+    busilice i odvijaci". Popunjen je na 378 od 386 kategorija (mereno 09.10.);
+    za preostalih osam se vraca ono sto ima, da red ne ostane prazan.
+    """
     return [
-        (r.s, " / ".join(x for x in (r.k1, r.k2) if x))
+        (r.s, " / ".join(x for x in (r.k2, r.k3) if x) or " / ".join(
+            x for x in (r.k1, r.k2) if x))
         for r in conn.execute(
             text("SELECT RTRIM(SHKAT) s, RTRIM(ISNULL(KAT1,'')) k1, "
-                 "RTRIM(ISNULL(KAT2,'')) k2 FROM dbo.KATARTIK ORDER BY KAT1, KAT2")
+                 "RTRIM(ISNULL(KAT2,'')) k2, RTRIM(ISNULL(KAT3,'')) k3 "
+                 "FROM dbo.KATARTIK ORDER BY KAT2, KAT3")
         )
         if (r.s or "").strip()
     ]

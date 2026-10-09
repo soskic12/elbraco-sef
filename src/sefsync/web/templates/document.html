@@ -12,6 +12,12 @@
   {# Stampa se SEF-ov zvanicni prikaz, ne nas ekran. #}
   <a class="small" href="/dokument/{{ doc.id }}/pdf" target="_blank"
      style="font-weight:400;margin-left:8px">Štampaj</a>
+  {% if doc.ima_prilog %}
+  {# Kod MTS-a i racuna za struju potrosnje po objektima stoje bas u prilogu. #}
+  <a class="small" href="/dokument/{{ doc.id }}/prilog" target="_blank"
+     style="font-weight:400;margin-left:8px"
+     title="PDF koji je dobavljač priložio uz fakturu">Štampaj prilog</a>
+  {% endif %}
 </h1>
 
 {% if doc.error_message %}<div class="msg err">{{ doc.error_message }}</div>{% endif %}
