@@ -454,6 +454,16 @@
   barkod, roba se prelepljuje; ne otvara se druga šifra.</p>
 {% endcall %}
 
+{% call korak('Poveži sve upisane') %}
+  <p>Na dnu svake fakture na ekranu <b>Šifre</b> stoji dugme
+  <span class="tag">Poveži sve upisane</span>. Upišeš šifre u polja koja znaš,
+  pa jednim klikom povežeš sve odjednom — ne čeka se učitavanje posle svake.</p>
+  <p class="muted small"><b>Prazna polja se preskaču</b> — što ne znaš, ostavi
+  prazno. Dugmad po redovima rade kao i do sada; ovo je samo prečica za fakture
+  sa mnogo stavki. Na knjižnom odobrenju veze važe samo na toj fakturi, isto
+  kao kod pojedinačnog povezivanja.</p>
+{% endcall %}
+
 {% call korak('Štampaj prilog') %}
   <p>Pored <b>Štampaj</b> ponekad stoji i <b>Štampaj prilog</b> — to je PDF koji
   je dobavljač <b>priložio uz fakturu</b>. Kod MTS-a i računa za struju baš su

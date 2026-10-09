@@ -1650,6 +1650,61 @@ def sifre_povezi(
     return _back(nazad, f"Šifra {sifra} je povezana samo na ovoj fakturi.")
 
 
+@app.post("/sifre/povezi-sve")
+def sifre_povezi_sve(
+    user: Korisnik,
+    document_id: int = Form(...),
+    line_no: list[int] = Form([]),
+    erp_item_code: list[str] = Form([]),
+) -> RedirectResponse:
+    """Povezuje odjednom sve sifre koje je covek upisao na jednoj fakturi.
+
+    Dule je sifre kucao red po red i posle svake cekao da se strana ucita - na
+    fakturi sa dvadeset stavki to je dvadeset ucitavanja. Prazna polja se
+    preskacu: sto ne zna, ostavi prazno.
+
+    Pojedinacna dugmad ostaju; ovo je samo precica (Bane, 09.10.).
+    """
+    from ..services.nacrti import povezi_sifru
+
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        if not _sme_na_dokument(session, user, doc):
+            raise HTTPException(403, "Taj dokument nije tvoj.")
+        vrsta = doc.document_type
+    nazad = "/sifre" if user.is_operator else "/moja-jedinica"
+
+    if len(line_no) != len(erp_item_code):
+        return _back(nazad, "Spisak stavki i šifara se ne poklapa.", False)
+
+    # Na knjiznom odobrenju se veza NE pamti sama - sifra dobavljaca je tamo
+    # cesto opsta oznaka, pa bi zapamcena veza stampala isti artikal na svako
+    # sledece odobrenje. Isto pravilo kao kod pojedinacnog povezivanja.
+    pamti = vrsta is not DocumentType.CREDIT_NOTE
+
+    povezano, greske = 0, []
+    for red, sifra in zip(line_no, erp_item_code):
+        sifra = (sifra or "").strip()
+        if not sifra:
+            continue
+        try:
+            povezi_sifru(document_id, red, sifra, korisnik=user.login, pamti=pamti)
+            povezano += 1
+        except Exception as exc:  # noqa: BLE001 - jedna stavka ne obara ostale
+            greske.append(f"stavka {red}: {exc}")
+
+    if not povezano and not greske:
+        return _back(nazad, "Nijedno polje nije popunjeno.", False)
+    poruka = f"Povezano šifara: {povezano}."
+    if not pamti and povezano:
+        poruka += " Na odobrenju veze važe samo na ovoj fakturi."
+    if greske:
+        return _back(nazad, poruka + " Nije prošlo — " + "; ".join(greske[:3]), False)
+    return _back(nazad, poruka)
+
+
 @app.post("/dokument/{doc_id}/ispravi-sifru")
 def dokument_ispravi_sifru(
     doc_id: int,

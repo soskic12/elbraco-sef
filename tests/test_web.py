@@ -1997,3 +1997,56 @@ def test_dugme_za_prilog_samo_kad_prilog_postoji(db, client):
 
     assert "Štampaj prilog" not in client.get(f"/dokument/{id_bez}").text
     assert "Štampaj prilog" in client.get(f"/dokument/{id_sa}").text
+
+
+def test_grupno_povezivanje_preskace_prazna_polja(db, client, monkeypatch):
+    """Dule je šifre kucao red po red i svaki put čekao učitavanje strane."""
+    from sefsync.models import Document
+    from sefsync.services import nacrti as modul
+
+    prijavi(client, OPERATER)
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=995601, document_number="GRUPNO")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    pozvano = []
+    monkeypatch.setattr(
+        modul, "povezi_sifru",
+        lambda d, red, sifra, **k: pozvano.append((red, sifra)),
+    )
+
+    odgovor = client.post(
+        "/sifre/povezi-sve",
+        data={
+            "document_id": doc_id,
+            "line_no": [1, 2, 3],
+            "erp_item_code": ["12345", "", "  67890  "],
+        },
+        follow_redirects=False,
+    )
+
+    assert odgovor.status_code in (302, 303)
+    assert pozvano == [(1, "12345"), (3, "67890")]
+
+
+def test_grupno_povezivanje_bez_ijednog_polja_ne_radi_nista(db, client, monkeypatch):
+    from sefsync.models import Document
+    from sefsync.services import nacrti as modul
+
+    prijavi(client, OPERATER)
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=995602, document_number="PRAZNO")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    pozvano = []
+    monkeypatch.setattr(modul, "povezi_sifru", lambda *a, **k: pozvano.append(a))
+    client.post(
+        "/sifre/povezi-sve",
+        data={"document_id": doc_id, "line_no": [1], "erp_item_code": [""]},
+        follow_redirects=False,
+    )
+    assert pozvano == []

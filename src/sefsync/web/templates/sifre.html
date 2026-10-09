@@ -114,6 +114,7 @@
           <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
           <input type="hidden" name="line_no" value="{{ s.line_no }}">
           <input type="text" name="erp_item_code" required size="10" placeholder="npr. 12345"
+                 data-doc="{{ nacrt.document_id }}" data-stavka="{{ s.line_no }}"
                  {% if s.predlog %}value="{{ s.predlog.sifra }}"{% endif %}>
           <button type="submit">Poveži</button>
           <label class="small muted" style="display:block"
@@ -143,6 +144,15 @@
     </tr>
     {% endfor %}
   </table>
+  {# Zajednicko dugme: polja ostaju ista, samo se poberu odjednom. Pojedinacna
+     dugmad rade kao i do sada - ovo je precica za fakturu sa mnogo stavki. #}
+  <form method="post" action="/sifre/povezi-sve" class="row"
+        style="margin-top:8px;align-items:center"
+        data-doc="{{ nacrt.document_id }}" onsubmit="return poberi(this)">
+    <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
+    <button type="submit">Poveži sve upisane</button>
+    <span class="muted small">Prazna polja se preskaču.</span>
+  </form>
 </div>
 {% else %}
 <div class="card">Nema kalkulacija koje čekaju šifru.</div>
@@ -175,3 +185,27 @@
 {% endfor %}
 {% endif %}
 {% endblock %}
+
+<script>
+// Pokupi sve popunjene sifre te fakture i posalji ih odjednom. Polja ostaju
+// tamo gde jesu i dalje rade pojedinacno - ovo im samo cita vrednosti.
+function poberi(forma) {
+  forma.querySelectorAll('.pobrano').forEach(function (e) { e.remove(); });
+  var doc = forma.dataset.doc, koliko = 0;
+  document.querySelectorAll('input[data-doc="' + doc + '"]').forEach(function (polje) {
+    var vrednost = (polje.value || '').trim();
+    if (!vrednost) { return; }
+    koliko++;
+    [['line_no', polje.dataset.stavka], ['erp_item_code', vrednost]].forEach(function (par) {
+      var skriveno = document.createElement('input');
+      skriveno.type = 'hidden';
+      skriveno.name = par[0];
+      skriveno.value = par[1];
+      skriveno.className = 'pobrano';
+      forma.appendChild(skriveno);
+    });
+  });
+  if (!koliko) { alert('Nijedno polje nije popunjeno.'); return false; }
+  return confirm('Povezati ' + koliko + ' šifara na ovoj fakturi?');
+}
+</script>
