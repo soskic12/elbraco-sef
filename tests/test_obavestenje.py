@@ -477,3 +477,19 @@ def test_poklapanje_po_broju_trpi_RS_prefiks_i_razmake(db):
     assert nalaz["nema_obavestenje"] == []
     with session_scope() as session:
         assert doc_id not in [d.id for d in bez_obavestenja(session)]
+
+
+def test_broj_izvornog_dokumenta_se_ne_skracuje():
+    """SEF čuva broj doslovno; skraćen broj daje „Source document not found“.
+
+    KIM-TEC šalje `90002972  ` sa dva razmaka na kraju — provereno 09.10. i u
+    SEF-ovom pregledu (`DocumentNumber`) i u UBL-u (`cbc:ID`). Zbog skraćivanja
+    su obaveštenja za ta odobrenja padala sa 400 od 02.10.
+    """
+    from sefsync.services.obavestenje import telo_zahteva
+
+    telo = telo_zahteva(_odobrenje(document_number="90002972  ", billing_reference_count=1))
+
+    assert telo["relatedDocumentNumber"] == "90002972  "
+    # Nas broj obavestenja ostaje uredan.
+    assert telo["noticeNumber"] == "90002972"

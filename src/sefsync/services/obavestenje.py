@@ -166,7 +166,12 @@ def telo_zahteva(doc: Document) -> dict:
         "documentIssueOrigin": PORAKLO_SEF,
         "basisOfNotice": OSNOV_ODOBRENJE,
         "documentReferenceType": vrsta,
-        "relatedDocumentNumber": doc.document_number.strip(),
+        # NE skracivati: SEF cuva broj doslovno onako kako ga je dobavljac
+        # poslao. KIM-TEC salje `90002972  ` sa dva razmaka na kraju (provereno
+        # 09.10. u SEF-ovom pregledu i u samom UBL-u), pa je skraceni broj davao
+        # `400 Source document not found` - SEF nije nalazio izvorni dokument.
+        # `noticeNumber` ostaje skracen: to je nas broj obavestenja, ne pokazivac.
+        "relatedDocumentNumber": doc.document_number,
         "relatedDocumentIssueDate": doc.issue_date.isoformat(),
         "recipient": {"vatRegistrationCode": doc.supplier_vat.strip()},
     }

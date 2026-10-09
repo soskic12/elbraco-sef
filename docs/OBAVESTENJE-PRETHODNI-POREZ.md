@@ -80,7 +80,30 @@ dugujemo obaveštenja i za neprihvaćena odobrenja.**
 | `recipient.vatRegistrationCode` | da | PIB primaoca (pravilo 16) | PIB dobavljača |
 | `recipient.registrationCode` | **da za korisnika javnih sredstava** (JBKJS), opciono matični za firmu (pravilo 17) | | `supplier_reg_no` |
 
-### Zašto je padalo sa 400
+### SEF-ova greška 400, izmerena 09.10.2026.
+
+Telo odgovora, konačno uhvaćeno:
+
+```json
+{"Message": "Source document not found", "FieldName": "", "ErrorCode": "VatDeductionNoti…"}
+```
+
+Uzrok nije bio u validaciji nego u **pokazivaču na izvorni dokument**. KIM-TEC
+šalje broj odobrenja sa razmacima na kraju, i SEF ga čuva doslovno — provereno na
+dva nezavisna mesta:
+
+* SEF-ov pregled nabavki: `'DocumentNumber': '90002972  '`
+* sam UBL: `<cbc:ID>90002972  </cbc:ID>`
+
+Mi smo `relatedDocumentNumber` slali **skraćen** (`.strip()`), pa SEF nije nalazio
+dokument. Datum je sve vreme bio tačan (`cbc:IssueDate` = `2026-09-28`, isto što
+smo slali), a vrsta veze takođe — odobrenje pokazuje na jednu fakturu
+(`34944/23 ` od 2023-06-06), dakle `CreditNoteReferenceToInvoice`.
+
+**Pravilo:** `relatedDocumentNumber` ide doslovno, kako SEF drži.
+`noticeNumber` ostaje skraćen — to je naš broj obaveštenja, ne pokazivač.
+
+### Zašto je padalo sa 400 (zapisano 08.10., pre merenja)
 
 **Pravila 12 i 13 kažu da su polja perioda „опционо“. Tabela polja na strani 177
 kaže `Mandatory when DocumentReferenceTypes = CreditNoteReferenceToPeriod`.**
