@@ -186,6 +186,39 @@ se ima sa čim uporediti:
 
 Dnevna provera je jedna komanda: `sefsync provera-prelaska`.
 
+### 09.10.2026. — provera upisa, i sta je nasla
+
+Povod je `kp-2026248-POV` (#8279): pravilo #70 ga je poslalo Bogdanu, on je
+upisao kalkulaciju `088/03205` (cime je faktura prihvacena na SEF-u i obavestenje
+otislo dobavljacu), shvatio da nije njegova i kalkulaciju **obrisao u ERP-u**.
+Vracanje se odbija dok nacrt stoji kao „upisan", pa dokument nikad nije stigao
+Ilijani. A oslobodjen broj je ERP dao drugom — `088/03205` je danas MISON-ovo
+odobrenje `26-2204-239378`.
+
+Nova komanda `provera-upisa` cita svaki nacrt u stanju „upisan" i pita ERP da li
+je kalkulacija jos tamo i nosi li nas broj racuna.
+
+**Prvo pustanje je dalo 106 laznih uzbuna — moja greska, u dve tacke:**
+
+1. `erp_broj` ima dva oblika. Kad app upise kalkulaciju stoji `088/03205`; kad
+   je prepozna kao vec unetu rukom stoji `ULKALKUL 010/00620`, sa imenom tabele.
+   Cepao sam samo po „/" i trazio magacin „ULKALKUL 010". U ispisu se i videlo —
+   ime tabele je pisalo dvaput.
+2. Broj racuna se poredio doslovno, a ERP ga cuva u `varchar(20)`, pa ljudi
+   izbacuju crtice i seku kraj: `SAODSO1002/2026-06256_Garden` tamo stoji kao
+   `SAODSO1002202606256G`.
+
+Posle popravke: **476 provereno, 473 u redu, 1 nema je, 2 tudja.** Sva tri su
+stvarna:
+
+* `#8279` i `#8479` — broj pokazuje na tudji dokument; oslobodjeni.
+* `#8049` (`IFK-26-18998`, `MKALKUL 071/00194`) — pubova kalkulacija sa 6 g
+  umesto 6.000 g kafe, koju je Bane obrisao. Kad se ponovo upise, uci ce 6.000:
+  faktor x1000 je u medjuvremenu naucen iz ispravne `00197`.
+
+Dodata i dva pravila za Inzenjering Servis (prioritet 30, ispred #70):
+`-POV` → MAG010, `-FIN` → OFFICE. Mereno 17 od 17.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
