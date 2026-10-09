@@ -351,6 +351,47 @@ def proveri_unicode() -> list[str]:
     return sumnjive
 
 
+def objasni_gresku_veze(exc: Exception, url: str) -> list[str]:
+    """Ljudski prevod greske pri kacenju na bazu panela.
+
+    Komanda se pokrece bas kad veza ne radi, pa je traceback od tri stotine
+    redova najgore sto moze da ispise - a 09.10. je upravo to uradila kad
+    lozinka naloga `sefsync_app` nije odgovarala.
+    """
+    poruka = str(exc)
+    gde = _bez_lozinke(url)
+    if "18456" in poruka:
+        nalog = ""
+        try:
+            from sqlalchemy.engine import make_url
+
+            nalog = make_url(url).username or ""
+        except Exception:  # noqa: BLE001
+            pass
+        return [
+            f"Baza panela odbija prijavu naloga „{nalog or '?'}“.",
+            f"   {gde}",
+            "",
+            "SQL Server ne razlikuje „nalog ne postoji“ od „lozinka ne odgovara“.",
+            "Po redu verovatnoće:",
+            "  1. Lozinka u DB_URL nije ista kao ona iz ALTER LOGIN.",
+            "  2. ALTER LOGIN nije prošao (politika lozinke) — pogledaj šta je SSMS rekao.",
+            "  3. Nalog je isključen: ALTER LOGIN [nalog] ENABLE;",
+            "  4. Lozinka ima znak koji se u URL-u mora kodirati (@ : / ? # &).",
+            "",
+            "Provera nezavisno od panela: prijavi se u SSMS-u SQL autentikacijom",
+            "tim nalogom i tom lozinkom. Ako ni tamo ne prolazi, panel nije kriv.",
+        ]
+    if "4060" in poruka or "cannot open database" in poruka.lower():
+        return [
+            f"Nalog se prijavio, ali ne sme da otvori bazu: {gde}",
+            "Fali mu CREATE USER u toj bazi.",
+        ]
+    if "08001" in poruka or "timeout" in poruka.lower():
+        return [f"Server baze se ne javlja: {gde}", "Adresa, port ili mreža."]
+    return [str(exc).splitlines()[0][:200], f"   {gde}"]
+
+
 def init_db() -> list[str]:
     Base.metadata.create_all(get_engine())
     promene = sync_schema()

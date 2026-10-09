@@ -250,3 +250,29 @@ def test_ista_baza_ne_dize_uzbunu(tmp_path, monkeypatch):
 
     assert db_module.promena_baze() is None
     monkeypatch.setattr(db_module, "_engine", None)
+
+
+def test_odbijena_prijava_na_bazu_panela_se_objasni():
+    """Komanda je 09.10. ispisala tri stotine redova zbog pogrešne lozinke."""
+    from sefsync.db import objasni_gresku_veze
+
+    url = "mssql+pyodbc://sefsync_app:tajna@server:1433/SefSync?driver=x"
+    redovi = objasni_gresku_veze(RuntimeError("[28000] Login failed (18456)"), url)
+    tekst = chr(10).join(redovi)
+
+    assert "sefsync_app" in tekst
+    assert "ALTER LOGIN" in tekst
+    assert "tajna" not in tekst  # lozinka se ne ispisuje
+    assert "28000" not in tekst
+
+
+def test_nedostupan_server_se_razlikuje_od_lozinke():
+    from sefsync.db import objasni_gresku_veze
+
+    url = "mssql+pyodbc://u:p@server/SefSync"
+    assert "ne javlja" in chr(10).join(
+        objasni_gresku_veze(RuntimeError("[08001] server does not exist"), url)
+    )
+    assert "CREATE USER" in chr(10).join(
+        objasni_gresku_veze(RuntimeError("(4060) Cannot open database"), url)
+    )

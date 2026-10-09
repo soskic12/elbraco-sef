@@ -41,7 +41,16 @@ def _boot(naziv: str = "sefsync-cli") -> None:
         typer.secho(problem, fg="red")
         raise typer.Exit(2)
     setup_logging(naziv=naziv)
-    init_db()
+    try:
+        init_db()
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne traceback
+        from .config import get_settings
+        from .db import objasni_gresku_veze
+
+        typer.secho("Ne mogu da otvorim bazu panela.", fg="red")
+        for red in objasni_gresku_veze(exc, get_settings().db_url):
+            typer.echo(red)
+        raise typer.Exit(2) from exc
 
 
 def _parse_date(value: str | None) -> date | None:
