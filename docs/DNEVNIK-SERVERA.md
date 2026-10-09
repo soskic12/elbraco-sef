@@ -95,6 +95,19 @@ Posledice, sve objašnjene istim uzrokom:
 šta „nikad nije pušteno na serveru" su netačni: `mapiranje --upisi` i
 `pravila-uvoz` **jesu** bili pušteni — u pravoj bazi.
 
+### 09.10.2026. — povratak na pravu bazu ✔
+
+Nalog `sefsync_app` je postojao u `SefSync`; dobio je novu lozinku
+(`ALTER LOGIN`), a `DB_URL` je vraćen u `C:\efakture\.env` **pored**
+`ERP_DB_URL`-a. Prva prijava je pala (`18456`) dok lozinka nije usaglašena.
+
+`sefsync baza` nad MS SQL-om: **8.435 dokumenata, 2.176 veza šifara, 338
+pravila, 95 jedinica, 694 nacrta, 42 obaveštenja**, najnoviji dokument
+07.10. 12:29 — tačno tamo gde je stala. Potvrđeno da je to prava baza.
+
+Nova brava je proradila iz prve: pri pokretanju je ispisala
+`BAZA PANELA JE PROMENJENA. Ranije: sqlite… Sada: mssql…`.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
