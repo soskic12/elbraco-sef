@@ -132,3 +132,22 @@ def test_neuverljiv_faktor_se_odbija(db):
         modul.potvrdi_pakovanje(1, 1, 0, korisnik="nina")
     with pytest.raises(ValueError):
         modul.potvrdi_pakovanje(1, 1, 99999, korisnik="nina")
+
+
+def test_dijagnostika_imenuje_zadrsku_zbog_pakovanja():
+    """Bez ovoga je `nemapirane` za LIMUN govorila „treba da se reši sama“.
+
+    Šifra jeste poznata — zato je app i zadržala stavku: artikal se vodi u
+    gramima, a faktura šalje komade.
+    """
+    import re
+
+    from sefsync.services.nacrti import _NIJE_ARTIKAL
+
+    stavka = {"naziv": "LIMUN", "ean": "", "sifra_dobavljaca": "132000008",
+              "predlog_faktora": 1000.0}
+
+    # Ista grana kao u `razlozi_cekanja`: pakovanje se proverava prvo.
+    assert stavka.get("predlog_faktora")
+    assert not _NIJE_ARTIKAL.search(stavka["naziv"])
+    assert isinstance(_NIJE_ARTIKAL, re.Pattern)

@@ -106,7 +106,13 @@ def razlozi_cekanja(engine=None) -> dict:
                 sifra_dob = (stavka.get("sifra_dobavljaca") or "").strip()
                 pib = doc.supplier_vat if doc is not None else None
 
-                if _NIJE_ARTIKAL.search(naziv):
+                if stavka.get("predlog_faktora"):
+                    # Sifra je poznata, ali se artikal vodi u drugoj jedinici
+                    # nego sto faktura kaze - ceka se potvrda pakovanja, ne
+                    # sifra. Bez ovoga je dijagnostika govorila „treba da se
+                    # resi sama“ za stavku koju je app namerno zadrzala.
+                    uzrok = "pakovanje nije potvrđeno — čeka potvrdu na ekranu Šifre"
+                elif _NIJE_ARTIKAL.search(naziv):
                     uzrok = "nije artikal (odobrenje, troškovi, naknada)"
                 elif ean and ean in barkodovi:
                     uzrok = "barkod POSTOJI u šifarniku — treba da se reši sam"
