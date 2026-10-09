@@ -161,6 +161,31 @@ digao stariji). Zbog toga se uz svaki neuspeh sada zapisuje telo zahteva
 postavljena". Odgovor je došao tek kad sam pitao SEF kako izgleda obaveštenje
 koje je **prošlo** (`GET …/sender/date-range`), umesto da čitam uputstvo.
 
+### 09.10.2026. — polazno stanje za praćenje
+
+Dogovoreno: dva-tri dana samo praćenje, bez novih izmena. Brojevi od danas, da
+se ima sa čim uporediti:
+
+| | 09.10. |
+|---|---|
+| baza panela | `mssql` (`SefSync`), potvrđena |
+| dokumenata | 8.481 |
+| veza šifara | 2.176 |
+| pravila | 338 |
+| nacrti | spreman 33, čeka šifru 16, **problem 0**, upisan 438 |
+| nerazvrstanih | 11 (Nina ih prolazi) |
+| obaveštenja bez slanja | 0 |
+
+Šta bi značilo da nešto ne valja:
+
+* **`problem` veći od nule** — nacrt koji se ne može sklopiti, roba neuknjižena;
+* **`čeka šifru` raste iz dana u dan** — veze se ne pamte ili je nov dobavljač;
+* **`nerazvrstanih` raste** — fali pravilo;
+* **bilo koji red o bazi** u `provera-prelaska` koji nije `ok`;
+* u logu red `BAZA PANELA JE PROMENJENA` — tada odmah stati.
+
+Dnevna provera je jedna komanda: `sefsync provera-prelaska`.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?
