@@ -527,6 +527,11 @@ class Veze:
     po_imenu: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     # (pib, sifra) -> da li je to oznaka vrste dokumenta, a ne sifra artikla
     oznake: dict[tuple[str, str], bool] = field(default_factory=dict)
+    # (pib, nasa sifra) -> koliko puta je kolicina sa fakture veca u ERP-u.
+    # Bure od 20 l ulazi kao 20 litara, kutija caja kao 40 kesica, kilogram kafe
+    # kao 1000 grama. Vidi `docs/PUB-071.md`. Kljuc je nasa sifra, ne dobavljaceva,
+    # jer faktor zavisi od toga u cemu se artikal vodi - a to je nasa odluka.
+    faktori: dict[tuple[str, str], float] = field(default_factory=dict)
 
 
 _KES_VEZA: tuple[float, Veze] | None = None
@@ -557,24 +562,38 @@ def veze_dobavljaca(session, *, osvezi_kes: bool = False) -> Veze:
         return _KES_VEZA[1]
 
     veze = Veze()
-    for pib, sifra, barkod, naziv, erp in session.execute(
+    sporni: set[tuple[str, str]] = set()
+    for pib, sifra, barkod, naziv, erp, faktor in session.execute(
         select(
             ItemMapping.supplier_vat,
             ItemMapping.supplier_item_id,
             ItemMapping.barcode,
             ItemMapping.supplier_item_name,
             ItemMapping.erp_item_code,
+            ItemMapping.unit_factor,
         ).where(ItemMapping.active == True)  # noqa: E712 - MS SQL nema IS TRUE
     ):
         kod = (erp or "").strip()
         if not kod:
             continue
+        if pib and faktor and float(faktor) > 0 and float(faktor) != 1.0:
+            kljuc = (pib, kod)
+            ranije = veze.faktori.get(kljuc)
+            if ranije is not None and ranije != float(faktor):
+                # Dve veze istog dobavljaca za isti artikal tvrde razlicito.
+                # Mnozenje naslepo bi upisalo pogresnu zalihu, pa se ne mnozi.
+                sporni.add(kljuc)
+            veze.faktori[kljuc] = float(faktor)
         if pib and (sifra or "").strip():
             veze.po_sifri[(pib, sifra.strip())] = kod
         if (barkod or "").strip():
             veze.po_barkodu.setdefault(barkod.strip(), set()).add(kod)
         if pib and (naziv or "").strip():
             veze.po_imenu.setdefault((pib, normalize(naziv)), set()).add(kod)
+
+    for kljuc in sporni:
+        veze.faktori.pop(kljuc, None)
+        log.warning("Faktor za %s nije jednoznacan - stavka se ne mnozi.", kljuc)
 
     _KES_VEZA = (sada, veze)
     return veze
@@ -857,12 +876,20 @@ def pripremi(
 
             tarifa = (art["tarifa"] or "002").strip()
             stopa = _stopa(conn, tarifa)
-            kolicina = float(linija.quantity or 0) * predznak
+
+            # Pakovanje: bure od 20 l ulazi kao 20 litara, kutija caja kao 40
+            # kesica, kilogram kafe kao 1000 grama. Faktor se NE pogadja - uzima
+            # se samo onaj koji stoji uz vezu, dakle onaj koji je covek potvrdio
+            # ili koji je izveden iz istorije. Kad ga nema, mnozenja nema i sve
+            # ostaje kako je bilo. Vidi `docs/PUB-071.md`.
+            faktor = veze.faktori.get((doc.supplier_vat or "", sifra), 1.0) if veze else 1.0
+            kolicina = float(linija.quantity or 0) * predznak * faktor
             kol_abs = abs(kolicina) or 1.0
 
             # Mereno na 4.425 stavki sa rabatom: FAK_CENA je bruto cena,
             # NAB_CENA neto, IZN_RABATA rabat po komadu, VREDNOST neto x kolicina.
-            bruto = float(linija.price or 0) * kurs
+            # Cena ide po novoj jedinici: vrednost stavke ostaje ista.
+            bruto = float(linija.price or 0) * kurs / faktor
             neto = (
                 round(float(linija.line_amount) * kurs / kol_abs, 4)
                 if linija.line_amount is not None and kol_abs

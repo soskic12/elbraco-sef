@@ -1664,3 +1664,37 @@ def test_devizna_faktura_cita_obracun_iz_sacuvanog_ubl_a(db, tmp_path):
 
     assert not nacrt.problemi
     assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 124426.85
+
+
+# --------------------------------------------------------------------------- #
+# pakovanje: bure od 20 l ulazi kao 20 litara
+# --------------------------------------------------------------------------- #
+
+def test_faktor_mnozi_kolicinu_a_vrednost_ostaje_ista():
+    """Bure od 20 l: 2 kom x 5.233,61 -> 40 l x 261,68. Iznos je isti.
+
+    Bez toga je `HAUSBRANDT HERMAN 1kg` 6 KGM zavrsio kao 6 grama umesto 6.000
+    (kalkulacija 00194, pub 071).
+    """
+    from sefsync.erp.kalkulacija import Veze
+
+    veze = Veze()
+    veze.faktori[("100001", "9999970")] = 20.0
+
+    kolicina_fakture, cena_fakture = 2.0, 5233.61
+    faktor = veze.faktori[("100001", "9999970")]
+
+    kolicina = kolicina_fakture * faktor
+    cena = cena_fakture / faktor
+
+    assert kolicina == 40.0
+    assert round(cena, 2) == 261.68
+    assert round(kolicina * cena, 2) == round(kolicina_fakture * cena_fakture, 2)
+
+
+def test_bez_faktora_nista_se_ne_mnozi():
+    """Podrazumevano ponašanje se ne menja — faktora nema dok ga čovek ne potvrdi."""
+    from sefsync.erp.kalkulacija import Veze
+
+    veze = Veze()
+    assert veze.faktori.get(("100001", "200018"), 1.0) == 1.0
