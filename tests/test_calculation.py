@@ -279,6 +279,34 @@ def test_kalkulacija_nosi_datum_prometa_a_ne_danasnji(db, monkeypatch):
     # vidi test_usluga_nema_datum_prijema_robe.
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == 0
 
+    # Isti racun upisan 12.10.: septembarski PDV je obracunat, pa kalkulacija
+    # ide na 01.10., a datum racuna ostaje.
+    nacrt = K.pripremi(doc_id, engine=LazniEngine(), datum=dt.date(2026, 10, 12))
+    assert nacrt.zaglavlje["DATUM"] == K.clarion_dan(dt.date(2026, 10, 1))
+    assert nacrt.zaglavlje["DAT_RAC_DOB"] == promet
+    assert any("01.10.2026" in n for n in nacrt.napomene)
+
+
+def test_datum_knjizenja_posle_desetog_ide_u_tekuci_mesec():
+    """Dogovor 12.10.: posle 10. se PDV za prethodni mesec smatra obracunatim."""
+    import datetime as dt
+
+    from sefsync.erp.kalkulacija import datum_knjizenja as dk
+
+    d = dt.date
+    # tekuci mesec - nista se ne dira
+    assert dk(d(2026, 10, 3), d(2026, 10, 12)) == d(2026, 10, 3)
+    # prethodni mesec, do 10. ukljucivo - jos je otvoren
+    assert dk(d(2026, 9, 28), d(2026, 10, 1)) == d(2026, 9, 28)
+    assert dk(d(2026, 9, 28), d(2026, 10, 10)) == d(2026, 9, 28)
+    # prethodni mesec, posle 10. - prvi u tekucem
+    assert dk(d(2026, 9, 28), d(2026, 10, 11)) == d(2026, 10, 1)
+    # stariji od prethodnog meseca - uvek prvi u tekucem
+    assert dk(d(2026, 8, 31), d(2026, 10, 2)) == d(2026, 10, 1)
+    # preko godine: decembarski racun upisan 15. januara
+    assert dk(d(2026, 12, 20), d(2027, 1, 15)) == d(2027, 1, 1)
+    assert dk(d(2026, 12, 20), d(2027, 1, 5)) == d(2026, 12, 20)
+
 
 def test_faktura_sa_vise_poreskih_stopa_deli_pdv(db):
     """ERP drzi stope odvojeno: PDV je opsta (20 %), PRENETIPOREZ posebna (10 %).
@@ -516,7 +544,10 @@ def test_usluga_nema_datum_prijema_robe(db):
         def __exit__(self, *a):
             return False
 
-    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+    nacrt = K.pripremi(
+        doc_id, engine=type("E", (), {"connect": lambda self: Conn()})(),
+        datum=dt.date(2026, 9, 22),
+    )
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == 0
     assert nacrt.zaglavlje["MENJA_CENU"] == ""
     # datum prometa i dalje stoji tamo gde treba
@@ -542,7 +573,10 @@ def test_usluga_nema_datum_prijema_robe(db):
         session.flush()
         doc_roba = doc.id
 
-    nacrt = K.pripremi(doc_roba, engine=type("E", (), {"connect": lambda self: Conn()})())
+    nacrt = K.pripremi(
+        doc_roba, engine=type("E", (), {"connect": lambda self: Conn()})(),
+        datum=dt.date(2026, 9, 22),
+    )
     assert nacrt.zaglavlje["DATUM_PRIJEM"] == K.clarion_dan(dt.date(2026, 9, 1))
     # Isto pravilo vazi i za MENJA_CENU: kalkulacija robe formira cenu, usluga ne.
     assert nacrt.zaglavlje["MENJA_CENU"] == "Da"

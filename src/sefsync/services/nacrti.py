@@ -208,7 +208,9 @@ def _vec_u_erpu(nacrt, *, engine=None, i_predlog: bool = False):
                 broj,
                 dobavljac,
                 nacrt.zaglavlje.get("IZNOS_ZA_NAP"),
-                nacrt.zaglavlje.get("DATUM"),
+                # Datum sa racuna, ne DATUM - on je pomeren kad je PDV za
+                # period racuna vec obracunat.
+                nacrt.zaglavlje.get("DAT_RAC_DOB"),
                 poznati,
             )
     except SQLAlchemyError as exc:

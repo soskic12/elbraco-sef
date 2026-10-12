@@ -395,6 +395,11 @@
 {% call korak('Šta aplikacija uradi sama u kalkulaciji') %}
   <ul class="small">
     <li>uzima <b>datum prometa</b> sa fakture, ne datum slanja;</li>
+    <li>ako je promet iz <b>prethodnog meseca</b>, a kalkulacija se upisuje
+      <b>posle 10.</b>, kalkulacija ide na <b>1. u tekućem mesecu</b> — PDV za
+      prethodni mesec se tada smatra obračunatim. Isto važi uvek za račune
+      stare dva meseca i više. Datum računa dobavljača ostaje sa fakture, a uz
+      kalkulaciju stoji napomena;</li>
     <li>razdvaja PDV po stopama — opšta i posebna idu u odvojena polja;</li>
     <li>kad je deo računa <b>bez PDV-a</b> (npr. 349,00 kod EPS-a), upisuje ga
       kao zaseban red poreske evidencije, tip 23;</li>

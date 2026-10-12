@@ -112,6 +112,29 @@ def clarion_datum(n: int) -> dt.date:
     return CLARION_NULA + dt.timedelta(days=n)
 
 
+# Do kog dana u mesecu je PDV za prethodni mesec jos otvoren. ERP ne pamti da
+# je obracun predat (ZPDV ima samo 01.01.2026), pa je granica dogovor:
+# Bane, 12.10. - posle 10. se smatra da je PDV za prethodni mesec obracunat.
+PDV_OTVOREN_DO_DANA = 10
+
+
+def datum_knjizenja(promet: dt.date, danas: dt.date) -> dt.date:
+    """Datum koji ide u DATUM kalkulacije - po njemu ERP bira PDV period.
+
+    Mereno 12.10.: kod svih 128 zakasnelih racuna koji imaju red u PDVEVID,
+    PDVEVID.DATUM je jednak DATUM-u kalkulacije. Racun iz zatvorenog perioda
+    ljudi su knjizili na 1. u tekucem mesecu (91 od 138), a DAT_RAC_DOB je
+    ostajao datum sa racuna.
+    """
+    prvi = danas.replace(day=1)
+    if promet >= prvi:
+        return promet
+    prethodni = (prvi - dt.timedelta(days=1)).replace(day=1)
+    if promet >= prethodni and danas.day <= PDV_OTVOREN_DO_DANA:
+        return promet
+    return prvi
+
+
 # Ime pod kojim app upisuje stavke. RBR je jedini trag u ERP-u ko je stavku uneo,
 # pa stoji ime aplikacije, ne coveka (odluka: Bane, 21.09.). Kad nesto krene
 # naopako, `RBR LIKE 'sefsync%'` odmah kaze sta je app napravila. Ko je pokrenuo
@@ -790,6 +813,19 @@ def pripremi(
         # slanja umesto prometa.
         promet = doc.delivery_date or doc.issue_date
         dan_prometa = clarion_dan(promet) if promet else dan
+        # Racun iz perioda ciji je PDV vec obracunat ulazi u tekuci mesec.
+        # Pomera se samo DATUM (i prijem robe uz njega); DAT_RAC_DOB i rok
+        # placanja ostaju sa racuna.
+        dan_knjizenja = dan_prometa
+        if promet:
+            knjizi = datum_knjizenja(promet, danas)
+            if knjizi != promet:
+                dan_knjizenja = clarion_dan(knjizi)
+                nacrt.napomene.append(
+                    f"Promet je {promet:%d.%m.%Y}, a PDV za taj period se "
+                    f"smatra obračunatim — kalkulacija ide sa datumom "
+                    f"{knjizi:%d.%m.%Y}. Datum računa ostaje {promet:%d.%m.%Y}."
+                )
 
         osnovica = pdv_ukupno = mp_vrednost = mp_pdv = 0.0
         # Zbirovi po poreskoj stopi. ERP ih drzi u odvojenim poljima: PDV je
@@ -938,7 +974,7 @@ def pripremi(
                 "BROJ": broj,
                 "ARTIKAL": art["artikal"],
                 "NAZIV": art["naziv"],
-                "DATUM": dan_prometa,
+                "DATUM": dan_knjizenja,
                 "OPIS": broj_racuna[:15],
                 "TARIFA": tarifa.zfill(5),
                 "STOPA": stopa,
@@ -1076,15 +1112,16 @@ def pripremi(
             "MAGACIN": magacin,
             "VRSTAKNJIZ": "U",
             "BROJ": broj,
-            "DATUM": dan_prometa,
+            "DATUM": dan_knjizenja,
             "KONTO": "435",
             "DOBAVLJAC": dobavljac or "",
             "BROJ_RN_DOB": broj_racuna,
             "DAT_RAC_DOB": dan_prometa,
             # Datum prijema robe. Kod usluga prijema nema - na svih 3.076
             # zaglavlja na 088 je nula, dok je na 010, 021 i u maloprodaji
-            # popunjen bez izuzetka (i skoro uvek jednak DATUM-u).
-            "DATUM_PRIJEM": 0 if bez_stavki else dan_prometa,
+            # popunjen bez izuzetka (i skoro uvek jednak DATUM-u - i kod
+            # zakasnelih racuna, 7 od 8).
+            "DATUM_PRIJEM": 0 if bez_stavki else dan_knjizenja,
             "ROBNO_ZADUZ": round(osnovica, 2),
             "PDV": pdv_opsta,
             "PRENETIPOREZ": pdv_posebna,
@@ -1409,7 +1446,10 @@ def moguca_kalkulacija(
             text(
                 f"SELECT RTRIM(BROJ) br, RTRIM(MAGACIN) mag, RTRIM(DOBAVLJAC) dob, "
                 f"RTRIM(ISNULL(BROJ_RN_DOB,'')) rn FROM dbo.{tabela} "
-                f"WHERE RTRIM(DOBAVLJAC) IN ({uslov}) AND DATUM = :dan "
+                f"WHERE RTRIM(DOBAVLJAC) IN ({uslov}) "
+                # Zakasneli racun covek knjizi na 1. u mesecu, pa je datum sa
+                # racuna ostao samo u DAT_RAC_DOB.
+                f"AND (DATUM = :dan OR DAT_RAC_DOB = :dan) "
                 f"AND ABS(ISNULL(IZNOS_ZA_NAP, 0) - :iznos) < 0.01"
             ),
             parametri,
