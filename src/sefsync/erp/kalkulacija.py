@@ -927,7 +927,7 @@ def pripremi(
                 from .pakovanje import predlozi_faktor
 
                 predlog_faktora, objasnjenje = predlozi_faktor(
-                    linija.name or "", linija.unit_code, art["jm"]
+                    linija.name or "", linija.unit_code, art["jm"], magacin=magacin
                 )
                 if predlog_faktora != 1.0:
                     nacrt.nemapirane.append(

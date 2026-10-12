@@ -24,6 +24,13 @@ transportno pakovanje i ne znace nista - sve te stavke idu x1. Obrnuto, `1/40`
 znaci kutiju od 40. Isto i zapremina u nazivu: `COCA COLA 0,25L` nije pakovanje.
 Zato se broj litara trazi samo uz rec `KEG`, `BURE` ili `MODULAR`.
 
+**Pravila iz naziva vaze samo za pub.** Mereno 12.10. na celom sifarniku
+(763.949 artikala): pravila za kutiju i kesicu daju predlog za 6.763 artikla, i to
+gotovo sve dimenzije i oznake modela - `Klupa sklopiva 18x30x43` kao kutija od
+18, `Bosch KGN 34X04` od 34, `Unior 481 1/2 inca` od 2. Tesla RS0880HE je na
+fakturi nosio dimenzije u nazivu i stajao Duletu na ekranu. Van puba se
+preracunava samo kilogram u grame, jer to kaze jedinica mere, ne naziv.
+
 Ovaj modul **samo predlaze**. Mnozi se iskljucivo faktorom koji stoji uz vezu -
 onim koji je covek potvrdio ili koji je izveden iz istorije. Pogresan faktor
 tiho upise pogresnu zalihu, a to se vidi tek kad proizvodnja ode u minus.
@@ -48,11 +55,21 @@ _KUTIJA = re.compile(r"\b1\s*/\s*(\d+)\b")
 _KESICA = re.compile(r"\b(\d+)\s*X\s*\d|\b(\d+)\s*KESICA", re.I)
 _GRAMA = re.compile(r"\b(\d+)\s*G\b", re.I)
 
+# Objekti u kojima se pakovanje cita iz naziva - vidi `docs/PUB-071.md`.
+MAGACINI_PAKOVANJA = {"071"}
 
-def predlozi_faktor(naziv: str, jm_fakture: str | None, jm_artikla: str | None) -> tuple[float, str]:
+
+def predlozi_faktor(
+    naziv: str,
+    jm_fakture: str | None,
+    jm_artikla: str | None,
+    *,
+    magacin: str | None,
+) -> tuple[float, str]:
     """Vraca (faktor, objasnjenje). Faktor 1.0 znaci „nema sta da se preracuna".
 
     `jm_fakture` je `unitCode` sa stavke UBL-a, `jm_artikla` je `ARTIKLI.JEDMERE`.
+    `magacin` je objekat kalkulacije: naziv se cita samo u pubu.
     """
     n = (naziv or "").replace(",", ".")
     fakture = (jm_fakture or "").strip().upper()
@@ -62,6 +79,9 @@ def predlozi_faktor(naziv: str, jm_fakture: str | None, jm_artikla: str | None) 
     if fakture in _KILOGRAM and artikla in GRAM:
         return 1000.0, "kilogram sa fakture, artikal se vodi u gramima"
     if fakture in _LITAR_FAKTURE and artikla in LITAR:
+        return 1.0, ""
+
+    if (magacin or "").strip() not in MAGACINI_PAKOVANJA:
         return 1.0, ""
 
     # 2. Bure: broj litara, ali samo uz rec koja kaze da je bure.

@@ -130,6 +130,8 @@ def izvedi(dana: int = 365, engine=None) -> Nalaz:
         )
         # Jedinica artikla iz sifarnika treba citacu naziva; cita se jednom.
         jedinice: dict[str, str] = {}
+        # U kojim objektima je veza vidjena - naziv se cita samo u pubu.
+        objekti: dict[tuple[str, str], set[str]] = {}
         po_dobavljacu: dict[str, list[Document]] = {}
         for d in dokumenti:
             po_dobavljacu.setdefault((d.supplier_vat or "").strip(), []).append(d)
@@ -172,6 +174,7 @@ def izvedi(dana: int = 365, engine=None) -> Nalaz:
                             faktor = float(round(faktor))
                         nalaz.uparenih_stavki += 1
                         nalaz.vidjeno.setdefault((pib, sifra), Counter())[faktor] += 1
+                        objekti.setdefault((pib, sifra), set()).add(isti[0]["magacin"])
 
         # Sta je pouzdano.
         for (pib, sifra), brojac in nalaz.vidjeno.items():
@@ -179,7 +182,11 @@ def izvedi(dana: int = 365, engine=None) -> Nalaz:
             if len(brojac) == 1 and next(iter(brojac)) != 1.0:
                 primer = _primer_naziva(session, pib, sifra, granica)
                 if primer is not None:
-                    iz_naziva = predlozi_faktor(primer[0], primer[1], jedinice.get(sifra))[0]
+                    mag = objekti.get((pib, sifra), set())
+                    iz_naziva = predlozi_faktor(
+                        primer[0], primer[1], jedinice.get(sifra),
+                        magacin=next(iter(mag)) if len(mag) == 1 else None,
+                    )[0]
             odluka = oceni(brojac, iz_naziva)
             if odluka is None:
                 if len(brojac) > 1:

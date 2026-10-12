@@ -36,7 +36,7 @@ from sefsync.erp.pakovanje import predlozi_faktor
     ],
 )
 def test_preracunava_se(naziv, jm_fakture, jm_artikla, ocekivano):
-    faktor, objasnjenje = predlozi_faktor(naziv, jm_fakture, jm_artikla)
+    faktor, objasnjenje = predlozi_faktor(naziv, jm_fakture, jm_artikla, magacin="071")
     assert faktor == ocekivano
     assert objasnjenje
 
@@ -62,19 +62,19 @@ def test_preracunava_se(naziv, jm_fakture, jm_artikla, ocekivano):
     ],
 )
 def test_ne_preracunava_se(naziv, jm_fakture, jm_artikla):
-    faktor, objasnjenje = predlozi_faktor(naziv, jm_fakture, jm_artikla)
+    faktor, objasnjenje = predlozi_faktor(naziv, jm_fakture, jm_artikla, magacin="071")
     assert faktor == 1.0
     assert objasnjenje == ""
 
 
 def test_zapremina_pred_L_nije_bure():
     """Da pravilo za bure ne pokupi „0,33L" — dalo bi trećinu litre po flaši."""
-    assert predlozi_faktor("TUBORG 0.33L  24/1", "H87", "lit")[0] == 1.0
-    assert predlozi_faktor("COCA COLA 0,25L RGB", "H87", "l")[0] == 1.0
+    assert predlozi_faktor("TUBORG 0.33L  24/1", "H87", "lit", magacin="071")[0] == 1.0
+    assert predlozi_faktor("COCA COLA 0,25L RGB", "H87", "l", magacin="071")[0] == 1.0
 
 
 def test_litar_u_litar_se_ne_dira():
-    assert predlozi_faktor("Vranac 13.jul 1l", "LTR", "l")[0] == 1.0
+    assert predlozi_faktor("Vranac 13.jul 1l", "LTR", "l", magacin="071")[0] == 1.0
 
 
 # --------------------------------------------------------------------------- #
@@ -151,3 +151,29 @@ def test_dijagnostika_imenuje_zadrsku_zbog_pakovanja():
     assert stavka.get("predlog_faktora")
     assert not _NIJE_ARTIKAL.search(stavka["naziv"])
     assert isinstance(_NIJE_ARTIKAL, re.Pattern)
+
+
+@pytest.mark.parametrize(
+    "naziv",
+    [
+        "Tesla RS0880HE frizider 48x45x85cm",
+        "Klupa sklopiva 18x30x43",
+        "Bosch KGN 34X04",
+        "Unior 481 1/2 inca",
+        "Kabel 5x1,5mm",
+        "LED 40W/600X8/2800LM/4000K/BO",
+    ],
+)
+def test_van_puba_naziv_nije_pakovanje(naziv):
+    """Dimenzije i oznake modela nisu pakovanje (Tesla RS0880HE, Dule 12.10.).
+
+    Mereno na sifarniku: pravila za kutiju i kesicu su van puba davala predlog
+    za 6.763 artikla, gotovo sve lazne.
+    """
+    for magacin in ("001", "021", None):
+        assert predlozi_faktor(naziv, "H87", "kom", magacin=magacin) == (1.0, "")
+
+
+def test_kilogram_u_grame_vazi_svuda():
+    """To kaze jedinica mere, ne naziv - pa vazi i van puba."""
+    assert predlozi_faktor("Kafa", "KGM", "g", magacin="001")[0] == 1000.0
