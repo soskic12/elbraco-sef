@@ -24,12 +24,13 @@ transportno pakovanje i ne znace nista - sve te stavke idu x1. Obrnuto, `1/40`
 znaci kutiju od 40. Isto i zapremina u nazivu: `COCA COLA 0,25L` nije pakovanje.
 Zato se broj litara trazi samo uz rec `KEG`, `BURE` ili `MODULAR`.
 
-**Pravila iz naziva vaze samo za pub.** Mereno 12.10. na celom sifarniku
-(763.949 artikala): pravila za kutiju i kesicu daju predlog za 6.763 artikla, i to
-gotovo sve dimenzije i oznake modela - `Klupa sklopiva 18x30x43` kao kutija od
-18, `Bosch KGN 34X04` od 34, `Unior 481 1/2 inca` od 2. Tesla RS0880HE je na
-fakturi nosio dimenzije u nazivu i stajao Duletu na ekranu. Van puba se
-preracunava samo kilogram u grame, jer to kaze jedinica mere, ne naziv.
+**Kutija i kesica se citaju samo u pubu.** Mereno 12.10. na celom sifarniku
+(763.949 artikala): ta dva pravila daju predlog za 6.763 artikla, i to gotovo
+sve dimenzije i oznake modela - `Klupa sklopiva 18x30x43` kao kutija od 18,
+`Bosch KGN 34X04` od 34, `Unior 481 1/2 inca` od 2. Tesla RS0880HE je na
+fakturi nosio dimenzije u nazivu i stajao Duletu na ekranu. Kilogram, bure i
+grami vaze svuda, jer ih cuva jedinica artikla (litar, gram) - a burad ima i
+021 (Paulaner i Kozel 30 l).
 
 Ovaj modul **samo predlaze**. Mnozi se iskljucivo faktorom koji stoji uz vezu -
 onim koji je covek potvrdio ili koji je izveden iz istorije. Pogresan faktor
@@ -81,27 +82,29 @@ def predlozi_faktor(
     if fakture in _LITAR_FAKTURE and artikla in LITAR:
         return 1.0, ""
 
-    if (magacin or "").strip() not in MAGACINI_PAKOVANJA:
-        return 1.0, ""
-
-    # 2. Bure: broj litara, ali samo uz rec koja kaze da je bure.
+    # 2. Bure: broj litara, ali samo uz rec koja kaze da je bure. Vazi svuda -
+    # artikal mora da se vodi u litrima, a burad ima i 021 (Paulaner 30L).
     if artikla in LITAR:
         m = _BURE.search(n) or _MODULAR.search(n)
         if m:
             return float(m.group(1)), f"bure od {m.group(1)} l"
 
-    # 3. Kutija zapisana kao „1/40".
-    m = _KUTIJA.search(n)
-    if m:
-        return float(m.group(1)), f"kutija od {m.group(1)}"
+    # Kutija i kesica se citaju iz samog naziva, bez obzira na jedinicu, pa van
+    # puba hvataju dimenzije i oznake modela.
+    if (magacin or "").strip() in MAGACINI_PAKOVANJA:
+        # 3. Kutija zapisana kao „1/40".
+        m = _KUTIJA.search(n)
+        if m:
+            return float(m.group(1)), f"kutija od {m.group(1)}"
 
-    # 4. Kutija kesica: „40X2,5“, „20X1,75“, „40 KESICA“.
-    m = _KESICA.search(n)
-    if m:
-        broj = m.group(1) or m.group(2)
-        return float(broj), f"kutija od {broj} kesica"
+        # 4. Kutija kesica: „40X2,5“, „20X1,75“, „40 KESICA“.
+        m = _KESICA.search(n)
+        if m:
+            broj = m.group(1) or m.group(2)
+            return float(broj), f"kutija od {broj} kesica"
 
-    # 5. Kesica od N grama, a artikal se vodi u gramima.
+    # 5. Kesica od N grama, a artikal se vodi u gramima. Vazi svuda - cuva ga
+    # jedinica artikla.
     if artikla in GRAM:
         m = _GRAMA.search(n)
         if m:

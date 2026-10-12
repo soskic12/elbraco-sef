@@ -177,3 +177,8 @@ def test_van_puba_naziv_nije_pakovanje(naziv):
 def test_kilogram_u_grame_vazi_svuda():
     """To kaze jedinica mere, ne naziv - pa vazi i van puba."""
     assert predlozi_faktor("Kafa", "KGM", "g", magacin="001")[0] == 1000.0
+
+
+def test_bure_vazi_i_van_puba():
+    """Burad ima i 021 (Paulaner i Kozel 30 l) - njih cuva jedinica artikla."""
+    assert predlozi_faktor("PAULANER BURE 30L", "H87", "l", magacin="021")[0] == 30.0
