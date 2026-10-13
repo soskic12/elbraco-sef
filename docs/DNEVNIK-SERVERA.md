@@ -418,3 +418,16 @@ sve slalo na jedno mesto.
   je do 08.10. uzimala **prvi** zapis koji se poklopi i nije govorila da ih ima
   više — pa je moguće da postoje dva zapisa iste fakture. Proveriti sa
   `dvojnici`.
+
+### 13.10.2026. 14:46 — paket `85af747` napravljen ✗ (nije postavljen)
+
+U njemu, posle `ba1e0ba` koji radi na serveru:
+
+* knjižno zaduženje ide sa ID PDV evidencije **6** (`270ea53`);
+* obaveštenje kod storna i čitanje storna iz SEF-ovih događaja (`85af747`).
+  Prvo pokretanje radnika (ili `sefsync storno-promene`) čita 30 dana i
+  zatečenim stornima ispravlja status. Na SEF-u ih je u tom periodu bilo četiri
+  (`2026-6919`, `26-2075-237232` i dva koja razvojna kopija ne zna).
+
+Posle postavljanja proveriti: `storno-promene` (ili red „Storna sa SEF-a“ u
+`servis.log`) i da `2026-6919` stoji kao Storno.
