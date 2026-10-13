@@ -2112,7 +2112,7 @@ def cmd_obavestenja(
     with session_scope() as session:
         propalo = bez_obavestenja(session)
         if not propalo:
-            typer.secho("Nema takvih — sva prihvaćena odobrenja imaju obaveštenje.", fg="green")
+            typer.secho("Nema takvih — sva prihvaćena odobrenja i nova storna imaju obaveštenje.", fg="green")
             return
 
         pokusaji = {
@@ -2156,6 +2156,28 @@ def cmd_obavestenja(
         typer.echo("Po dobavljaču:")
         for ime, n in po_dobavljacu.most_common(10):
             typer.echo(f"   {n:>4}  {ime}")
+
+
+@app.command("storno-promene")
+def cmd_storno_promene() -> None:
+    """Čita SEF-ove događaje za protekle dane i beleži storna.
+
+    Isto što radnik radi sam jednom dnevno — ovde da se vidi odmah. Svaki dan
+    se čita jednom. Prvi put se čita 30 dana: zatečenim stornima se ispravi
+    status, a obaveštenje se nudi samo za storna od juče nadalje.
+    """
+    _boot()
+    from .services.storno import procitaj_promene
+
+    ishod = procitaj_promene()
+    if not ishod["dana"]:
+        typer.echo("Sve do juče je već pročitano.")
+        return
+    typer.echo(
+        f"Pročitano dana: {ishod['dana']}  storna na SEF-u: {ishod['storna']}  "
+        f"novih: {ishod['novih']}  zatečenih (samo status): {ishod['zatecenih']}  "
+        f"nepoznatih: {ishod['nepoznatih']}"
+    )
 
 
 @app.command("uskladi-obavestenja")
@@ -2710,7 +2732,7 @@ def cmd_provera_prelaska() -> None:
             log.debug("Provera obaveštenja nije prošla: %s", exc)
         red(
             not propalo,
-            "Sva prihvaćena knjižna odobrenja imaju obaveštenje o prethodnom porezu"
+            "Sva prihvaćena knjižna odobrenja i nova storna imaju obaveštenje o prethodnom porezu"
             if not propalo
             else f"Bez obaveštenja o prethodnom porezu: {len(propalo)} "
             + ", ".join((d.document_number or "?") for d in propalo[:5]),

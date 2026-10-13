@@ -364,6 +364,25 @@
   traži iznos veći od nule.</p>
 {% endcall %}
 
+{% call korak('Obaveštenje kod storna') %}
+  <p>Kad dobavljač <b>stornira</b> fakturu, knjižno zaduženje ili avans, propis
+  traži da mu se pošalje obaveštenje o prethodnom porezu — isto ono koje se na
+  portalu pravi na storniranom dokumentu. Aplikacija storno sazna sama, i na
+  dokumentu se pojavi <b style="color:#b45309">žuto</b> „Dobavljač je stornirao
+  ovaj dokument“ sa poljem za napomenu i dugmetom
+  <span class="tag">Pošalji obaveštenje o stornu</span>.</p>
+  <p>Napomena ide dobavljaču, pa je pročitaj pre slanja. Aplikacija predloži
+  „Faktura nije knjižena i PDV nije korišćen kao prethodni porez.“ — a ako je
+  kalkulacija već u ERP-u, predloži da je PDV ispravljen i upozori da se
+  kalkulacija stornira u ERP-u (aplikacija je ne dira).</p>
+  <p class="muted small">Ne šalje se samo od sebe — storno pravi dobavljač, pa
+  slanje ostaje tvoja odluka. Nudi se samo za storna nastala posle uvođenja
+  (13.10.2026.); starijim stornima aplikacija samo ispravi status, da se za njih
+  ne upiše kalkulacija, a obaveštenje ne nudi. Za stornirano <b>odobrenje</b> obaveštenje se ne šalje —
+  propis ga traži samo za odobrenje koje nije stornirano. Ako je obaveštenje već
+  napravljeno na portalu, klikni <span class="tag">Već sam ga napravio na portalu</span>.</p>
+{% endcall %}
+
 {% call korak('„Zaustavljeno“ zbog dobavljača') %}
   <p>Kad dobavljač nije otvoren u ERP-ovom šifarniku komitenata, kalkulacija
   stoji i ispod nje piše zašto, sa matičnim brojem i PIB-om sa fakture.</p>

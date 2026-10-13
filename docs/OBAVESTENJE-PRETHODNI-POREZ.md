@@ -32,14 +32,42 @@ Dakle šest slučajeva, u dve grupe:
 | `CreditNoteIssued` | `CreditNoteReferenceToInvoice` — odobrenje na fakturu | **da** |
 | `CreditNoteIssued` | `CreditNoteReferenceToPrepaymentInvoice` — odobrenje na avansnu fakturu | **da, od 08.10.** |
 | `CreditNoteIssued` | `CreditNoteReferenceToPeriod` — odobrenje na period | **da, od 08.10. ispravno** |
-| `Storno` | `StornoInvoice` — storno fakture | **ne** |
-| `Storno` | `StornoPrepayment` — storno avansa | **ne** |
-| `Storno` | `StornoDebitNote` — storno dokumenta o povećanju | **ne** |
+| `Storno` | `StornoInvoice` — storno fakture | **da, od 13.10.** (dugmetom) |
+| `Storno` | `StornoPrepayment` — storno avansa | **da, od 13.10.** (dugmetom) |
+| `Storno` | `StornoDebitNote` — storno dokumenta o povećanju | **da, od 13.10.** (dugmetom) |
 
-**Tri slučaja sa stornom ne pokrivamo nikako** — ni u aplikaciji, ni u izveštaju,
-ni u proveri. To nije „još nije stiglo na red“, to je dug koji do 08.10. nije bio
-ni zapisan. Veličina se meri po `sef_status = Storno` nad dokumentima na kojima
-smo odbili prethodni porez; odluka šta sa tim je Banetova, nije tehnička.
+### Storno — izmereno 13.10.2026.
+
+* SEF zna za **14** obaveštenja sa osnovom `Storno`, sva `StornoInvoice`, sva
+  Bogdanova sa portala, **prvo 08.06.2026.** — pre juna se nisu slala.
+* U kopiji baze od 09.10.: **27** storniranih faktura sa PDV-om, obaveštenje ima
+  13 (+1 koje nije u panelu). Od juna bez obaveštenja: 8 (EWE ×2, BSH, Comtrade,
+  CSM ×3, CTC-UNIT). Još jedno stornirano zaduženje (`KZ-52-26`, VLAMA) i četiri
+  stornirana odobrenja.
+* Oblik zahteva je preuzet sa Bogdanovih: `noticeNumber` = broj fakture,
+  `relatedDocumentNumber` i `relatedDocumentIssueDate` kao kod odobrenja
+  (doslovni broj i `SentDate`), `totalVatAmount` = PDV fakture, napomena tipa
+  „faktura nije knjižena i PDV nije korišćen kao prethodni porez“.
+* **Datum storna** (`relatedDocumentStornoDate`) je po tabeli polja (str. 177)
+  **obavezan** kod `Storno` — pravilo 14 ga u prozi zove opcionim; važi tabela.
+  Izvor: događaj `Storno` iz `purchase-invoice/changes` (polje `Date`), a kad
+  njega nema, `LastModifiedUtc` iz zapisa stornirane fakture. Oba su poređena sa
+  svih 14 Bogdanovih obaveštenja: isto do milisekunde.
+
+**Panel storno ranije nije ni video.** Pregled (`purchase-invoice/overview`)
+filtrira po **datumu slanja** fakture, a sinhronizacija čita poslednja tri dana —
+`R-26061900` poslata 23.07., stornirana 24.07.: pregled za 24.07. je ne vraća.
+Storno fakture starije od tri dana ostajao je kod nas „Approved“ — npr.
+`2026-6919` (storno 17.09.) i odobrenje `26-2075-237232` (storno 07.10.). To nije
+samo pitanje obaveštenja: upis kalkulacije se odbija tek kad panel zna za storno.
+Od 13.10. radnik jednom dnevno čita `changes` za protekle dane (SEF ih čuva mesec
+dana). Prvo čitanje ide 30 dana unazad i zatečenim stornima samo ispravi status
+(`sef.storno.zatecen`); obaveštenje se nudi za storna od dana pre uvođenja.
+
+**Odluke (Bane, 13.10.):** obaveštenje kod storna ide **dugmetom na dokumentu**,
+sa napomenom koju čovek vidi i menja pre slanja — ne automatski. Nudi se **samo
+za storna uočena posle uvođenja**; zaostala se ne nude. Za stornirano odobrenje
+se ne šalje (pravilo 2: „који није сторниран“).
 
 ### Šta obaveštenje NE traži
 
@@ -220,8 +248,11 @@ portalu“, a pre bilo kakvog slanja ide usklađivanje sa SEF-om.
 
 ## 5. Šta ostaje nerešeno
 
-1. **Tri slučaja sa stornom** (pravilo 2) ne pokrivamo. Prvo izmeriti koliko ih
-   je, pa odlučiti.
+1. **Storno** — rešeno 13.10. (odeljak 1). Ostalo: kad je kalkulacija u ERP-u
+   a faktura stornirana, kalkulaciju u ERP-u stornira čovek; aplikacija samo
+   upozori. Za dva stornirana odobrenja (`318FN-2026`, `26-1355-229464`) je
+   ranije poslato `CreditNoteIssued` obaveštenje — da li to treba ispravljati,
+   nije utvrđeno.
 2. **Pretpostavka o `Approved`** nije proverena — vidi odeljak 1.
 3. **`noticeNumber` mora biti jedinstven.** Koristimo broj odobrenja. Dva
    dobavljača mogu izdati odobrenja istog broja (MISON ima šifre tipa „1“); tada

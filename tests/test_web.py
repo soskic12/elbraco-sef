@@ -2050,3 +2050,32 @@ def test_grupno_povezivanje_bez_ijednog_polja_ne_radi_nista(db, client, monkeypa
         follow_redirects=False,
     )
     assert pozvano == []
+
+
+def test_storno_na_dokumentu_nudi_obavestenje_sa_napomenom(client, db):
+    """Storno pravi dobavljac, pa je dugme na dokumentu jedini put (Bane, 13.10.)."""
+    from sefsync.models import AuditLog
+
+    with db.session_scope() as session:
+        doc = Document(
+            sef_invoice_id=453705773, document_number="R-26061900",
+            supplier_name="Comtrade", supplier_vat="100000104",
+            amount=243318.0, vat_amount=40553.0, sef_status=SefStatus.STORNO,
+        )
+        staro = Document(
+            sef_invoice_id=1, document_number="IFK-26-628", supplier_name="X",
+            supplier_vat="1", amount=100.0, vat_amount=20.0, sef_status=SefStatus.STORNO,
+        )
+        session.add_all([doc, staro])
+        session.flush()
+        session.add(AuditLog(actor="sef", action="sef.storno", document_id=doc.id,
+                             detail="2026-07-24T13:23:14.9212074Z storno ST-1"))
+        doc_id, staro_id = doc.id, staro.id
+    prijavi(client, OPERATER)
+
+    strana = client.get(f"/dokument/{doc_id}").text
+    assert "Pošalji obaveštenje o stornu" in strana
+    assert "Faktura nije knjižena i PDV nije korišćen kao prethodni porez." in strana
+
+    # Storno od pre uvodjenja se ne nudi.
+    assert "Pošalji obaveštenje o stornu" not in client.get(f"/dokument/{staro_id}").text

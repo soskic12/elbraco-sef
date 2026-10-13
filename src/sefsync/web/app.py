@@ -609,6 +609,14 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
             )
             if nadjene:
                 slikano[linija.line_no] = nadjene
+        from ..services.obavestenje import je_storno, predlog_napomene
+        from ..services.storno import je_zabelezen
+
+        storno_obavestenje = (
+            je_storno(doc)
+            and abs(doc.vat_amount or 0) > 0
+            and je_zabelezen(session, doc.id)
+        )
         return templates.TemplateResponse(
             request,
             "document.html",
@@ -629,6 +637,18 @@ def document_detail(request: Request, doc_id: int, user: Korisnik) -> HTMLRespon
                     doc.document_type == DocumentType.CREDIT_NOTE
                     and doc.sef_status == SefStatus.APPROVED
                     and abs(doc.vat_amount or 0) > 0
+                ) or storno_obavestenje,
+                # Storno uocen posle uvodjenja: obavestenje se nudi dugmetom, sa
+                # napomenom koju covek moze da promeni pre slanja.
+                "storno_obavestenje": storno_obavestenje,
+                "predlog_napomene": (
+                    predlog_napomene(
+                        nacrt.erp_broj
+                        if nacrt is not None and nacrt.stanje.value == "upisan"
+                        else None
+                    )
+                    if storno_obavestenje
+                    else ""
                 ),
                 "upis_ukljucen": get_settings().erp_upis_kalkulacije,
                 "units": units,
@@ -1789,16 +1809,19 @@ def sifre_predlog(
 
 
 @app.post("/dokument/{doc_id}/obavestenje")
-def dokument_obavestenje(doc_id: int, user: Operater) -> RedirectResponse:
+def dokument_obavestenje(
+    doc_id: int, user: Operater, napomena: Annotated[str, Form()] = ""
+) -> RedirectResponse:
     """Ponovo salje obavestenje o prethodnom porezu.
 
     Redovno ide samo uz prihvatanje na SEF-u. Kad tada padne, do sada nije bilo
     nacina da se pokusa ponovo iz panela - a SEF-ovo objasnjenje se videlo tek
-    posle slanja (06.10.).
+    posle slanja (06.10.). Kod storna je ovo jedini put: storno pravi
+    dobavljac, pa klika na nasoj strani nema (Bane, 13.10.).
     """
     from ..services.obavestenje import posalji
 
-    ok, poruka = posalji(doc_id, korisnik=user.login)
+    ok, poruka = posalji(doc_id, korisnik=user.login, napomena=napomena or None)
     return _back(f"/dokument/{doc_id}", poruka, ok)
 
 

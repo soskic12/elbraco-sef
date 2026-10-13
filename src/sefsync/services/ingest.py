@@ -271,6 +271,7 @@ class IngestService:
             if is_new:
                 doc = Document(sef_invoice_id=invoice_id)
                 session.add(doc)
+            bio_status = None if is_new else doc.sef_status
             changed = self._apply_overview(doc, record)
             session.flush()
 
@@ -308,6 +309,21 @@ class IngestService:
                 )
             elif changed:
                 stats.updated += 1
+
+            # Storno koji pregled pokaze (faktura poslata u poslednjih par dana)
+            # belezi se odmah; stariji stize preko `storno.procitaj_promene`.
+            # Nov dokument koji vec stize storniran racuna se samo ako je svez -
+            # inace bi ponovno preuzimanje istorije sva stara storna proglasilo
+            # novim.
+            if doc.sef_status is SefStatus.STORNO and bio_status is not SefStatus.STORNO:
+                svez = doc.sent_date is not None and (
+                    datetime.now(timezone.utc).replace(tzinfo=None)
+                    - doc.sent_date.replace(tzinfo=None)
+                ) < timedelta(days=30)
+                if not is_new or svez:
+                    from .storno import zabelezi
+
+                    zabelezi(session, doc)
 
             doc_id = doc.id
             treba_nacrt = (need_ubl or razvrstan_sada) and doc.business_unit_id is not None

@@ -94,6 +94,27 @@
           <div class="muted small">{{ obavestenje.poslao }},
             {{ obavestenje.poslato_u.strftime('%d.%m.%Y %H:%M') }}
             {%- if obavestenje.iznos_pdv %} · PDV {{ '%.2f'|format(obavestenje.iznos_pdv) }}{% endif %}</div>
+        {% elif not obavestenje and storno_obavestenje %}
+          <div class="small" style="padding:5px 8px;border-left:3px solid #b45309;background:#fffbeb">
+            <b>Dobavljač je stornirao ovaj dokument.</b> Propis traži da mu se
+            pošalje obaveštenje o prethodnom porezu (PDV {{ '%.2f'|format((doc.vat_amount or 0)|abs) }}).
+            {% if nacrt and nacrt.stanje.value == 'upisan' %}
+              <div style="margin:4px 0"><b>Kalkulacija {{ nacrt.erp_broj }} je u ERP-u</b> —
+              stornira se tamo, aplikacija je ne dira.</div>
+            {% endif %}
+            {% if user.is_operator %}
+              <form method="post" action="/dokument/{{ doc.id }}/obavestenje" style="margin-top:6px"
+                    onsubmit="return confirm('Šalje se dobavljaču i ne može da se povuče. Ako je obaveštenje već napravljeno na portalu, ovo bi poslalo DRUGO. Nastaviti?')">
+                <label class="muted">Napomena (ide dobavljaču — proveri da je tačna)</label>
+                <textarea name="napomena" rows="2" style="width:100%">{{ predlog_napomene }}</textarea>
+                <button type="submit">Pošalji obaveštenje o stornu</button>
+              </form>
+              <form class="inline" method="post"
+                    action="/dokument/{{ doc.id }}/obavestenje-rucno">
+                <button class="ghost" type="submit">Već sam ga napravio na portalu</button>
+              </form>
+            {% endif %}
+          </div>
         {% elif not obavestenje %}
           <div class="small" style="padding:5px 8px;border-left:3px solid #b45309;background:#fffbeb">
             <b>Obaveštenje još nije poslato.</b> Odobrenje je prihvaćeno na SEF-u,
@@ -116,13 +137,16 @@
           </div>
         {% else %}
           <div class="small" style="padding:5px 8px;border-left:3px solid #b91c1c;background:#fef2f2">
-            <b>Obaveštenje nije poslato.</b> Prihvatanje na SEF-u jeste prošlo.
+            <b>Obaveštenje nije poslato.</b>{% if not storno_obavestenje %} Prihvatanje na SEF-u jeste prošlo.{% endif %}
             Probaj ponovo; ako opet ne prođe, uradi to na portalu dugmetom
             „Kreiraj obaveštenje o prethodnom porezu“.
             <div class="muted" style="margin:4px 0">{{ (obavestenje.greska or '')[:400] }}</div>
             {% if user.is_operator %}
               <form class="inline" method="post" action="/dokument/{{ doc.id }}/obavestenje"
                     onsubmit="return confirm('Šalje se dobavljaču i ne može da se povuče. Ako je obaveštenje već napravljeno na portalu, ovo bi poslalo DRUGO. Nastaviti?')">
+                {% if storno_obavestenje %}
+                  <textarea name="napomena" rows="2" style="width:100%">{{ predlog_napomene }}</textarea>
+                {% endif %}
                 <button type="submit">Pošalji obaveštenje ponovo</button>
               </form>
               <form class="inline" method="post"

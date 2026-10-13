@@ -40,6 +40,20 @@ class SyncWorker:
             except Exception:  # noqa: BLE001 - radnik ne sme da umre zbog jednog ciklusa
                 log.exception("Neocekivana greska u ciklusu sinhronizacije")
 
+            # Storno starije fakture pregled ne vraca (filtrira po datumu
+            # slanja), pa se storna citaju iz SEF-ovih dogadjaja. Jednom dnevno -
+            # svaki dan se cita samo jednom, ostali ciklusi ne zovu SEF.
+            try:
+                from .storno import procitaj_promene
+
+                ishod = procitaj_promene()
+                if ishod["dana"]:
+                    log.info("Storna sa SEF-a: dana %(dana)s, storna %(storna)s, "
+                             "novih %(novih)s, zatecenih %(zatecenih)s, "
+                             "nepoznatih %(nepoznatih)s", ishod)
+            except Exception:  # noqa: BLE001 - SEF ume da bude nedostupan
+                log.exception("Čitanje storna sa SEF-a nije prošlo")
+
             # Sifra se otvara u ERP-u, van panela, pa se zapeli nacrti moraju
             # preracunati sami - inace covek uradi posao a ekran i dalje kaze
             # "ceka sifru", dok neko rucno ne pusti `nacrti --osvezi`.

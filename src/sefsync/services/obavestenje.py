@@ -18,6 +18,13 @@ Sta obavestenje trazi i odakle uzimamo (mereno na 967 odobrenja, 30.09.):
 
 Sve to imamo za 966 od 967 odobrenja. Jedino koje ne moze je ono sa nultim
 PDV-om - za takvo obavestenje ni ne postoji, jer iznos mora biti veci od nule.
+
+**Storno** (od 13.10.): kad dobavljac stornira fakturu, zaduzenje ili avans,
+obavestenje ide sa `BasisOfNotice = Storno`. Oblik je preuzet sa 14 obavestenja
+koja je Bogdan od juna pravio na portalu: broj i trenutak prijema kao kod
+odobrenja, PDV sa fakture, i **trenutak storna** - obavezan po tabeli polja
+(str. 177), iako ga prozni deo (pravilo 14) zove opcionim. Salje se samo
+dugmetom, i nudi samo za storna uocena posle uvodjenja (vidi `storno.py`).
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ from ..models import (
     Document,
     DocumentType,
     ObavestenjeOPrethodnomPorezu,
+    SefStatus,
     utcnow,
 )
 
@@ -41,6 +49,13 @@ OSNOV_ODOBRENJE = "CreditNoteIssued"
 VEZA_FAKTURA = "CreditNoteReferenceToInvoice"
 VEZA_PERIOD = "CreditNoteReferenceToPeriod"
 VEZA_AVANS = "CreditNoteReferenceToPrepaymentInvoice"
+OSNOV_STORNO = "Storno"
+VEZA_STORNO_FAKTURA = "StornoInvoice"
+VEZA_STORNO_AVANS = "StornoPrepayment"
+VEZA_STORNO_ZADUZENJE = "StornoDebitNote"
+# Storno odobrenja ne trazi obavestenje - pravilo 2 ga trazi bas za odobrenje
+# "koje nije stornirano".
+VRSTE_ZA_STORNO = (DocumentType.INVOICE, DocumentType.DEBIT_NOTE, DocumentType.PREPAYMENT)
 # Avansni racun po UBL-u (InvoiceTypeCode 386).
 KOD_AVANSA = "386"
 
@@ -89,13 +104,25 @@ class NeMozeObavestenje(RuntimeError):
     """Razlog zbog kog obavestenje ne moze da se posalje - ide coveku, ne u log."""
 
 
+def je_storno(doc: Document) -> bool:
+    """Stornirana faktura, zaduzenje ili avans - za njih obavestenje ide kao storno."""
+    from ..models import SefStatus
+
+    return doc.sef_status is SefStatus.STORNO and doc.document_type in VRSTE_ZA_STORNO
+
+
 def _proveri(doc: Document) -> None:
     if doc is None:
         raise NeMozeObavestenje("Dokument ne postoji.")
-    if doc.document_type is not DocumentType.CREDIT_NOTE:
+    if doc.document_type is not DocumentType.CREDIT_NOTE and not je_storno(doc):
         raise NeMozeObavestenje(
-            "Obaveštenje o prethodnom porezu ide uz knjižno odobrenje, "
-            f"a ovo je {doc.document_type.value}."
+            "Obaveštenje o prethodnom porezu ide uz knjižno odobrenje ili uz "
+            f"stornirani dokument, a ovo je {doc.document_type.value}."
+        )
+    if doc.document_type is DocumentType.CREDIT_NOTE and doc.sef_status is SefStatus.STORNO:
+        raise NeMozeObavestenje(
+            "Odobrenje je stornirano — obaveštenje se šalje samo za odobrenje "
+            "koje nije stornirano (pravilo 2)."
         )
     if not (doc.supplier_vat or "").strip():
         raise NeMozeObavestenje("Dokument nema PIB dobavljača — nema kome da se pošalje.")
@@ -105,7 +132,7 @@ def _proveri(doc: Document) -> None:
         raise NeMozeObavestenje("Dokument nema datum izdavanja.")
     if abs(doc.vat_amount or 0) <= 0:
         raise NeMozeObavestenje(
-            "PDV na ovom odobrenju je nula — obaveštenje traži iznos veći od nule."
+            "PDV na ovom dokumentu je nula — obaveštenje traži iznos veći od nule."
         )
 
 
@@ -117,6 +144,12 @@ def vrsta_veze(doc: Document) -> str:
     isla kao obicna. Odobrenje na avans je redak slucaj ali postoji, i SEF za
     njega trazi svoju vrednost.
     """
+    if je_storno(doc):
+        if doc.document_type is DocumentType.DEBIT_NOTE:
+            return VEZA_STORNO_ZADUZENJE
+        if doc.document_type is DocumentType.PREPAYMENT or doc.invoice_type_code == KOD_AVANSA:
+            return VEZA_STORNO_AVANS
+        return VEZA_STORNO_FAKTURA
     if (doc.billing_reference_count or 0) > 1:
         return VEZA_PERIOD
     if doc.prepayment_date is not None or doc.invoice_type_code == KOD_AVANSA:
@@ -203,16 +236,62 @@ def sef_zapis_dokumenta(doc: Document, klijent=None) -> dict | None:
     return None
 
 
-def telo_zahteva(doc: Document, sef_zapis: dict | None = None) -> dict:
+def datum_storna(doc: Document, klijent=None) -> str | None:
+    """Trenutak storna, doslovno kako ga SEF drzi.
+
+    Prvo iz dogadjaja koji je storno javio (zapisan u dnevniku dokumenta), pa
+    iz SEF-ovog zapisa fakture: `LastModifiedUtc` stornirane fakture je tacno
+    trenutak storna - provereno 13.10. na svih 14 Bogdanovih obavestenja.
+    """
+    from ..sef.client import SefClient
+    from .storno import trenutak_storna
+
+    with session_scope() as session:
+        kada = trenutak_storna(session, doc.id) if doc.id else None
+    if kada:
+        return kada
+    try:
+        with (klijent or SefClient()) as sef:
+            zapis = sef.purchase_invoice(doc.sef_invoice_id) or {}
+    except Exception as exc:  # noqa: BLE001 - bez datuma se ne salje, covek dobija poruku
+        log.warning("Zapis fakture #%s nije procitan: %s", doc.id, exc)
+        return None
+    if str(zapis.get("Status") or "") != "Storno":
+        return None
+    return zapis.get("LastModifiedUtc")
+
+
+def predlog_napomene(kalkulacija_u_erpu: str | None) -> str:
+    """Napomena koja se nudi uz storno; covek je menja pre slanja.
+
+    Bogdan je na 13 od 14 storna pisao da faktura nije knjizena i PDV nije
+    koriscen. Kad je kalkulacija ipak u ERP-u, to vise nije tacno.
+    """
+    if kalkulacija_u_erpu:
+        return (
+            "Faktura je bila evidentirana; PDV iz stornirane fakture "
+            "ispravljen je kao prethodni porez."
+        )
+    return "Faktura nije knjižena i PDV nije korišćen kao prethodni porez."
+
+
+def telo_zahteva(
+    doc: Document,
+    sef_zapis: dict | None = None,
+    *,
+    storno_u: str | None = None,
+    napomena: str | None = None,
+) -> dict:
     """Telo poziva ka SEF-u. `sef_zapis` je SEF-ov red o dokumentu, ako ga imamo."""
     _proveri(doc)
     zapis = sef_zapis or {}
     vrsta = vrsta_veze(doc)
+    storno = je_storno(doc)
     telo = {
         "noticeNumber": doc.document_number.strip()[:200],
         "totalVatAmount": round(abs(doc.vat_amount or 0), 2),
         "documentIssueOrigin": PORAKLO_SEF,
-        "basisOfNotice": OSNOV_ODOBRENJE,
+        "basisOfNotice": OSNOV_STORNO if storno else OSNOV_ODOBRENJE,
         "documentReferenceType": vrsta,
         # NE skracivati: SEF cuva broj doslovno onako kako ga je dobavljac
         # poslao. KIM-TEC salje `90002972  ` sa dva razmaka na kraju (provereno
@@ -238,6 +317,15 @@ def telo_zahteva(doc: Document, sef_zapis: dict | None = None) -> dict:
     sifra = (doc.supplier_reg_no or "").strip()
     if sifra:
         telo["recipient"]["registrationCode"] = sifra
+
+    if storno:
+        if not storno_u:
+            raise NeMozeObavestenje(
+                "Ne zna se kada je dokument storniran — SEF taj datum traži kao obavezan."
+            )
+        telo["relatedDocumentStornoDate"] = storno_u
+    if napomena and napomena.strip():
+        telo["notes"] = napomena.strip()[:2000]
 
     if vrsta == VEZA_PERIOD:
         period = period_veze(doc)
@@ -292,7 +380,9 @@ def zabelezi_rucno(document_id: int, korisnik: str) -> str:
         return f"Zabeleženo: obaveštenje {red.broj} je napravljeno ručno na portalu."
 
 
-def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str]:
+def posalji(
+    document_id: int, *, korisnik: str, klijent=None, napomena: str | None = None
+) -> tuple[bool, str]:
     """Salje obavestenje i pamti trag. Vraca (da li je poslato, poruka za coveka).
 
     Slanje je prema dobavljacu i nepovratno, pa se ne ponavlja: ako je jednom
@@ -312,7 +402,8 @@ def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str
         except Exception:  # noqa: BLE001 - bez zapisa se salje iz nasih podataka
             zapis = None
         try:
-            telo = telo_zahteva(doc, zapis)
+            storno_u = datum_storna(doc, klijent) if doc is not None and je_storno(doc) else None
+            telo = telo_zahteva(doc, zapis, storno_u=storno_u, napomena=napomena)
         except NeMozeObavestenje as exc:
             return False, str(exc)
         broj = telo["noticeNumber"]
@@ -376,7 +467,7 @@ def posalji(document_id: int, *, korisnik: str, klijent=None) -> tuple[bool, str
 
 
 def bez_obavestenja(session) -> list[Document]:
-    """Prihvacena knjizna odobrenja za koja obavestenje nije proslo.
+    """Prihvacena knjizna odobrenja i nova storna za koja obavestenje nije proslo.
 
     Ne sluzi masovnom slanju - ono ide iskljucivo uz prihvatanje - nego da se
     vidi sta je propalo, jer slanje ume da padne a prihvatanje ostaje.
@@ -393,15 +484,35 @@ def bez_obavestenja(session) -> list[Document]:
         for o in session.scalars(select(ObavestenjeOPrethodnomPorezu))
         if o.zavrseno
     }
-    return [
-        d
-        for d in session.scalars(
+    from ..models import AuditLog
+    from .storno import OZNAKA
+
+    odobrenja = list(
+        session.scalars(
             select(Document).where(
                 Document.document_type == DocumentType.CREDIT_NOTE,
                 Document.sef_status == SefStatus.APPROVED,
                 Document.archived == False,  # noqa: E712
             )
         )
+    )
+    # Storno samo ako ga je panel uocio (red `sef.storno`) - zaostala storna od
+    # pre uvodjenja se ne nude (Bane, 13.10.). `archived` se ne gleda: on kaze
+    # da je UBL sklonjen, a stornira se i faktura stara mesecima.
+    storna = list(
+        session.scalars(
+            select(Document).where(
+                Document.sef_status == SefStatus.STORNO,
+                Document.document_type.in_(VRSTE_ZA_STORNO),
+                Document.id.in_(
+                    select(AuditLog.document_id).where(AuditLog.action == OZNAKA)
+                ),
+            )
+        )
+    )
+    return [
+        d
+        for d in odobrenja + storna
         if d.id not in poslata and abs(d.vat_amount or 0) > 0
     ]
 
