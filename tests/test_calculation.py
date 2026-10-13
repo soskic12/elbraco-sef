@@ -1262,6 +1262,28 @@ def test_pdv_evidencija_finansijsko_odobrenje():
     assert vrsta == K.TIP_FINANSIJSKO_ODOBRENJE
 
 
+def test_pdv_evidencija_knjizno_zaduzenje():
+    """Knjizno zaduzenje (DebitNote) je 6 - 13 od 14 u ERP-u, i 1 u istoriji ga ne menja."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, napomena = K.vrsta_pdv_evidencije(
+        _ConnIstorija([(21, 1, 0), (1, 4, 0)]), "57441", "088",
+        predznak=1.0, ima_pdv=True, knjizno_zaduzenje=True,
+    )
+    assert vrsta == K.TIP_KNJIZNO_ZADUZENJE == 6
+    assert napomena is None
+
+
+def test_pdv_evidencija_povrat_ostaje_35_i_kad_je_zaduzenje():
+    """Magacin 010 ima prednost - tamo je sve povrat robe."""
+    from sefsync.erp import kalkulacija as K
+
+    vrsta, _ = K.vrsta_pdv_evidencije(
+        _ConnIstorija(), "0001", "010", predznak=-1.0, ima_pdv=True, knjizno_zaduzenje=True
+    )
+    assert vrsta == K.TIP_POVRAT_ROBE
+
+
 def test_pdv_evidencija_negativno_u_maloprodaji_ne_postaje_34():
     """Van 088 negativnog nema; ako se pojavi, app ne izmislja 34."""
     from sefsync.erp import kalkulacija as K

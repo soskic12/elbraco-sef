@@ -47,6 +47,7 @@ TIP_ULAZNI_RACUN = 1     # sifarnik TIPEVID: "ULAZNI RACUNI"
 TIP_BEZ_EPPDV = 23       # "ULAZNI RACUNI (BEZ EPPDV)" - racun koji ne nosi PDV
 TIP_POVRAT_ROBE = 35           # "Povrat robe" - magacin 010, sve negativno
 TIP_FINANSIJSKO_ODOBRENJE = 34  # "Finansijska odobrenja" - negativno, bez robe
+TIP_KNJIZNO_ZADUZENJE = 6       # "Knjizna zaduznja" - DebitNote (383) sa SEF-a
 
 # Clarion ne ostavlja NULL: u kolonu koja nije popunjena upisuje nulu ili prazan
 # string. Nas INSERT je nabrajao samo polja koja racunamo, pa je ostalo 78 kolona
@@ -356,6 +357,7 @@ def vrsta_pdv_evidencije(
     *,
     predznak: float,
     ima_pdv: bool,
+    knjizno_zaduzenje: bool = False,
 ) -> tuple[int, str | None]:
     """ID PDV evidencije za kalkulaciju. Vraca (vrsta, napomena za coveka).
 
@@ -368,6 +370,9 @@ def vrsta_pdv_evidencije(
       kalkulacije, a 600 od 603 nosi 35.
     * **34 Finansijska odobrenja** - negativan dokument na 088; svih 368 je
       negativno i bez stavki.
+    * **6 Knjizna zaduzenja** - DebitNote sa SEF-a. Mereno 13.10.: od 14
+      knjiznih zaduzenja koja imaju kalkulaciju 13 nosi 6 (jedno 1, omaska), a
+      svih 15 kalkulacija sa 6 su knjizna zaduzenja. Retko - vecinom VLAMA.
     * racun **sa PDV-om** je 1 ili 21, nikad 75 ni 23 (1.255 : 408 : 14);
     * racun **bez PDV-a** je 75 ili 23, nikad 1 ni 21 (921 : 168 : 2).
 
@@ -388,6 +393,8 @@ def vrsta_pdv_evidencije(
     # na 021 nema nijedne negativne kalkulacije.
     if predznak < 0 and magacin == MAGACIN_ULAZNI_RACUN:
         return TIP_FINANSIJSKO_ODOBRENJE, None
+    if knjizno_zaduzenje:
+        return TIP_KNJIZNO_ZADUZENJE, None
 
     istorija = (
         conn.execute(
@@ -1101,6 +1108,7 @@ def pripremi(
             magacin,
             predznak=predznak,
             ima_pdv=abs(round(pdv_opsta + pdv_posebna, 2)) > 0,
+            knjizno_zaduzenje=doc.document_type is DocumentType.DEBIT_NOTE,
         )
         if napomena:
             nacrt.napomene.append(napomena)
