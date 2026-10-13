@@ -246,6 +246,12 @@ kopiranja, i posle pip-a heš-om poredi svaki `.py` iz paketa sa `src\` i sa
 `.venv`. Ako se razlikuju, panel se ipak pali, ali skripta piše crveno
 „NIJE GOTOVO" umesto „Gotovo".
 
+Prvo puštanje (13.10. 11:42) prijavilo je **104 razlike — lažne, greška u
+proveri**: TEMP administratora je `ADMINI~1`, a `Get-ChildItem` vraća pun naziv
+`Administrator`, pa je sečenje putanje po dužini pomerilo svaku putanju za pet
+znakova (`sefsync\sync\cli.py`). Provera sada seče po `\src\sefsync\`;
+isprobano na stvarnom 8.3 imenu.
+
 Uočeno usput: rade **dva** `python.exe … sefsync.exe serve --worker` (PID
 11676 i 11972) uz jedan `cmd` zadatka — proveriti posle postavljanja da li
 ostaje jedan.

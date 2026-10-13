@@ -263,11 +263,15 @@ Uradi 'instaliram zavisnosti (iz paketa, bez interneta)' {
 # Zato se ne veruje kopiranju ni pip-u, nego se proveri: svaki .py iz paketa
 # mora biti isti i u src\ i u onome sto panel stvarno izvrsava (.venv).
 Uradi 'proveravam da je postavljen bas kod iz paketa' {
+    # Relativna putanja se trazi po '\src\sefsync\', ne po duzini osnovne putanje:
+    # TEMP administratora je 'ADMINI~1', a Get-ChildItem vraca 'Administrator',
+    # pa je 13.10. seckanje po duzini prijavilo 104 lazne razlike (sefsync\sync\cli.py).
     $izPaketa = Join-Path $privremeno 'src\sefsync'
+    $oznaka = '\src\sefsync\'
     $instalirano = Join-Path $venv 'Lib\site-packages\sefsync'
     $razlike = @()
     foreach ($f in Get-ChildItem $izPaketa -Recurse -Filter '*.py') {
-        $rel = $f.FullName.Substring($izPaketa.Length + 1)
+        $rel = $f.FullName.Substring($f.FullName.IndexOf($oznaka) + $oznaka.Length)
         $hes = (Get-FileHash $f.FullName).Hash
         foreach ($gde in @((Join-Path $Odrediste 'src\sefsync'), $instalirano)) {
             $cilj = Join-Path $gde $rel
