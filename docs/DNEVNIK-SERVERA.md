@@ -252,6 +252,17 @@ proveri**: TEMP administratora je `ADMINI~1`, a `Get-ChildItem` vraća pun naziv
 znakova (`sefsync\sync\cli.py`). Provera sada seče po `\src\sefsync\`;
 isprobano na stvarnom 8.3 imenu.
 
+**Potvrđeno posle postavljanja 13.10. 11:42** (ispisi viđeni): svih 52 `.py`
+iz paketa isti su u `src\` i u `.venv` (razlika 0), `MAGACINI_PAKOVANJA` je u
+`.venv`. Kod od 12.10. od sada radi na serveru.
+
+`#8049` (`IFK-26-18998`, pub 071): `zaboravi-upis 8049 --stvarno`, pa
+`nacrti --osvezi` (345 s: spreman 27, čeka šifru 13, problem 0, upisan 549,
+ne treba 1, greška 0). `pripremi(8049)` bez upisa daje: `200012 Hausbrandt
+Herman 1kg` **6000.0 g**, datum **01.10.2026.** (promet 23.09.). Napomena
+uz nacrt: kod dobavljača ID PDV evidencije ranije 4× `1`, 1× `21`. Upis u ERP —
+čeka se.
+
 Uočeno usput: rade **dva** `python.exe … sefsync.exe serve --worker` (PID
 11676 i 11972) uz jedan `cmd` zadatka — proveriti posle postavljanja da li
 ostaje jedan.
