@@ -219,6 +219,37 @@ stvarna:
 Dodata i dva pravila za Inzenjering Servis (prioritet 30, ispred #70):
 `-POV` → MAG010, `-FIN` → OFFICE. Mereno 17 od 17.
 
+### 13.10.2026. — paket od 12.10. nikad nije proradio ✔ (nalaz) / ✗ (popravka)
+
+Simptom: paket `07cefda` (12.10. 14:43) „dignut i raspakovan", a ne radi. Mereno
+na serveru, ispisima:
+
+* `src\sefsync\erp\pakovanje.py` je od 09.10. (3.494 B), u paketu je 4.545 B.
+* `src\` je **kod od 22.09.** za svaki fajl koji je tada postojao
+  (`kalkulacija.py` 26.424 B = commit `1cc980d`), plus fajlovi nastali posle
+  (`komitent`, `nalog`, `pakovanje`) u svojoj prvoj verziji. Na vrhu
+  `C:\efakture` su `postavi.ps1` i `pravila.json` od 22.09. — neko je između
+  12.10. 14:42 i 13.10. 08:56 preko `C:\efakture` iskopirao paket od 22.09.
+  Bekap `20261012-143946` još ima kod od 09.10., bekap `20261013-085655` već
+  ima 22.09. **Ko i kako — nije utvrđeno.**
+* U `.venv` (to panel izvršava) je kod od **09.10.** (`kalkulacija.py`
+  66.178 B), i u bekapu 13.10. i posle jutarnjeg postavljanja. Razlog:
+  `C:\efakture\build\` je ostao od prvog ručnog paketa (11.09.); pip gradi u
+  samom folderu, a setuptools u `build\lib` prepisuje samo fajl **noviji** od
+  postojećeg. Stari `src\` je zato tiho dao `.venv` iz `build\lib` od 09.10.
+  Isto je i 12.10. u 14:42: `.venv` je dobio 66.178 B, ne kod iz paketa.
+* Dakle izmene od 12.10. (zakasneli račun na 1., pakovanje po magacinu) **nisu
+  bile na serveru ni jednog trenutka**, a skripta je oba puta rekla „Gotovo".
+
+Popravka u `postavi.ps1`: briše `build\` i `src\sefsync.egg-info` posle
+kopiranja, i posle pip-a heš-om poredi svaki `.py` iz paketa sa `src\` i sa
+`.venv`. Ako se razlikuju, panel se ipak pali, ali skripta piše crveno
+„NIJE GOTOVO" umesto „Gotovo".
+
+Uočeno usput: rade **dva** `python.exe … sefsync.exe serve --worker` (PID
+11676 i 11972) uz jedan `cmd` zadatka — proveriti posle postavljanja da li
+ostaje jedan.
+
 ## Hronologija
 
 ### 28.09.2026. — prelazak na rad u aplikaciji ?

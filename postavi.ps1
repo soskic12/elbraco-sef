@@ -43,6 +43,7 @@ $ErrorActionPreference = 'Stop'
 $env:SEFSYNC_HOME = $Odrediste
 $bekapKoren = Join-Path $Odrediste 'bekap'
 $cuvaj = @('.env', 'data')
+$kodNeOdgovara = 0
 
 function Korak($tekst) { Write-Host "`n== $tekst" -ForegroundColor Cyan }
 function Uradi($opis, [scriptblock]$posao) {
@@ -225,6 +226,13 @@ Uradi 'kopiram novu verziju (.env i data ostaju netaknuti)' {
     New-Item -ItemType Directory -Force -Path (Join-Path $Odrediste 'data') | Out-Null
     Get-ChildItem $privremeno | Where-Object { $cuvaj -notcontains $_.Name } |
         Copy-Item -Destination $Odrediste -Recurse -Force
+    # build\ ostaje od pip-a (gradi u samom folderu). Setuptools iz src\ u
+    # build\lib kopira samo fajl noviji od onog koji tamo vec stoji - pa je
+    # 13.10. u .venv usao kod od 9.10. iz build\lib, a ne onaj iz src\.
+    foreach ($d in @('build', 'src\sefsync.egg-info')) {
+        $p = Join-Path $Odrediste $d
+        if (Test-Path $p) { Remove-Item $p -Recurse -Force }
+    }
 }
 
 Korak 'Python okruzenje'
@@ -249,6 +257,32 @@ Uradi 'instaliram zavisnosti (iz paketa, bez interneta)' {
             throw 'Instalacija zavisnosti nije prosla ni offline ni online.'
         }
     }
+}
+
+# Skripta je 13.10. rekla "Gotovo", a na serveru je i dalje radio kod od 9.10.
+# Zato se ne veruje kopiranju ni pip-u, nego se proveri: svaki .py iz paketa
+# mora biti isti i u src\ i u onome sto panel stvarno izvrsava (.venv).
+Uradi 'proveravam da je postavljen bas kod iz paketa' {
+    $izPaketa = Join-Path $privremeno 'src\sefsync'
+    $instalirano = Join-Path $venv 'Lib\site-packages\sefsync'
+    $razlike = @()
+    foreach ($f in Get-ChildItem $izPaketa -Recurse -Filter '*.py') {
+        $rel = $f.FullName.Substring($izPaketa.Length + 1)
+        $hes = (Get-FileHash $f.FullName).Hash
+        foreach ($gde in @((Join-Path $Odrediste 'src\sefsync'), $instalirano)) {
+            $cilj = Join-Path $gde $rel
+            if (-not (Test-Path $cilj) -or (Get-FileHash $cilj).Hash -ne $hes) { $razlike += $cilj }
+        }
+    }
+    if ($razlike) {
+        $razlike | Select-Object -First 15 | ForEach-Object { Write-Host "      razlikuje se: $_" -ForegroundColor Red }
+        # Ne prekida se: panel se ipak pali (stari kod je bolji nego nikakav),
+        # ali na kraju ne pise "Gotovo".
+        $script:kodNeOdgovara = $razlike.Count
+        Write-Warning "Postavljeni kod NIJE isti kao u paketu ($($razlike.Count) fajlova)."
+        return
+    }
+    Write-Host '   kod u src\ i u .venv isti je kao u paketu' -ForegroundColor Green
 }
 
 Korak 'Podesavanja'
@@ -370,7 +404,9 @@ Uradi 'provera da odgovara' {
 }
 
 Write-Host ''
-if ($Stvarno) {
+if ($Stvarno -and $kodNeOdgovara) {
+    Write-Host "NIJE GOTOVO: panel radi, ali $kodNeOdgovara fajlova se razlikuje od paketa - vidi crvene redove gore." -ForegroundColor Red
+} elseif ($Stvarno) {
     Write-Host "Gotovo. Panel: http://$env:COMPUTERNAME`:$Port" -ForegroundColor Green
     Write-Host "Logovi: $Odrediste\data\servis.log"
 } else {
