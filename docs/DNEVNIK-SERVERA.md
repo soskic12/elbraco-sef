@@ -263,9 +263,10 @@ Herman 1kg` **6000.0 g**, datum **01.10.2026.** (promet 23.09.). Napomena
 uz nacrt: kod dobavljača ID PDV evidencije ranije 4× `1`, 1× `21`. Upis u ERP —
 čeka se.
 
-Uočeno usput: rade **dva** `python.exe … sefsync.exe serve --worker` (PID
-11676 i 11972) uz jedan `cmd` zadatka — proveriti posle postavljanja da li
-ostaje jedan.
+Dva `python.exe` uz `serve --worker` **nisu dva panela** (provereno 13.10. po
+`ParentProcessId`): `cmd` → `sefsync.exe` → `.venv\Scripts\python.exe` →
+`Python313\python.exe`. Python iz `.venv` na Windows-u samo pokreće pravi
+interpreter, pa su uvek dva.
 
 ## Hronologija
 
