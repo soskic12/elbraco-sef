@@ -175,7 +175,11 @@ Write-Host @"
 
 Dalje, na serveru (RDP, kao administrator):
   1. prekopiraj paket u C:\objave\sefsync-paket.zip
-  2. powershell -ExecutionPolicy Bypass -File C:\objave\postavi.ps1 -Arhiva C:\objave\sefsync-paket.zip -Stvarno
+  2. raspakuj ga i pokreni postavi.ps1 IZ PAKETA (C:\objave\postavi.ps1 je stari, od 22.09.):
+     Remove-Item C:\objave\novo -Recurse -Force -ErrorAction SilentlyContinue
+     Expand-Archive C:\objave\sefsync-paket.zip C:\objave\novo
+     powershell -ExecutionPolicy Bypass -File C:\objave\novo\postavi.ps1 -Arhiva C:\objave\sefsync-paket.zip -Stvarno
+     Na kraju mora da pise "kod u src\ i u .venv isti je kao u paketu" i "Gotovo".
   3. C:\efakture\.venv\Scripts\sefsync.exe pravila-uvoz C:\efakture\pravila.json
   4. C:\efakture\.venv\Scripts\sefsync.exe osvezi-ubl
   5. C:\efakture\.venv\Scripts\sefsync.exe razvrstaj
