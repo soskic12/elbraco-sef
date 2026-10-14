@@ -445,3 +445,20 @@ ispravka ide UPDATE-om koji pušta čovek (app sme samo INSERT). ✗ nije pušte
 
 Paket `5748801` (14.10. 09:16) napravljen ✗ nije postavljen. Sadrži i
 `85af747` (storno) i `270ea53` (zaduženje → 6) od 13.10.
+
+### 14.10.2026. — storna pogrešno upisana kao nova ✔ (nalaz) / ✗ (popravka)
+
+Paket `85af747` postavljen 08:32 (bekap `20261014-083208`), `5748801` u 09:27
+(`20261014-092732`). UPDATE cena za 14451–14457: **74 reda** ✔.
+
+U 08:35 je radnik u prvom ciklusu čitao 30 dana storna, a istovremeno je ručno
+puštena `storno-promene` (po mom uputstvu od 13.10.). Komanda je granicu
+„novo“ izvela iz dana koji je radnik već zabeležio, pa su sva četiri storna
+upisana kao **nova** (`sef.storno`, 06:35–06:36 UTC): `2026-6919`,
+`26-300-030998`, `26-2075-237232`, `KP-446/26` — trebalo je zatečena. Radnik je
+u 08:35:41 pao na SEF-ovom pozivu. Dva radnika **nisu** radila: „Radnik
+pokrenut“ samo 08:35 i 09:28, sada jedan lanac procesa.
+
+Popravka `7704925`: granica se zapisuje jednom (`storno_uvedeno`; na serveru
+13.10.) i pri zapisivanju prevodi ta četiri zapisa u zatečene. Paket 14.10.
+11:34 ✗ nije postavljen. Do tada se za ta četiri ne šalje obaveštenje.
