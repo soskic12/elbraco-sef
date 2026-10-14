@@ -33,15 +33,21 @@ OZNAKA = "sef.storno"
 # nudi (zaostala storna se ne nude - Bane, 13.10.).
 OZNAKA_ZATECEN = "sef.storno.zatecen"
 PROMENE_DO = "storno_promene_do"
+# Dan od kog je storno „nov“ (nudi se obavestenje). Zapisuje se jednom i posle
+# se samo cita. Do 14.10. se granica racunala iz `PROMENE_DO`, pa je drugi
+# radnik koji je krenuo dok je prvi vec citao proglasio sva stara storna novim
+# (14.10. 08:35: 2026-6919, 26-300-030998, 26-2075-237232, KP-446/26).
+UVEDENO = "storno_uvedeno"
 # SEF cuva dogadjaje mesec dana; dalje od toga nema sta da se trazi.
 NAJVISE_DANA = 30
 
 
-def je_zabelezen(session, document_id: int) -> bool:
+def je_zabelezen(session, document_id: int, *, i_zatecen: bool = False) -> bool:
+    akcije = (OZNAKA, OZNAKA_ZATECEN) if i_zatecen else (OZNAKA,)
     return (
         session.scalar(
             select(AuditLog.id).where(
-                AuditLog.document_id == document_id, AuditLog.action == OZNAKA
+                AuditLog.document_id == document_id, AuditLog.action.in_(akcije)
             ).limit(1)
         )
         is not None
@@ -65,7 +71,7 @@ def zabelezi(
         session.flush()
     bio = doc.sef_status
     doc.sef_status = SefStatus.STORNO
-    if je_zabelezen(session, doc.id):
+    if je_zabelezen(session, doc.id, i_zatecen=True):
         return False
     # Detalj pocinje trenutkom storna, kad ga znamo - `trenutak_storna` ga
     # odatle cita. Iz pregleda trenutak ne stize.
@@ -98,6 +104,34 @@ def trenutak_storna(session, document_id: int) -> str | None:
     return prvi
 
 
+def granica_novih(session, juce: date) -> date:
+    """Dan od kog je storno nov. Zapisuje se pri prvom citanju i vise se ne menja.
+
+    Kad granica tek nastaje, zapisi `sef.storno` sa datumom storna pre nje
+    prevode se u zatecene - to ispravlja ono sto je 14.10. nastalo pre ove
+    popravke.
+    """
+    red = session.get(Setting, UVEDENO)
+    if red is not None and red.value:
+        return date.fromisoformat(red.value)
+    # Gde se vec citalo (server, 14.10.), granica je dan do kog je procitano -
+    # tada je uvedeno. Inace juce.
+    vec = session.get(Setting, PROMENE_DO)
+    granica = min(date.fromisoformat(vec.value), juce) if vec is not None and vec.value else juce
+    session.add(Setting(key=UVEDENO, value=granica.isoformat()))
+    for zapis in session.scalars(select(AuditLog).where(AuditLog.action == OZNAKA)):
+        prvi = (zapis.detail or "").split(" ")[0]
+        try:
+            kada = datetime.fromisoformat(prvi.replace("Z", "+00:00")).date()
+        except ValueError:
+            continue
+        if kada < granica:
+            zapis.action = OZNAKA_ZATECEN
+            log.info("Storno #%s od %s je zatecen, ne nov", zapis.document_id, kada)
+    session.flush()
+    return granica
+
+
 def procitaj_promene(
     *, klijent=None, danas: date | None = None, od: date | None = None
 ) -> dict:
@@ -114,15 +148,16 @@ def procitaj_promene(
     danas = danas or date.today()
     juce = danas - timedelta(days=1)
     with session_scope() as session:
+        novi_od = granica_novih(session, juce)
         red = session.get(Setting, PROMENE_DO)
         procitano_do = date.fromisoformat(red.value) if red and red.value else None
     najranije = danas - timedelta(days=NAJVISE_DANA)
     if od:
-        pocetak = novi_od = od
+        pocetak = od
     elif procitano_do:
-        pocetak = novi_od = procitano_do + timedelta(days=1)
+        pocetak = procitano_do + timedelta(days=1)
     else:
-        pocetak, novi_od = najranije, juce
+        pocetak = najranije
     pocetak = max(pocetak, najranije)
 
     ishod = {"dana": 0, "storna": 0, "novih": 0, "zatecenih": 0, "nepoznatih": 0}

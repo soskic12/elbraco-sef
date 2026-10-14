@@ -339,3 +339,57 @@ def test_stari_storno_pri_preuzimanju_istorije_nije_nov(db, faktura_xml):
         doc = session.scalar(select(Document).where(Document.sef_invoice_id == 453705773))
         assert doc.sef_status is SefStatus.STORNO
         assert not je_zabelezen(session, doc.id)
+
+
+def test_granica_je_stalna_i_ispravlja_pogresno_nova_storna(db):
+    """14.10. 08:35: drugi radnik je granicu izveo iz toga dokle je prvi stigao,
+    pa su četiri stara storna (17.09.-09.10.) upisana kao nova. Granica se sada
+    zapisuje jednom, a pri zapisivanju se takvi zapisi prevode u zatečene.
+    """
+    from sefsync.services.obavestenje import bez_obavestenja
+    from sefsync.services.storno import procitaj_promene
+
+    staro = _faktura(db, sef_invoice_id=471935557, document_number="2026-6919",
+                     sef_status=SefStatus.STORNO)
+    with db.session_scope() as session:
+        session.add(Setting(key="storno_promene_do", value="2026-10-13"))
+        session.add(AuditLog(actor="sef", action="sef.storno", document_id=staro,
+                             detail="2026-09-17T08:07:56.7682175Z storno ST2026-344"))
+
+    procitaj_promene(klijent=LazniSef(), danas=date(2026, 10, 15))
+
+    with db.session_scope() as session:
+        assert session.get(Setting, "storno_uvedeno").value == "2026-10-13"
+        akcije = [a.action for a in session.scalars(
+            select(AuditLog).where(AuditLog.document_id == staro))]
+        assert akcije == ["sef.storno.zatecen"]
+        assert staro not in [d.id for d in bez_obavestenja(session)]
+
+    # Granica se posle ne pomera, ma dokle se citalo.
+    procitaj_promene(klijent=LazniSef(), danas=date(2026, 10, 20))
+    with db.session_scope() as session:
+        assert session.get(Setting, "storno_uvedeno").value == "2026-10-13"
+
+
+def test_drugi_radnik_ne_proglasava_staro_novim(db):
+    """Prvi radnik zapiše granicu i dan, pa padne; drugi nastavlja - staro ostaje staro."""
+    from sefsync.services.storno import procitaj_promene
+
+    staro = _faktura(db, sef_invoice_id=471935557, document_number="2026-6919")
+    dogadjaj = {date(2026, 9, 17): [{"Date": "2026-09-17T08:07:56Z", "NewInvoiceStatus": "Storno",
+                                     "PurchaseInvoiceId": 471935557}]}
+
+    class PadaPosleDana(LazniSef):
+        def purchase_changes(self, dan):
+            if dan > date(2026, 9, 15):
+                raise RuntimeError("SEF ne odgovara")
+            return super().purchase_changes(dan)
+
+    with pytest.raises(RuntimeError):
+        procitaj_promene(klijent=PadaPosleDana(dogadjaj), danas=date(2026, 10, 14))
+    ishod = procitaj_promene(klijent=LazniSef(dogadjaj), danas=date(2026, 10, 14))
+
+    assert (ishod["novih"], ishod["zatecenih"]) == (0, 1)
+    with db.session_scope() as session:
+        assert [a.action for a in session.scalars(
+            select(AuditLog).where(AuditLog.document_id == staro))] == ["sef.storno.zatecen"]
