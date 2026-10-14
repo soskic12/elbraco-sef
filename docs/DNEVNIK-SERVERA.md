@@ -431,3 +431,17 @@ U njemu, posle `ba1e0ba` koji radi na serveru:
 
 Posle postavljanja proveriti: `storno-promene` (ili red „Storna sa SEF-a“ u
 `servis.log`) i da `2026-6919` stoji kao Storno.
+
+### 14.10.2026. — šifre i zastarela poruka o ceni
+
+Na serveru, ispisom: `26-FA001010834` (#7768, pub) bio je **arhiviran** i nacrt
+mu nije računat od 01.10. — radnik je preskakao arhivirane, a ekran „Šifre“ ih
+prikazuje. `osvezi(7768)` ručno: `problem` → `ceka_sifru` (cene 215 i 225 su
+odavno u ARTPROD/071). Još dva upisana nacrta (8042, 8203) nosila su stari tekst
+„nema cenu“. U logu: „Zapeli nacrti: odmrznuto 0 od 12“ svakih 15 min.
+
+Šifre koje je app otvorila: 14451–14457 bez `CENAMALO` u 74 reda ARTIKLI —
+ispravka ide UPDATE-om koji pušta čovek (app sme samo INSERT). ✗ nije pušteno.
+
+Paket `5748801` (14.10. 09:16) napravljen ✗ nije postavljen. Sadrži i
+`85af747` (storno) i `270ea53` (zaduženje → 6) od 13.10.
