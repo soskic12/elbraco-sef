@@ -778,6 +778,9 @@ def otvori_sifru(
     jedmere: str | None = None,
     tarifa: str | None = None,
     shkat: str | None = None,
+    poreklo: str = "",
+    garancija: int | None = None,
+    produzena_garancija: int | None = None,
     engine=None,
 ) -> str:
     """Otvara novu sifru artikla u ERP-u i odmah je veze za stavku.
@@ -813,6 +816,16 @@ def otvori_sifru(
         predlog.tarifa = tarifa.strip()[:3]
     if shkat:
         predlog.shkat = shkat.strip()[:5]
+    # Poreklo i garancije je Dule do 14.10. dopisivao u ERP-u posle otvaranja.
+    # Garancije su obavezne (0 je ispravan odgovor), poreklo nije - za
+    # 24.548 artikala ga nema.
+    if garancija is None or produzena_garancija is None:
+        raise ValueError("Upiši garanciju i produženu garanciju u mesecima (0 ako je nema).")
+    if not (0 <= int(garancija) <= 999 and 0 <= int(produzena_garancija) <= 255):
+        raise ValueError("Garancija se upisuje u mesecima — proveri broj.")
+    predlog.poreklo = (poreklo or "").strip()[:30]
+    predlog.garancija = int(garancija)
+    predlog.produzena_garancija = int(produzena_garancija)
 
     opis = upisi_artikal(predlog, produkcija=get_settings().erp_allow_production_write)
     sifra = predlog.predlozena_sifra

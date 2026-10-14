@@ -45,7 +45,9 @@
     <div><b>ARTIKLI</b> ({{ predlog.magacini|length }}): {{ predlog.magacini|join(', ') }}</div>
     <div><b>ARTPROD</b> ({{ predlog.prodajna_mesta|length }}): {{ predlog.prodajna_mesta|join(', ') }}</div>
     <div class="muted"><b>DARTIKLI</b>: ne upisujemo — noćni posao na serveru
-      otvori dopunu sam, a zemlja porekla se dopuni sutradan.</div>
+      otvori dopunu sam.</div>
+    <div class="muted">Maloprodajna cena, zemlja porekla i garancije idu u
+      <b>svaki</b> red — i u magacine i u prodajna mesta.</div>
   </div>
 </div>
 
@@ -122,6 +124,27 @@
         <input name="cena_mp" type="number" step="0.01" min="0.01" required
                value="{{ '%.2f'|format(predlog.cena_mp) if predlog.cena_mp else '' }}"></div>
     </div>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Zemlja porekla</label>
+        <input name="poreklo" maxlength="30" list="porekla" value="{{ predlog.poreklo }}"
+               placeholder="izaberi sa spiska ili upiši">
+        <datalist id="porekla">
+          {% for p in porekla %}<option value="{{ p }}">{% endfor %}
+        </datalist></div>
+      <div class="field"><label>Garancija (meseci)</label>
+        <input name="garancija" type="number" min="0" max="999" step="1" required
+               value="{{ predlog.garancija if predlog.garancija is not none else '' }}"></div>
+      <div class="field"><label>Produžena garancija (meseci)</label>
+        <input name="produzena_garancija" type="number" min="0" max="255" step="1" required
+               value="{{ predlog.produzena_garancija if predlog.produzena_garancija is not none else '' }}"></div>
+    </div>
+    {% if predlog.garancija is not none %}
+      <div class="small" style="margin:2px 0 6px;color:#166534">
+        Poreklo i garancije predloženi po sličnim artiklima — proveri.</div>
+    {% else %}
+      <div class="small" style="margin:2px 0 6px;color:#b45309">
+        Garancije nisam mogao da predložim — upiši ih (0 ako je nema).</div>
+    {% endif %}
     {% if predlog.cena_predlog %}
       <div class="small" style="margin:2px 0 6px">
         {% if predlog.cena_predlog.cena %}

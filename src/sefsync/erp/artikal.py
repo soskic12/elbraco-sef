@@ -10,8 +10,7 @@ Sta ide gde:
                spisak, vidi MAGACINI nize
     ARTPROD    red po prodajnom mestu koje nije usluzno (cita se iz dbo.PRODAV)
     DARTIKLI   **ne pisemo mi.** Nocni posao na serveru svaku novu sifru iz
-               jedinstvenog sifarnika sam otvori i u DARTIKLI, a Dule sutradan
-               dopuni zemlju porekla. Tabela nema nijedan indeks (proverio
+               jedinstvenog sifarnika sam otvori i u DARTIKLI. Tabela nema nijedan indeks (proverio
                03.10.) - dupli red se ne bi ni prijavio kao greska nego bi tiho
                ostao, pa bi se artikal duplirao u svemu sto iz nje cita. Dok se
                taj posao ne pogleda, mi je ne diramo (Bane, 03.10.).
@@ -119,6 +118,13 @@ class PredlogArtikla:
     # Covek je izricito rekao da artikal nema barkod - tek tada se upisuje
     # sifra umesto barkoda, kako stoji kod 7.005 postojecih artikala.
     bez_barkoda: bool = False
+    # Zemlja porekla i garancije (u mesecima). Do 14.10. ih je Dule dopisivao
+    # rucno posle otvaranja. Predlazu se po slicnim artiklima; kad slicnih nema,
+    # garancije ostaju prazne i covek ih upisuje - pogresan broj koji se samo
+    # prihvati gori je od praznog polja.
+    poreklo: str = ""
+    garancija: int | None = None
+    produzena_garancija: int | None = None
 
     @property
     def broj_redova(self) -> int:
@@ -248,7 +254,8 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
     nadjeni = []
     for r in conn.execute(
         text("SELECT TOP 200 RTRIM(ARTIKAL) a, RTRIM(NAZIV) n, RTRIM(ISNULL(BARCODE,'')) b, "
-             "RTRIM(ISNULL(SHKAT,'')) k "
+             "RTRIM(ISNULL(SHKAT,'')) k, RTRIM(ISNULL(POREKLO,'')) p, "
+             "GARANCIJA g, PRODUZENAGARANCIJA pg "
              f"FROM dbo.ARTIKLI WHERE RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}' AND NAZIV LIKE :u"),
         {"u": f"%{najduza}%"},
     ):
@@ -266,6 +273,9 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
                 "artikal": r.a, "naziv": r.n, "barkod": r.b,
                 "poklapanje": round(poklapanje, 2),
                 "shkat": r.k,
+                "poreklo": r.p if r.p not in ("", ".") else "",
+                "garancija": r.g,
+                "produzena_garancija": r.pg,
                 "cena_mp": float(cene.mp) if cene else None,
                 "nabavna": float(cene.nab) if cene and cene.nab else None,
             })
@@ -306,6 +316,32 @@ def kategorije(conn: Connection) -> list[tuple[str, str]]:
         )
         if (r.s or "").strip()
     ]
+
+
+def porekla(conn: Connection) -> list[str]:
+    """Zemlje porekla koje vec postoje, najcesce prve - za izbor.
+
+    Polje je slobodan tekst i vec ima dvojnike („Nemačka“ 1.553, „Nemacka“
+    431, mereno 14.10.). Spisak redom po ucestalosti gura ka postojecem nazivu
+    umesto ka novom obliku.
+    """
+    return [
+        r.p
+        for r in conn.execute(
+            text(f"SELECT RTRIM(POREKLO) p, COUNT(*) n FROM dbo.ARTIKLI "
+                 f"WHERE RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}' AND RTRIM(ISNULL(POREKLO,'')) "
+                 "NOT IN ('', '.') GROUP BY RTRIM(POREKLO) ORDER BY n DESC")
+        )
+    ]
+
+
+def _vecina(slicni: list[dict], kljuc: str):
+    """Vrednost koju deli vecina slicnih artikala, ili None."""
+    glasovi = [s.get(kljuc) for s in slicni if s.get(kljuc) not in (None, "")]
+    if not glasovi:
+        return None
+    najcesca = max(set(glasovi), key=glasovi.count)
+    return najcesca if glasovi.count(najcesca) > len(glasovi) / 2 else None
 
 
 def predlog_kategorije(slicni: list[dict]) -> str:
@@ -445,6 +481,9 @@ def predlozi(
         )
         predlog.shkat_predlog = predlog_kategorije(predlog.slicni)
         predlog.shkat = predlog.shkat_predlog or SHKAT_OSTALO
+        predlog.poreklo = _vecina(predlog.slicni, "poreklo") or ""
+        predlog.garancija = _vecina(predlog.slicni, "garancija")
+        predlog.produzena_garancija = _vecina(predlog.slicni, "produzena_garancija")
         predlog.cena_predlog = predlog_cene(
             conn, dobavljac, predlog.nabavna_cena, predlog.pdv_stopa
         )
@@ -476,6 +515,11 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
             "maloprodaji staje sa „artikal nema cenu u objektu“."
         )
 
+    dodatno = {
+        "POREKLO": (predlog.poreklo or "").strip()[:30] or None,
+        "GARANCIJA": predlog.garancija,
+        "PRODUZENAGARANCIJA": predlog.produzena_garancija,
+    }
     osnova = {
         "ARTIKAL": sifra,
         "NAZIV": predlog.naziv[:30],
@@ -484,8 +528,15 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
         "TARIFA": predlog.tarifa,
         "SHKAT": predlog.shkat or SHKAT_OSTALO,
         **STALNO_ARTIKLI,
+        **dodatno,
     }
-    artikli = [{**osnova, "SIFRAMAG": m} for m in predlog.magacini]
+    # Cena ide i u lokalni cenovnik svakog magacina, ne samo u ARTPROD. Postojeci
+    # artikli je nose u svakom redu ARTIKLI; mi je do 14.10. nismo upisivali, pa
+    # su sifre 14452-14457 stajale bez cene u svih 11 magacina (Bane, 14.10.).
+    artikli = [
+        {**osnova, "SIFRAMAG": m, "CENAMALO": round(float(predlog.cena_mp), 2)}
+        for m in predlog.magacini
+    ]
     artprod = [
         {
             "SIFRAPRO": m,
@@ -501,6 +552,7 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
             "DECCENA": 2,
             "DECKOLIC": 2,
             "PROIZVODJAC": ".",
+            **dodatno,
         }
         for m in predlog.prodajna_mesta
     ]
@@ -596,7 +648,9 @@ def bez_cenovnika(conn: Connection, sifra: str) -> tuple[dict | None, list[str],
     art = conn.execute(
         text("SELECT TOP 1 RTRIM(ARTIKAL) artikal, RTRIM(NAZIV) naziv, "
              "RTRIM(ISNULL(BARCODE,'')) barkod, RTRIM(ISNULL(JEDMERE,'kom')) jm, "
-             "RTRIM(ISNULL(TARIFA,'002')) tarifa, RTRIM(ISNULL(SHKAT,'')) shkat "
+             "RTRIM(ISNULL(TARIFA,'002')) tarifa, RTRIM(ISNULL(SHKAT,'')) shkat, "
+             "RTRIM(ISNULL(POREKLO,'')) poreklo, GARANCIJA garancija, "
+             "PRODUZENAGARANCIJA produzena "
              f"FROM dbo.ARTIKLI WHERE RTRIM(ARTIKAL)=:a AND RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}'"),
         {"a": sifra},
     ).first()
@@ -659,10 +713,13 @@ def dopuni_cenovnike(
             "TARIFA": art["tarifa"],
             "SHKAT": art["shkat"] or SHKAT_OSTALO,
             **STALNO_ARTIKLI,
+            "POREKLO": art["poreklo"] or None,
+            "GARANCIJA": art["garancija"],
+            "PRODUZENAGARANCIJA": art["produzena"],
         }
         upisano = 0
         for mag in magacini:
-            red = {**osnova, "SIFRAMAG": mag}
+            red = {**osnova, "SIFRAMAG": mag, "CENAMALO": round(float(cena_mp), 2)}
             conn.execute(
                 text(f"INSERT INTO dbo.ARTIKLI ({', '.join(red)}) "
                      f"VALUES ({', '.join(f':{k}' for k in red)})"), red)

@@ -1144,8 +1144,10 @@ def test_slicni_artikli_upozoravaju_na_duplikat(db):
             if "ARTPROD" in str(upit):
                 return _Rezultat([type("R", (), {"mp": 12400.0, "nab": 6900.0})()])
             return [
-                type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860", "k": "853"})(),
-                type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861", "k": "411"})(),
+                type("R", (), {"a": "87423", "n": "Lexa LX 302 Nitro", "b": "860", "k": "853",
+                                "p": "Kina", "g": 24, "pg": 36})(),
+                type("R", (), {"a": "12345", "n": "Nitro gorivo 5l", "b": "861", "k": "411",
+                                "p": "", "g": None, "pg": None})(),
             ]
 
     nadjeni = slicni_artikli(Conn(), "LEXA BT ZVUCNIK LX-302 NITRO")
@@ -1338,3 +1340,34 @@ def test_dopuna_cenovnika_trazi_cenu_i_postojecu_sifru(monkeypatch):
         A.dopuni_cenovnike("87622", 0)
     with pytest.raises(ValueError, match="nema u jedinstvenom"):
         A.dopuni_cenovnike("87622", 100.0)
+
+
+def test_cena_poreklo_i_garancije_idu_u_svaki_red():
+    """Šifre 14452-14457 su stajale bez cene u svih 11 magacina (Bane, 14.10.).
+
+    Postojeći artikli nose `CENAMALO` u svakom redu `ARTIKLI`, a poreklo i
+    garancije je Dule dopisivao ručno posle otvaranja.
+    """
+    from sefsync.erp.artikal import PredlogArtikla, redovi
+
+    p = PredlogArtikla(document_id=1, line_no=1, predlozena_sifra="14458",
+                       naziv="Gorenje ECT 603 FM", barkod="3838782", cena_mp=28400.0,
+                       magacini=["001", "099"], prodajna_mesta=["001", "071"],
+                       poreklo="Slovenija", garancija=24, produzena_garancija=36)
+
+    red = redovi(p)
+    for r in red["ARTIKLI"]:
+        assert r["CENAMALO"] == 28400.0
+    for r in red["ARTIKLI"] + red["ARTPROD"]:
+        assert (r["POREKLO"], r["GARANCIJA"], r["PRODUZENAGARANCIJA"]) == ("Slovenija", 24, 36)
+
+
+def test_poreklo_i_garancije_po_slicnim_artiklima():
+    from sefsync.erp.artikal import _vecina
+
+    slicni = [{"poreklo": "Kina", "garancija": 24}, {"poreklo": "Kina", "garancija": 24},
+              {"poreklo": "", "garancija": 36}]
+    assert _vecina(slicni, "poreklo") == "Kina"
+    assert _vecina(slicni, "garancija") == 24
+    assert _vecina([{"garancija": 24}, {"garancija": 36}], "garancija") is None
+    assert _vecina([], "garancija") is None

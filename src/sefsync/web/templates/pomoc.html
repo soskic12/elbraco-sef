@@ -296,9 +296,18 @@
   853…). Aplikacija je predloži po sličnim artiklima — oni iz iste serije je
   dele — ali je <b>proveri</b>; kad ne može da predloži, stoji „ostalo“ i treba
   izabrati pravu. Bez kategorije baza ne prima artikal.</p>
+  <p>Na istom ekranu se upisuju i <b>zemlja porekla</b> i <b>garancija</b> i
+  <b>produžena garancija</b>, u mesecima — posle otvaranja ih više ne treba
+  dopisivati u ERP-u. Zemlja se bira sa spiska postojećih (najčešće su na vrhu,
+  da ne nastane „Nemacka“ pored „Nemačka“); može i prazno. Garancije su
+  obavezne — <b>0</b> ako je nema. Kad postoje slični artikli, aplikacija sve tri
+  vrednosti predloži po njima, ali ih proveri.</p>
+  <p class="muted small">Maloprodajna cena, poreklo i garancije idu u svaki red:
+  u jedinstveni šifarnik, u lokalni cenovnik svakog magacina i u svako prodajno
+  mesto. Do 14.10. cena nije išla u magacine — šifre 14451–14457 su zato bez
+  cene u magacinima i ispravljaju se u ERP-u.</p>
   <p class="muted small">Dopuna artikla (<b>DARTIKLI</b>) se ne upisuje odavde —
-  noćni posao na serveru je otvori sam, a zemlja porekla se dopuni sutradan,
-  kao i do sada.</p>
+  noćni posao na serveru je otvori sam.</p>
 {% endcall %}
 
 {% call korak('Pogrešno povezana šifra — kako se ispravlja') %}

@@ -1781,7 +1781,7 @@ def sifre_predlog(
     request: Request, document_id: int, line_no: int, user: Operater
 ) -> HTMLResponse:
     """Sve sto se sa fakture zna o novom artiklu, spremno za otvaranje sifre."""
-    from ..erp.artikal import kao_sql, predlozi
+    from ..erp.artikal import kao_sql, porekla, predlozi
 
     from ..erp.artikal import kategorije as sve_kategorije
     from ..erp.connection import get_erp_engine
@@ -1790,6 +1790,7 @@ def sifre_predlog(
     sql = kao_sql(predlog) or None
     with get_erp_engine().connect() as conn:
         spisak_kategorija = sve_kategorije(conn)
+        spisak_porekla = porekla(conn)
     with session_scope() as session:
         doc = session.get(Document, document_id)
         broj = doc.document_number if doc else ""
@@ -1803,6 +1804,7 @@ def sifre_predlog(
             "broj": broj,
             "dobavljac": dobavljac,
             "kategorije": spisak_kategorija,
+            "porekla": spisak_porekla,
             "user": user,
         },
     )
@@ -1892,6 +1894,9 @@ def sifre_otvori(
     jedmere: str = Form(""),
     tarifa: str = Form(""),
     shkat: str = Form(""),
+    poreklo: str = Form(""),
+    garancija: int = Form(...),
+    produzena_garancija: int = Form(...),
 ) -> RedirectResponse:
     """Otvara novu šifru artikla u ERP-u i odmah je veže za stavku."""
     from ..services.nacrti import otvori_sifru
@@ -1903,6 +1908,8 @@ def sifre_otvori(
             korisnik=user.login, bez_barkoda=bool(bez_barkoda),
             jedmere=jedmere or None, tarifa=tarifa or None,
             shkat=shkat or None,
+            poreklo=poreklo, garancija=garancija,
+            produzena_garancija=produzena_garancija,
         )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku
         return _back(nazad, str(exc), False)
