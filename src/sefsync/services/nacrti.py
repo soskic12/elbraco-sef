@@ -255,6 +255,8 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
                 # sto je vec zaknjizeno - a operater bi na dugme dobio gresku
                 # umesto objasnjenja.
                 red.stanje = StanjeNacrta.UPISAN
+                red.problemi = None
+                red.nemapirane = None
                 red.erp_broj = rucno.oznaka[:20]
                 red.erp_napomena = (rucno.razlog or None) and rucno.razlog[:250]
                 red.sumnja = None
@@ -456,19 +458,28 @@ def osvezi_zapele(*, limit: int = 200, engine=None) -> dict:
 
     Gledaju se samo stanja koja ERP moze da odmrzne - `ceka_sifru` i `problem`.
     Spremni i upisani se ne diraju: njih menja covek u panelu, ne sifarnik.
+
+    Osvezava se **isto sto ekran „Sifre“ prikazuje** - i arhivirani dokumenti.
+    Do 14.10. su arhivirani preskakani, a ekran ih je pokazivao: `26-FA001010834`
+    (pub) je stajao sa „nema cenu u objektu 071“ od 01.10., iako su cene odavno
+    bile upisane (Bane: „nije uvek to problem“). Redom ide od najduze
+    neosvezenog, pa i sa ogranicenjem po ciklusu svaki vremenom dodje na red.
     """
+    from sqlalchemy import case
+
     with session_scope() as session:
         ids = list(
             session.scalars(
                 select(NacrtKalkulacije.document_id)
-                .join(Document, Document.id == NacrtKalkulacije.document_id)
                 .where(
                     NacrtKalkulacije.stanje.in_(
                         (StanjeNacrta.CEKA_SIFRU, StanjeNacrta.PROBLEM)
                     ),
-                    Document.archived == False,  # noqa: E712
                 )
-                .order_by(NacrtKalkulacije.document_id.desc())
+                .order_by(
+                    case((NacrtKalkulacije.racunato_u.is_(None), 0), else_=1),
+                    NacrtKalkulacije.racunato_u,
+                )
                 .limit(limit)
             )
         )
@@ -752,6 +763,10 @@ def _zabelezi_upis(
         red.erp_broj = broj[:20]
         red.upisano_u = utcnow()
         red.upisao = korisnik
+        # Stari razlozi zastoja vise ne vaze - 8042 i 8203 su posle upisa i
+        # dalje nosili „nema cenu u objektu“ (14.10.).
+        red.problemi = None
+        red.nemapirane = None
         # Napomena treba da se vidi BAS posle upisa - knjizi se posle njega.
         # Ovde se cuva jer se nacrt posle uspesnog upisa vise ne preracunava.
         if napomene is not None:

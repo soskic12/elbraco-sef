@@ -1018,6 +1018,8 @@ def pripremi(
                 else:
                     nacrt.problemi.append(
                         f"stavka {linija.line_no}: artikal {art['artikal']} nema cenu u objektu {magacin}"
+                        f" — upiši maloprodajnu cenu u ERP-u za prodajno mesto {magacin}; "
+                        "kalkulacija se sama osveži u roku od 15 minuta"
                     )
 
             osnovica += vrednost

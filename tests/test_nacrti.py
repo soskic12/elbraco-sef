@@ -716,7 +716,7 @@ def test_osvezi_zapele_dira_samo_ono_sto_erp_moze_da_odmrzne(db, monkeypatch):
         problem = dodaj("PROBLEM", StanjeNacrta.PROBLEM)
         dodaj("SPREMAN", StanjeNacrta.SPREMAN)
         dodaj("UPISAN", StanjeNacrta.UPISAN)
-        dodaj("ARHIVIRAN", StanjeNacrta.CEKA_SIFRU, arhiviran=True)
+        arhiviran = dodaj("ARHIVIRAN", StanjeNacrta.CEKA_SIFRU, arhiviran=True)
 
     dirani = []
 
@@ -727,8 +727,9 @@ def test_osvezi_zapele_dira_samo_ono_sto_erp_moze_da_odmrzne(db, monkeypatch):
     monkeypatch.setattr(N, "osvezi", lazni_osvezi)
     ishod = N.osvezi_zapele()
 
-    assert sorted(dirani) == sorted([ceka, problem])
-    assert ishod["pregledano"] == 2
+    # Arhiviran se osvezava: ekran „Sifre“ ga prikazuje (26-FA001010834, 14.10.).
+    assert sorted(dirani) == sorted([ceka, problem, arhiviran])
+    assert ishod["pregledano"] == 3
 
 
 def test_povezivanje_bez_sifre_i_barkoda_ne_gasi_prethodnu_vezu(db, monkeypatch):
@@ -1371,3 +1372,28 @@ def test_poreklo_i_garancije_po_slicnim_artiklima():
     assert _vecina(slicni, "garancija") == 24
     assert _vecina([{"garancija": 24}, {"garancija": 36}], "garancija") is None
     assert _vecina([], "garancija") is None
+
+
+def test_osvezi_zapele_ide_od_najduze_neosvezenog(db, monkeypatch):
+    """Sa ograničenjem po ciklusu svaki zapeli nacrt mora vremenom doći na red."""
+    import datetime as dt
+
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        ids = {}
+        for broj, kad in (("NOV", dt.datetime(2026, 10, 14)), ("STAR", dt.datetime(2026, 10, 1)),
+                          ("NIKAD", None)):
+            doc = Document(sef_invoice_id=abs(hash(broj)) % 10**6, document_number=broj)
+            session.add(doc)
+            session.flush()
+            session.add(NacrtKalkulacije(document_id=doc.id, stanje=StanjeNacrta.PROBLEM,
+                                         racunato_u=kad))
+            ids[broj] = doc.id
+
+    dirani = []
+    monkeypatch.setattr(N, "osvezi", lambda doc_id, engine=None: dirani.append(doc_id))
+    N.osvezi_zapele(limit=2)
+
+    assert dirani == [ids["NIKAD"], ids["STAR"]]
