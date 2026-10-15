@@ -308,6 +308,13 @@
   cene u magacinima i ispravljaju se u ERP-u.</p>
   <p class="muted small">Dopuna artikla (<b>DARTIKLI</b>) se ne upisuje odavde —
   noćni posao na serveru je otvori sam.</p>
+  <p><b>Specifikacija (DEKA)</b> se upisuje u istom prolazu, ako je polje
+  popunjeno. Kad postoji sličan artikal sa specifikacijom, njegov tekst je već u
+  polju — <b>proveri svaki red</b>, jer se artikli iste serije uglavnom
+  razlikuju. Dugme <span class="tag">Predloži sa weba (Claude)</span> nađe model
+  na internetu i napiše specifikaciju u našem obliku („Ključ: vrednost“), uz
+  spisak izvora. To je predlog: u ERP ide ono što ostaviš u polju. Prazno polje
+  znači da se šifra otvara bez specifikacije, kao do sada.</p>
 {% endcall %}
 
 {% call korak('Pogrešno povezana šifra — kako se ispravlja') %}

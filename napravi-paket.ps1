@@ -147,7 +147,7 @@ foreach ($v in $Verzije) {
 
 $brojTockova = (Get-ChildItem $tocak -Filter '*.whl').Count
 Write-Host "   tockova: $brojTockova"
-foreach ($obavezan in @('pypdf', 'pyodbc', 'lxml', 'fastapi')) {
+foreach ($obavezan in @('pypdf', 'pyodbc', 'lxml', 'fastapi', 'anthropic')) {
     if (-not (Get-ChildItem $tocak -Filter "$obavezan-*.whl")) {
         throw "U wheelhouse nema $obavezan - instalacija na serveru bi pukla."
     }

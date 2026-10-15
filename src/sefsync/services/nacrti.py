@@ -919,6 +919,7 @@ def otvori_sifru(
     poreklo: str = "",
     garancija: int | None = None,
     produzena_garancija: int | None = None,
+    specifikacija: str = "",
     engine=None,
 ) -> str:
     """Otvara novu sifru artikla u ERP-u i odmah je veze za stavku.
@@ -964,6 +965,7 @@ def otvori_sifru(
     predlog.poreklo = (poreklo or "").strip()[:30]
     predlog.garancija = int(garancija)
     predlog.produzena_garancija = int(produzena_garancija)
+    predlog.specifikacija = (specifikacija or "").strip()
 
     opis = upisi_artikal(predlog, produkcija=get_settings().erp_allow_production_write)
     sifra = predlog.predlozena_sifra

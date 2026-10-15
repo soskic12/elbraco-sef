@@ -44,6 +44,7 @@
   <div class="small">
     <div><b>ARTIKLI</b> ({{ predlog.magacini|length }}): {{ predlog.magacini|join(', ') }}</div>
     <div><b>ARTPROD</b> ({{ predlog.prodajna_mesta|length }}): {{ predlog.prodajna_mesta|join(', ') }}</div>
+    <div><b>DEKA</b> (1): specifikacija — ako je polje ispod popunjeno.</div>
     <div class="muted"><b>DARTIKLI</b>: ne upisujemo — noćni posao na serveru
       otvori dopunu sam.</div>
     <div class="muted">Maloprodajna cena, zemlja porekla i garancije idu u
@@ -162,6 +163,27 @@
       <div class="small" style="margin:2px 0 6px;color:#b45309">
         Kategoriju nisam mogao da predložim — stoji „ostalo“, izaberi pravu.</div>
     {% endif %}
+    <div class="field" style="margin-top:8px">
+      <label>Specifikacija (DEKA) — jedan podatak po redu, „Ključ: vrednost“</label>
+      <textarea name="specifikacija" id="specifikacija" rows="10" style="width:100%;font-family:inherit"
+                placeholder="prazno = šifra se otvara bez specifikacije">{{ spec_slicnog.tekst if spec_slicnog else '' }}</textarea>
+      {% if spec_slicnog %}
+        <div class="small" style="margin:2px 0;color:#b45309">
+          Prepisano od sličnog artikla <b>{{ spec_slicnog.artikal }}</b> „{{ spec_slicnog.naziv }}“ —
+          <b>proveri svaki red</b>: artikli iste serije se u 4 od 5 slučajeva razlikuju
+          (boja, snaga, dimenzije).</div>
+      {% endif %}
+      <div class="row" style="align-items:center;margin-top:4px">
+        {% if claude_ukljucen %}
+          <button type="button" class="ghost" id="dugme-spec" onclick="predloziSpec(this)">
+            Predloži sa weba (Claude)</button>
+          <span class="small muted" id="spec-stanje">traje 10–40 sekundi; zameni tekst u polju</span>
+        {% else %}
+          <span class="small muted">Predlog sa weba nije uključen (nema ANTHROPIC_API_KEY na serveru).</span>
+        {% endif %}
+      </div>
+      <div class="small" id="spec-izvori" style="margin-top:2px"></div>
+    </div>
     <label class="small"><input type="checkbox" name="bez_barkoda" value="1">
       ovaj artikal <b>zaista nema</b> barkod — upiši šifru umesto njega</label>
     <p class="small muted" style="margin:6px 0">
@@ -173,6 +195,44 @@
   </form>
 </div>
 {% endif %}
+
+<script>
+// Predlog sa weba: forma ostaje ista, samo se popuni polje. U ERP ide tek na
+// „Otvori šifru“, i to ono što je u polju posle Duletove provere.
+async function predloziSpec(dugme) {
+  var forma = dugme.form, polje = document.getElementById('specifikacija');
+  var stanje = document.getElementById('spec-stanje'), izvori = document.getElementById('spec-izvori');
+  if (polje.value.trim() && !confirm('Zameniti tekst koji je već u polju?')) { return; }
+  var podaci = new FormData();
+  ['document_id', 'line_no', 'naziv', 'barkod', 'shkat'].forEach(function (k) {
+    podaci.append(k, forma.elements[k].value);
+  });
+  dugme.disabled = true; stanje.textContent = 'Claude traži model na webu…'; izvori.innerHTML = '';
+  try {
+    var r = await fetch('/sifre/specifikacija', {method: 'POST', body: podaci});
+    var o = await r.json();
+    if (o.ok) {
+      polje.value = o.tekst;
+      stanje.textContent = 'Predlog je u polju — proveri ga pre otvaranja šifre.';
+    } else {
+      stanje.textContent = o.poruka || 'Predlog nije dobijen.';
+    }
+    if (o.izvori && o.izvori.length) {
+      izvori.textContent = 'Izvori: ';
+      o.izvori.forEach(function (x, i) {
+        var a = document.createElement('a');
+        a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = x.naslov;
+        if (i) { izvori.appendChild(document.createTextNode(' · ')); }
+        izvori.appendChild(a);
+      });
+    }
+  } catch (e) {
+    stanje.textContent = 'Greška u vezi sa panelom: ' + e;
+  } finally {
+    dugme.disabled = false;
+  }
+}
+</script>
 
 {% if sql %}
 <div class="card">

@@ -55,6 +55,7 @@ TABELE_UPISA = (
     "PDVEVIDX",   # red PDV evidencije uz kalkulaciju
     "ARTIKLI",    # otvaranje nove sifre artikla
     "ARTPROD",    # cenovnik nove sifre po prodajnim mestima
+    "DEKA",       # specifikacija nove sifre (od 15.10.)
     "NAZIVI",     # otvaranje novog komitenta
 )
 

@@ -209,6 +209,11 @@ class Settings(BaseSettings):
     # (stigao ostatak ili knjizno odobrenje), prihvatanje se pokusava tada.
     prihvati_posle_upisa: bool = False
 
+    # --- Claude: predlog specifikacije artikla (DEKA) pri otvaranju sifre ---
+    # Bez kljuca dugme „Predloži sa weba" se ne nudi; sve ostalo radi isto.
+    anthropic_api_key: str = ""
+    spec_model: str = "claude-opus-5-5"
+
     # --- Email notifikacije ---
     smtp_host: str = ""
     smtp_port: int = 587

@@ -125,6 +125,9 @@ class PredlogArtikla:
     poreklo: str = ""
     garancija: int | None = None
     produzena_garancija: int | None = None
+    # Specifikacija (DEKA), obican tekst - u RTF se pretvara tek pri upisu.
+    # Prazno znaci da se red u DEKA ne pravi (pice, kablovi ga nemaju ni sad).
+    specifikacija: str = ""
 
     @property
     def broj_redova(self) -> int:
@@ -252,13 +255,18 @@ def slicni_artikli(conn: Connection, naziv: str, *, najvise: int = 5) -> list[di
     najduza = max(reci, key=len)
     trazene = set(reci)
     nadjeni = []
-    for r in conn.execute(
+    # Kandidati se procitaju do kraja PRE upita za cene. Bez MARS-a SQL Server
+    # ne prima drugi upit dok prvi jos vraca redove - strana „Nova sifra“ je
+    # pucala sa „Connection is busy“ kad god je postojao slican artikal (na
+    # serveru 05.10., lokalno 15.10. na „Realme C100“).
+    kandidati = list(conn.execute(
         text("SELECT TOP 200 RTRIM(ARTIKAL) a, RTRIM(NAZIV) n, RTRIM(ISNULL(BARCODE,'')) b, "
              "RTRIM(ISNULL(SHKAT,'')) k, RTRIM(ISNULL(POREKLO,'')) p, "
              "GARANCIJA g, PRODUZENAGARANCIJA pg "
              f"FROM dbo.ARTIKLI WHERE RTRIM(SIFRAMAG)='{MATICNI_MAGACIN}' AND NAZIV LIKE :u"),
         {"u": f"%{najduza}%"},
-    ):
+    ))
+    for r in kandidati:
         njegove = {x for x in normalize(r.n).split() if len(x) > 2}
         if not njegove:
             continue
@@ -556,7 +564,19 @@ def redovi(predlog: PredlogArtikla) -> dict[str, list[dict]]:
         }
         for m in predlog.prodajna_mesta
     ]
-    return {"ARTIKLI": artikli, "ARTPROD": artprod}
+    tabele = {"ARTIKLI": artikli, "ARTPROD": artprod}
+    # Specifikacija ide u istoj transakciji: ili sifra sa specifikacijom, ili
+    # nista. Do 15.10. ju je Dule kucao u ERP-u posle otvaranja (5 od 7 sifara
+    # koje je app otvorila 14.10. je tako dobilo tekst).
+    if (predlog.specifikacija or "").strip():
+        from ..services.specifikacija import proveri_duzinu
+
+        tabele["DEKA"] = [{
+            "ARTIKAL": sifra,
+            "TEKSTDEK": proveri_duzinu(predlog.specifikacija),
+            "SELEKTOVAN": 0,
+        }]
+    return tabele
 
 
 def kao_sql(predlog: PredlogArtikla) -> str:
@@ -632,7 +652,8 @@ def upisi(predlog: PredlogArtikla, *, produkcija: bool = False) -> str:
     opis = (f"{baza}: artikal {sifra} „{predlog.naziv[:30]}“, barkod {barkod}, "
             f"MP cena {predlog.cena_mp:,.2f} — {upisano} redova "
             f"({len(redovi_po_tabeli['ARTIKLI'])} magacina, "
-            f"{len(redovi_po_tabeli['ARTPROD'])} prodajnih mesta)")
+            f"{len(redovi_po_tabeli['ARTPROD'])} prodajnih mesta"
+            f"{', sa specifikacijom' if 'DEKA' in redovi_po_tabeli else ', bez specifikacije'})")
     log.info("Otvorena šifra: %s", opis)
     return opis
 

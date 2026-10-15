@@ -1792,11 +1792,20 @@ def sifre_predlog(
     from ..erp.artikal import kategorije as sve_kategorije
     from ..erp.connection import get_erp_engine
 
+    from ..services.specifikacija import od_slicnog
+
     predlog = predlozi(document_id, line_no)
     sql = kao_sql(predlog) or None
     with get_erp_engine().connect() as conn:
         spisak_kategorija = sve_kategorije(conn)
         spisak_porekla = porekla(conn)
+        # Specifikacija slicnog artikla je besplatan polazni tekst; Claude se
+        # zove tek na dugme, jer kosta i traje.
+        try:
+            spec_slicnog = od_slicnog(conn, predlog.slicni)
+        except Exception as exc:  # noqa: BLE001 - bez DEKA strana i dalje radi
+            log.info("Specifikacija slicnog nije procitana: %s", exc)
+            spec_slicnog = None
     with session_scope() as session:
         doc = session.get(Document, document_id)
         broj = doc.document_number if doc else ""
@@ -1811,9 +1820,66 @@ def sifre_predlog(
             "dobavljac": dobavljac,
             "kategorije": spisak_kategorija,
             "porekla": spisak_porekla,
+            "spec_slicnog": spec_slicnog,
+            "claude_ukljucen": bool(get_settings().anthropic_api_key),
             "user": user,
         },
     )
+
+
+@app.post("/sifre/specifikacija")
+def sifre_specifikacija(
+    user: Operater,
+    document_id: int = Form(...),
+    line_no: int = Form(...),
+    naziv: str = Form(""),
+    barkod: str = Form(""),
+    shkat: str = Form(""),
+) -> JSONResponse:
+    """Predlog specifikacije sa weba (Claude). Vraca JSON - strana ga upise u polje.
+
+    Nista se ne upisuje u ERP: tekst ide u polje, Dule ga pregleda i ispravi, a
+    u DEKA ulazi tek sa „Otvori sifru“.
+    """
+    from ..erp.artikal import kategorije as sve_kategorije
+    from ..erp.connection import get_erp_engine
+    from ..services.specifikacija import predlozi_claude, primeri_kategorije
+
+    with session_scope() as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(404, "Nema tog dokumenta.")
+        linija = next((x for x in doc.lines if x.line_no == line_no), None)
+        dobavljac = doc.supplier_name or ""
+        naziv_fakture = (linija.name if linija else "") or ""
+        ean = barkod.strip() or ((linija.standard_item_id if linija else "") or "").strip()
+
+    kategorija, primeri = "", []
+    try:
+        with get_erp_engine().connect() as conn:
+            kategorija = dict(sve_kategorije(conn)).get(shkat.strip(), "")
+            primeri = primeri_kategorije(conn, shkat)
+    except Exception as exc:  # noqa: BLE001 - primeri su ukras, ne uslov
+        log.info("Primeri specifikacije nisu procitani: %s", exc)
+
+    # Pun naziv sa fakture nosi vise od 30 znakova koliko staje u ERP - za
+    # pretragu je bolji; ono sto je Dule skratio ide uz njega.
+    trazi = naziv_fakture if len(naziv_fakture) > len(naziv) else naziv
+    predlog = predlozi_claude(
+        trazi.strip(), ean=ean, kategorija=kategorija, dobavljac=dobavljac, primeri=primeri
+    )
+    with session_scope() as session:
+        session.add(AuditLog(
+            actor=user.login, action="artikal.specifikacija.predlog", document_id=document_id,
+            detail=(f"stavka {line_no}: " + ("predlog " + str(len(predlog.tekst)) + " znakova"
+                    if predlog.tekst else predlog.poruka))[:250],
+        ))
+    return JSONResponse({
+        "ok": bool(predlog.tekst),
+        "tekst": predlog.tekst,
+        "izvori": predlog.izvori,
+        "poruka": predlog.poruka,
+    })
 
 
 @app.post("/dokument/{doc_id}/obavestenje")
@@ -1903,6 +1969,7 @@ def sifre_otvori(
     poreklo: str = Form(""),
     garancija: int = Form(...),
     produzena_garancija: int = Form(...),
+    specifikacija: str = Form(""),
 ) -> RedirectResponse:
     """Otvara novu šifru artikla u ERP-u i odmah je veže za stavku."""
     from ..services.nacrti import otvori_sifru
@@ -1916,6 +1983,7 @@ def sifre_otvori(
             shkat=shkat or None,
             poreklo=poreklo, garancija=garancija,
             produzena_garancija=produzena_garancija,
+            specifikacija=specifikacija,
         )
     except Exception as exc:  # noqa: BLE001 - poruka ide coveku
         return _back(nazad, str(exc), False)
