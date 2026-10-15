@@ -508,3 +508,25 @@ Paket 15.10. 12:07 (`2f0393d`) napravljen ✗ nije postavljen. Posle postavljanj
 prvom ciklusu `osvezi_zapele` skida 27 faktura sa „Šifre“ (log: „Zapeli
 nacrti: odmrznuto 27“), ostaje 7. Šema se ne menja (ime stanja `ZAVRSENO`
 staje u VARCHAR(10)).
+
+### 15.10.2026. — specifikacija (DEKA) pri otvaranju šifre ✔ (kod) / ✗ (GRANT, ključ, paket)
+
+Mereno na ELBS_2026 pre izmene: `DEKA` = `ARTIKAL` (PK) + `TEKSTDEK` (RTF, do
+4.095) + `SELEKTOVAN`, 6.929 redova, bez trigera; naš nalog ima samo SELECT.
+Specifikaciju ima 74 % artikala koji su 2026. ulazili u maloprodaju. Opis
+stavke u e-fakturi nije upotrebljiv (7 % stavki, polise i ponovljen naziv).
+Od 7 šifara koje je app otvorila 14.10., 5 je dobilo DEKA ručno.
+
+`a77de73`: polje „Specifikacija“ na strani „Nova šifra“, unapred popunjeno
+tekstom sličnog artikla; dugme „Predloži sa weba (Claude)“; upis u DEKA u istoj
+transakciji sa ARTIKLI/ARTPROD. Pretvarač RTF↔tekst proveren na svih 6.929
+redova (povratak bez razlike, nijedan preko 4.095). Usput: `slicni_artikli` je
+pucao sa „Connection is busy“ (servis.log 05.10.) — ispravljeno. Testova 553 ✔.
+
+Paket 15.10. 15:00 (`a77de73`, sadrži i `2f0393d`) ✗ nije postavljen.
+Pre postavljanja, na ELBS_2026 (i na test bazi, ako se tamo proba):
+
+    GRANT INSERT ON dbo.DEKA TO sefsync_erp;
+
+U `C:\efakture\.env`: `ANTHROPIC_API_KEY=…` (bez njega dugme se ne nudi, sve
+ostalo radi). Provera posle: `sefsync erp-nalog` mora da pokaže INSERT na DEKA.
