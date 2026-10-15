@@ -462,3 +462,19 @@ pokrenut“ samo 08:35 i 09:28, sada jedan lanac procesa.
 Popravka `7704925`: granica se zapisuje jednom (`storno_uvedeno`; na serveru
 13.10.) i pri zapisivanju prevodi ta četiri zapisa u zatečene. Paket 14.10.
 11:34 ✗ nije postavljen. Do tada se za ta četiri ne šalje obaveštenje.
+
+### 15.10.2026. — paket `7704925` jeste bio postavljen 14.10. ✔ (ispravka zapisa iznad)
+
+Zapis od 14.10. kaže ✗ za paket od 11:34 — pisan je pre postavljanja, a sesija je
+posle toga prekinuta nestankom struje na razvojnoj mašini. Provereno 15.10.
+preko SSH-a (`ElbracoRedakcija@194.146.57.216`, samo čitanje):
+
+* bekap `20261014-115521` postoji — paket postavljen 14.10. u **11:55**;
+* `servis.log` 11:56:19 „Radnik pokrenut“, 11:56:21 četiri reda „Storno #2920,
+  #8215, #3177, #8487 … je zatecen, ne nov“ — ta poruka postoji tek od
+  `7704925`, dakle popravka radi i četiri storna su prevedena u zatečena;
+* 15.10. 00:11 „Storna sa SEF-a: dana 1, storna 0, novih 0“; 11:12 „Zaostali
+  upisi: dovrseno 4 od 4“ — panel radi i odgovara na 8088.
+
+Nije provereno (nalog nema prava): stanje zakazanog zadatka i procesa
+(`schtasks`, `tasklist` → Access denied).
