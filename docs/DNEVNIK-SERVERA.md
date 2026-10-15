@@ -478,3 +478,33 @@ preko SSH-a (`ElbracoRedakcija@194.146.57.216`, samo čitanje):
 
 Nije provereno (nalog nema prava): stanje zakazanog zadatka i procesa
 (`schtasks`, `tasklist` → Access denied).
+
+### 15.10.2026. — dve dorade: PDV evidencija po stopi i zaglavljene fakture na „Šifre“ ✔ (nalaz) / ✗ (paket nije postavljen)
+
+Mereno na ERP-u (ELBS_2026, razvojni nalog, samo čitanje) i na bazi panela
+(SefSync na serveru, preko SSH-a i PowerShell-a):
+
+* **PDVEVIDX:** 213 redova u celoj bazi, **nijedan** ne nosi obe stope u istom
+  redu. Svih 12 računa na 088 sa dve stope i delom bez PDV-a (svi od dobavljača
+  02189, npr. 088/03284 = `16-KU-259319`) ima po **tri reda**: TIP 1 posebna,
+  TIP 1 opšta, TIP 23. Naša app je pisala jedan TIP 1 red sa oba para polja —
+  Bogdan je ispravljao rukom. Potpuno oporeziv račun sa dve stope redove nema
+  ni kod nas (24) ni kod ERP-a (7 fiskalnih) — tu se ništa ne menja.
+* **„Šifre“:** na serveru 34 nacrta u stanju `ceka_sifru` (spreman 44, upisan
+  880, problem 1, ne_treba 3). Provera u ERP-u po broju računa i dobavljaču:
+  **27 od 34 već ima kalkulaciju** (CSM 2017 bicikli po objektima, EWE
+  tastature u 9 objekata, Comtrade, Inženjering servis, Coffee Center…).
+  Stajali su jer je `osvezi` ERP pitao samo za **spremne** nacrte. Bez
+  kalkulacije je 7: Veletabak `130171554-26` (#2868) i šest Comtrade od
+  14–15.10. (#8691–8696, #8711) — sveže, normalno.
+
+Popravka `2f0393d`: PDVEVIDX po jedan red za svaku stopu; ERP se pita i za
+nacrte koji čekaju šifru (siguran pogodak samo — predlog po iznosu i dalje samo
+za spremne, jer je iznos nepotpun); novo stanje `zavrseno` i dugme „Završeno
+bez šifara“ sa obaveznim razlogom; predlog „možda je već u ERP-u“ i na ekranu
+„Šifre“. Testova 539 ✔.
+
+Paket 15.10. 12:07 (`2f0393d`) napravljen ✗ nije postavljen. Posle postavljanja očekivano: u
+prvom ciklusu `osvezi_zapele` skida 27 faktura sa „Šifre“ (log: „Zapeli
+nacrti: odmrznuto 27“), ostaje 7. Šema se ne menja (ime stanja `ZAVRSENO`
+staje u VARCHAR(10)).
