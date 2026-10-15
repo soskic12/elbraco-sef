@@ -145,6 +145,10 @@ def razlozi_cekanja(engine=None) -> dict:
 
 RUCNO_U_ERPU = "ručno u ERP-u"
 
+# Stanja koja se vise ne preracunavaju: ERP se za njih ne pita, a ponovno
+# racunanje ne sme da ih vrati unazad.
+ZAVRSENA_STANJA = (StanjeNacrta.UPISAN, StanjeNacrta.ZAVRSENO)
+
 
 _POZNATI: tuple[float, set[str]] | None = None
 TRAJANJE_KESA = 120.0  # sekundi
@@ -231,9 +235,17 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
     with session_scope() as session:
         doc = session.get(Document, document_id)
         avans = doc is not None and doc.document_type is DocumentType.PREPAYMENT
+        red = session.get(NacrtKalkulacije, document_id)
+        gotov = red is not None and red.stanje in ZAVRSENA_STANJA
+        if gotov:
+            session.expunge(red)
     if avans:
         # Ne troši se ni jedan upit ka ERP-u: avans nema sta da trazi u kalkulaciji.
         return _upisi_stanje(document_id, StanjeNacrta.NE_TREBA)
+    if gotov:
+        # Vec je u ERP-u, ili je covek rekao da je zavrseno bez upisa - ponovno
+        # racunanje ne sme da vrati stanje unazad, a ERP ne treba ni pitati.
+        return red
 
     # RBR nosi ime aplikacije, ne coveka - vidi erp.kalkulacija.KORISNIK
     nacrt = pripremi(document_id, engine=engine)
@@ -243,31 +255,42 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
         if red is None:
             red = NacrtKalkulacije(document_id=document_id)
             session.add(red)
-        if red.stanje is StanjeNacrta.UPISAN:
-            # Vec je u ERP-u - ponovno racunanje ne sme da vrati stanje unazad.
-            return red
         stanje = _stanje(nacrt)
-        if stanje is StanjeNacrta.SPREMAN:
-            rucno = _vec_u_erpu(nacrt, engine=engine, i_predlog=True)
-            if rucno is not None and rucno.siguran:
-                # Poslovodja je kalkulaciju napravio rukom. Panel to mora da
-                # prepozna, inace bi do kraja veka trazio prijem robe za nesto
-                # sto je vec zaknjizeno - a operater bi na dugme dobio gresku
-                # umesto objasnjenja.
-                red.stanje = StanjeNacrta.UPISAN
-                red.problemi = None
-                red.nemapirane = None
-                red.erp_broj = rucno.oznaka[:20]
-                red.erp_napomena = (rucno.razlog or None) and rucno.razlog[:250]
-                red.sumnja = None
-                red.upisao = RUCNO_U_ERPU
-                red.upisano_u = utcnow()
-                red.magacin = nacrt.magacin or None
-                red.tabela = nacrt.tabela_zaglavlja or None
-                red.racunato_u = utcnow()
-                session.flush()
-                session.expunge(red)
-                return red
+
+        # ERP se pita za SVAKI nedovrsen nacrt, ne samo za spreman. Do 15.10.
+        # se pitalo samo za spremne, pa je faktura koju je poslovodja uneo
+        # rukom dok je "cekala sifru" stajala na ekranu "Sifre" zauvek.
+        # Mereno 15.10. na serveru: 34 nacrta je cekalo sifru, a 27 od njih je
+        # vec imalo kalkulaciju u ERP-u - bicikli CSM 2017 (jedna stavka na
+        # fakturi, vise nasih sifara po bojama), EWE tastature u devet
+        # objekata, Comtrade, Inzenjering servis. Dule ih nije mogao povezati,
+        # poslovodje su unele rukom, a panel ih je i dalje trazio od njega.
+        #
+        # Predlog po iznosu i datumu se trazi samo za spreman nacrt: dok stavke
+        # cekaju sifru, IZNOS_ZA_NAP je nepotpun (na serveru najcesce 0), pa bi
+        # poredjenje po iznosu pogadjalo nasumice.
+        trazi_predlog = stanje is StanjeNacrta.SPREMAN
+        rucno = _vec_u_erpu(nacrt, engine=engine, i_predlog=trazi_predlog)
+        if rucno is not None and rucno.siguran:
+            # Poslovodja je kalkulaciju napravio rukom. Panel to mora da
+            # prepozna, inace bi do kraja veka trazio prijem robe ili sifru za
+            # nesto sto je vec zaknjizeno - a operater bi na dugme dobio gresku
+            # umesto objasnjenja.
+            red.stanje = StanjeNacrta.UPISAN
+            red.problemi = None
+            red.nemapirane = None
+            red.erp_broj = rucno.oznaka[:20]
+            red.erp_napomena = (rucno.razlog or None) and rucno.razlog[:250]
+            red.sumnja = None
+            red.upisao = RUCNO_U_ERPU
+            red.upisano_u = utcnow()
+            red.magacin = nacrt.magacin or None
+            red.tabela = nacrt.tabela_zaglavlja or None
+            red.racunato_u = utcnow()
+            session.flush()
+            session.expunge(red)
+            return red
+        if trazi_predlog:
             # Nesiguran pogodak ceka coveka, vidi `sumnja`.
             predlog = rucno
             odbijen = (red.sumnja or {}).get("oznaka") if red.sumnja_odbio else None
@@ -291,7 +314,6 @@ def osvezi(document_id: int, *, engine=None) -> NacrtKalkulacije | None:
 
     _zabelezi_popust(document_id, nacrt, engine=engine)
     return red
-
 
 def _zabelezi_popust(document_id: int, nacrt, *, engine=None) -> None:
     """Knjizno odobrenje na deo vrednosti uredjaja - zabelezi da Ilijana vidi.
@@ -602,6 +624,102 @@ def oznaci_nije_artikal(
     return osvezi(document_id, engine=engine)
 
 
+def oznaci_zavrseno(document_id: int, *, korisnik: str, razlog: str, engine=None) -> str:
+    """Covek kaze da je faktura resena bez upisa iz panela - silazi sa ekrana „Sifre“.
+
+    Za koga je: Dule, kad sifre ne mogu da se povezu - elektricni bicikl je na
+    fakturi jedna stavka, a kod nas pet sifara po bojama - pa fakturu niko ne
+    moze da zavrsi iz panela. Bane, 15.10.: „najlakse je Duletu dugme ZAVRSENO
+    kod fakture i da skloni“.
+
+    Pre oznake app sama pogleda ERP: ako kalkulacija vec postoji (po broju
+    racuna i dobavljacu), faktura se belezi kao „u ERP-u“ - isto kao da ju je
+    prepoznao ciklus. Tek kad je nema, ostaje oznaka „zavrseno“ sa razlogom i
+    potpisom. Razlog je obavezan: sklonjena faktura nije uknjizena, pa mora da
+    se zna zasto je neko odlucio da je ne ceka - a iz razloga se posle vidi i
+    koliko puta je uzrok „jedna stavka, vise sifara“, sto odlucuje da li vredi
+    praviti razbijanje stavke.
+
+    Vraca poruku za coveka. Pogresno sklonjena se vraca sa `vrati_na_sifre`.
+    """
+    razlog = (razlog or "").strip()
+    if not razlog:
+        raise ValueError("Upiši razlog — zašto se faktura sklanja bez šifara.")
+
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None:
+            raise ValueError(f"Dokument #{document_id} nema nacrt kalkulacije.")
+        if red.stanje is StanjeNacrta.UPISAN:
+            raise ValueError(f"Kalkulacija je već u ERP-u ({red.erp_broj or '?'}).")
+        if red.stanje is StanjeNacrta.NE_TREBA:
+            raise ValueError("Ovaj dokument ne ide kroz kalkulaciju.")
+        if red.stanje is StanjeNacrta.ZAVRSENO:
+            raise ValueError("Faktura je već označena kao završena.")
+
+    rucno = None
+    try:
+        nacrt = pripremi(document_id, engine=engine)
+        rucno = _vec_u_erpu(nacrt, engine=engine)
+    except Exception as exc:  # noqa: BLE001 - ERP ume da bude nedostupan; oznaka ide i bez provere
+        log.info("ERP nije proveren pre oznake „završeno“ za #%s: %s", document_id, exc)
+
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if rucno is not None and rucno.siguran:
+            red.stanje = StanjeNacrta.UPISAN
+            red.erp_broj = rucno.oznaka[:20]
+            red.erp_napomena = f"nađena pri „završeno“ ({korisnik}: {razlog})"[:250]
+            red.upisao = RUCNO_U_ERPU
+            red.upisano_u = utcnow()
+            red.problemi = None
+            red.nemapirane = None
+            red.sumnja = None
+            poruka = (
+                f"Kalkulacija već postoji u ERP-u ({rucno.oznaka}) — "
+                "faktura je sklonjena kao „u ERP-u“."
+            )
+            detalj = f"u ERP-u kao {rucno.oznaka}; razlog: {razlog}"
+        else:
+            red.stanje = StanjeNacrta.ZAVRSENO
+            red.erp_broj = None
+            red.erp_napomena = razlog[:250]
+            red.upisao = korisnik
+            red.upisano_u = utcnow()
+            poruka = "Faktura je označena kao završena bez šifara i sklonjena sa ekrana „Šifre“."
+            detalj = razlog
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="kalkulacija.zavrsena",
+                document_id=document_id,
+                detail=detalj,
+            )
+        )
+    return poruka
+
+
+def vrati_na_sifre(document_id: int, *, korisnik: str, engine=None) -> NacrtKalkulacije | None:
+    """Ponistava „zavrseno bez sifara“: faktura se vraca na ekran i nacrt se preracuna."""
+    with session_scope() as session:
+        red = session.get(NacrtKalkulacije, document_id)
+        if red is None or red.stanje is not StanjeNacrta.ZAVRSENO:
+            raise ValueError("Faktura nije označena kao završena.")
+        red.stanje = StanjeNacrta.CEKA_SIFRU
+        red.erp_napomena = None
+        red.upisao = None
+        red.upisano_u = None
+        session.add(
+            AuditLog(
+                actor=korisnik,
+                action="kalkulacija.vracena",
+                document_id=document_id,
+                detail="vraćena sa „završeno“ na ekran Šifre",
+            )
+        )
+    return osvezi(document_id, engine=engine)
+
+
 def upisi_u_erp(
     document_id: int, *, korisnik: str, produkcija: bool = False, engine=None
 ) -> tuple[bool, str]:
@@ -632,6 +750,11 @@ def upisi_u_erp(
 
     if stanje is StanjeNacrta.UPISAN:
         return False, f"Kalkulacija je već upisana ({vec_upisan})."
+    if stanje is StanjeNacrta.ZAVRSENO:
+        return False, (
+            "Faktura je označena kao završena bez upisa iz panela — ako kalkulacija "
+            "ipak treba, vrati je na ekran „Šifre“ (dugme na dokumentu)."
+        )
     if stanje is StanjeNacrta.NE_TREBA:
         return False, "Ovaj dokument ne ide kroz kalkulaciju."
 

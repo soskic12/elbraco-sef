@@ -10,6 +10,11 @@
   <br>
   Kad upišeš šifru, veza se pamti <b>po dobavljaču i njegovoj šifri</b>, pa naredne fakture
   tog dobavljača prolaze same. Zato je ovo najvredniji unos u celom toku.
+  <br>
+  Faktura koju je neko već uneo u ERP <b>ručno</b> nestaje odavde sama — ciklus na
+  15 minuta traži kalkulaciju po broju računa i dobavljaču. Kad šifre ne mogu da se
+  povežu (jedna stavka na fakturi, više naših šifara), a kalkulacija neće ni doći iz
+  panela, dugme <b>Završeno bez šifara</b> na dnu fakture je sklanja — uz razlog.
 </div>
 
 <div class="card">
@@ -18,6 +23,7 @@
     <div><b>{{ broj.spreman }}</b> <span class="muted small">kalkulacija spremno</span></div>
     <div><b>{{ broj.problem }}</b> <span class="muted small">ima drugi problem</span></div>
     <div><b>{{ broj.upisan }}</b> <span class="muted small">već u ERP-u</span></div>
+    <div><b>{{ broj.zavrseno }}</b> <span class="muted small">završeno bez šifara</span></div>
     <span class="spacer"></span>
     <form class="inline" method="post" action="/sifre/osvezi">
       <button class="ghost" type="submit">Preračunaj nacrte</button>
@@ -35,12 +41,17 @@
       <a href="/dokument/{{ nacrt.document_id }}">{{ nacrt.document.document_number or '—' }}</a>
     </h2>
     <span class="muted">{{ nacrt.document.supplier_name }}</span>
+    {% if nacrt.document.issue_date %}
+      <span class="muted small">{{ nacrt.document.issue_date.strftime('%d.%m.%Y') }}</span>
+    {% endif %}
     <span class="spacer"></span>
     <span class="tag">{{ nacrt.tabela }} · magacin {{ nacrt.magacin }}</span>
     {% if nacrt.document.business_unit %}
       <span class="tag">{{ nacrt.document.business_unit.code }}</span>
     {% endif %}
   </div>
+  {# Predlog „možda je već u ERP-u" i ovde, da Dule ne otvara dokument po dokument. #}
+  {% with n = nacrt, doc = nacrt.document, povratak = '/sifre' %}{% include "_sumnja.html" %}{% endwith %}
 
   {% if nacrt.problemi %}
     <div class="small" style="color:#b91c1c">
@@ -152,6 +163,17 @@
     <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
     <button type="submit">Poveži sve upisane</button>
     <span class="muted small">Prazna polja se preskaču.</span>
+  </form>
+  {# Kad sifre ne mogu da se povezu, a kalkulacija nece doci iz panela: skloni
+     uz razlog. App prvo proveri ERP - ako je vec uneto rukom, belezi „u ERP-u“. #}
+  <form method="post" action="/sifre/zavrseno" class="row"
+        style="margin-top:6px;align-items:center"
+        onsubmit="return confirm('Skloniti fakturu sa ekrana Šifre bez povezivanja šifara? Aplikacija prvo proveri da li je kalkulacija već u ERP-u.')">
+    <input type="hidden" name="document_id" value="{{ nacrt.document_id }}">
+    <input type="text" name="razlog" required size="44"
+           placeholder="zašto — npr. jedna stavka = 5 naših šifara, uneto ručno u ERP">
+    <button class="ghost" type="submit"
+            title="Faktura silazi sa ovog ekrana; razlog ostaje zapisan na dokumentu">Završeno bez šifara</button>
   </form>
 </div>
 {% else %}

@@ -919,7 +919,9 @@ def dokument_prilog(doc_id: int, user: Korisnik, redni: int = 0) -> Response:
 
 
 @app.post("/dokument/{doc_id}/sumnja")
-def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> RedirectResponse:
+def odluci_o_sumnji(
+    doc_id: int, user: Korisnik, odluka: str = Form(...), povratak: str = Form("")
+) -> RedirectResponse:
     """Covek presudjuje predlog „možda je već u ERP-u”.
 
     Predlog se nadje po istom dobavljacu, datumu i iznosu kad se broj racuna ne
@@ -932,6 +934,10 @@ def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> Red
     from ..models import utcnow
     from ..services.nacrti import RUCNO_U_ERPU
 
+    # Sa ekrana „Šifre“ se vraća tamo, ne na dokument - inače Dule posle svake
+    # odluke ide nazad rukom.
+    nazad = povratak if povratak.startswith("/") else f"/dokument/{doc_id}"
+
     with session_scope() as session:
         doc = session.get(Document, doc_id)
         if doc is None:
@@ -940,7 +946,7 @@ def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> Red
             raise HTTPException(403, "Taj dokument nije tvoj.")
         red = session.get(NacrtKalkulacije, doc_id)
         if red is None or not red.sumnja:
-            return _back(f"/dokument/{doc_id}", "Za ovu fakturu nema predloga.", False)
+            return _back(nazad, "Za ovu fakturu nema predloga.", False)
         oznaka = str(red.sumnja.get("oznaka") or "")
         if odluka == "jeste":
             red.stanje = StanjeNacrta.UPISAN
@@ -958,7 +964,7 @@ def odluci_o_sumnji(doc_id: int, user: Korisnik, odluka: str = Form(...)) -> Red
             red.sumnja_odbijeno_u = utcnow()
             poruka = "Zabeleženo — predlog odbijen, faktura ostaje na ekranu."
         session.flush()
-    return _back(f"/dokument/{doc_id}", poruka)
+    return _back(nazad, poruka)
 
 
 @app.post("/dokument/{doc_id}/upisi-kalkulaciju")
@@ -1935,6 +1941,42 @@ def sifre_nije_artikal(
     if vrati:
         return _back(f"/dokument/{document_id}", "Stavka je vraćena na spisak.")
     return _back("/sifre", "Stavka je označena — ne traži se šifra za nju.")
+
+
+@app.post("/sifre/zavrseno")
+def sifre_zavrseno(
+    user: Operater,
+    document_id: int = Form(...),
+    razlog: str = Form(""),
+) -> RedirectResponse:
+    """Faktura kojoj sifre ne mogu da se povezu silazi sa ekrana, uz razlog.
+
+    Bane, 15.10.: elektricni bicikl je na fakturi jedna stavka u pet boja, a kod
+    nas je svaka boja svoja sifra - nema sta da se poveze, a faktura je stajala
+    mesec dana. App prvo pogleda ERP: ako je neko kalkulaciju vec uneo rukom,
+    faktura se belezi kao „u ERP-u“, ne kao „zavrseno“.
+    """
+    from ..services.nacrti import oznaci_zavrseno
+
+    try:
+        poruka = oznaci_zavrseno(document_id, korisnik=user.login, razlog=razlog)
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
+        return _back("/sifre", str(exc), False)
+    return _back("/sifre", poruka)
+
+
+@app.post("/dokument/{doc_id}/vrati-na-sifre")
+def vrati_na_sifre(doc_id: int, user: Operater) -> RedirectResponse:
+    """Ponistava „zavrseno bez sifara“ - za slucaj da je kliknuto pogresno."""
+    from ..services.nacrti import vrati_na_sifre as _vrati
+
+    try:
+        _vrati(doc_id, korisnik=user.login)
+    except Exception as exc:  # noqa: BLE001 - poruka ide coveku, ne u log
+        return _back(f"/dokument/{doc_id}", str(exc), False)
+    return _back(
+        f"/dokument/{doc_id}", "Faktura je vraćena na ekran „Šifre“ i nacrt je preračunat."
+    )
 
 
 @app.post("/sifre/pakovanje")

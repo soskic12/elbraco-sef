@@ -1187,7 +1187,7 @@ def cmd_arhiviraj_stare(
 
     from .models import BusinessUnit, Document, NacrtKalkulacije, StanjeNacrta
 
-    GOTOVO = (StanjeNacrta.UPISAN, StanjeNacrta.NE_TREBA)
+    GOTOVO = (StanjeNacrta.UPISAN, StanjeNacrta.ZAVRSENO, StanjeNacrta.NE_TREBA)
     granica = get_settings().novi_tok_od
     if granica is None:
         typer.secho("NOVI_TOK_OD nije zadat — bez granice se ne zna šta je staro.", fg="red")

@@ -2079,3 +2079,169 @@ def test_storno_na_dokumentu_nudi_obavestenje_sa_napomenom(client, db):
 
     # Storno od pre uvodjenja se ne nudi.
     assert "Pošalji obaveštenje o stornu" not in client.get(f"/dokument/{staro_id}").text
+
+
+# ----------------------------------------------------------------------------
+# „Završeno bez šifara" (Bane, 15.10.): bicikl u pet boja je jedna stavka na
+# fakturi, a kod nas pet šifara - nema šta da se poveže, a faktura stoji.
+# ----------------------------------------------------------------------------
+
+
+def _ceka_sifru(db, doc_id: int, **dodatno) -> None:
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.CEKA_SIFRU, magacin="002", tabela="MKALKUL",
+            nemapirane=[{"line_no": 1, "naziv": "Električni bicikl", "sifra_dobavljaca": "966",
+                         "ean": "", "kolicina": 5.0, "cena": 35000.0, "jedinica": "kom"}],
+            **dodatno,
+        ))
+
+
+def _bez_erpa(monkeypatch, pogodak=None) -> None:
+    """Nacrt se sklapa bez ERP-a, a provera „već u ERP-u" vraća zadati pogodak."""
+    from sefsync.erp.kalkulacija import Nacrt
+    from sefsync.services import nacrti as modul
+
+    monkeypatch.setattr(modul, "pripremi", lambda doc_id, **k: Nacrt(
+        document_id=doc_id, tabela_zaglavlja="MKALKUL", tabela_stavki="PRMKALK",
+        magacin="002", zaglavlje={"BROJ_RN_DOB": "2026-6851", "DOBAVLJAC": "38621"},
+        nemapirane=[{"line_no": 1, "naziv": "Električni bicikl"}],
+    ))
+    monkeypatch.setattr(modul, "_vec_u_erpu", lambda nacrt, **k: pogodak)
+    monkeypatch.setattr(modul, "_zabelezi_popust", lambda *a, **k: None)
+
+
+def test_zavrseno_bez_sifara_sklanja_fakturu_uz_razlog(client, podaci, db, monkeypatch):
+    from sefsync.models import AuditLog, NacrtKalkulacije, StanjeNacrta
+
+    doc_id = podaci["doc"]
+    _ceka_sifru(db, doc_id)
+    _bez_erpa(monkeypatch)
+    prijavi(client, OPERATER)
+    assert "26-30F-087050" in client.get("/sifre").text
+
+    odgovor = client.post(
+        "/sifre/zavrseno",
+        data={"document_id": doc_id, "razlog": "jedna stavka = 5 šifara, uneto ručno"},
+        follow_redirects=False,
+    )
+    assert odgovor.status_code == 303
+    assert "GRE%C5%A0KA" not in odgovor.headers["location"]
+
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, doc_id)
+        assert red.stanje is StanjeNacrta.ZAVRSENO
+        assert red.upisao == "bogdan"
+        assert red.erp_broj is None
+        assert "5 šifara" in red.erp_napomena
+        trag = session.scalar(select(AuditLog).where(AuditLog.action == "kalkulacija.zavrsena"))
+        assert trag is not None and trag.document_id == doc_id
+
+    # sišla je sa ekrana, a na dokumentu piše ko, kada i zašto - i kako nazad
+    assert "26-30F-087050" not in client.get("/sifre").text
+    strana = client.get(f"/dokument/{doc_id}").text
+    assert "završena bez upisa" in strana
+    assert "5 šifara" in strana
+    assert "Vrati na ekran Šifre" in strana
+
+
+def test_zavrseno_bez_razloga_ne_prolazi(client, podaci, db, monkeypatch):
+    """Sklonjena faktura nije uknjižena — bez razloga se ne sklanja."""
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+
+    doc_id = podaci["doc"]
+    _ceka_sifru(db, doc_id)
+    _bez_erpa(monkeypatch)
+    prijavi(client, OPERATER)
+
+    odgovor = client.post(
+        "/sifre/zavrseno", data={"document_id": doc_id, "razlog": "   "}, follow_redirects=False
+    )
+    assert "GRE%C5%A0KA" in odgovor.headers["location"]
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, doc_id).stanje is StanjeNacrta.CEKA_SIFRU
+
+
+def test_zavrseno_prvo_proveri_erp_i_belezi_kalkulaciju(client, podaci, db, monkeypatch):
+    """27 od 34 „zaglavljenih" je već bilo u ERP-u — dugme to ne sme da sakrije."""
+    from sefsync.erp.kalkulacija import Pogodak
+    from sefsync.models import NacrtKalkulacije, StanjeNacrta
+    from sefsync.services.nacrti import RUCNO_U_ERPU
+
+    doc_id = podaci["doc"]
+    _ceka_sifru(db, doc_id)
+    _bez_erpa(monkeypatch, Pogodak("MKALKUL 002/00482"))
+    prijavi(client, OPERATER)
+
+    odgovor = client.post(
+        "/sifre/zavrseno", data={"document_id": doc_id, "razlog": "uneto ručno"},
+        follow_redirects=False,
+    )
+    assert "MKALKUL" in odgovor.headers["location"]
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, doc_id)
+        assert red.stanje is StanjeNacrta.UPISAN
+        assert red.erp_broj == "MKALKUL 002/00482"
+        assert red.upisao == RUCNO_U_ERPU
+        assert "bogdan" in red.erp_napomena
+        assert red.nemapirane is None
+
+
+def test_vracanje_na_sifre_ponistava_zavrseno(client, podaci, db, monkeypatch):
+    from sefsync.models import AuditLog, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as modul
+
+    doc_id = podaci["doc"]
+    with db.session_scope() as session:
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.ZAVRSENO, upisao="dule",
+            erp_napomena="greškom",
+        ))
+    osvezeno: list[int] = []
+    monkeypatch.setattr(modul, "osvezi", lambda d, **k: osvezeno.append(d))
+    prijavi(client, OPERATER)
+
+    odgovor = client.post(f"/dokument/{doc_id}/vrati-na-sifre", follow_redirects=False)
+    assert odgovor.status_code == 303
+    assert osvezeno == [doc_id]
+    with db.session_scope() as session:
+        red = session.get(NacrtKalkulacije, doc_id)
+        assert red.stanje is StanjeNacrta.CEKA_SIFRU
+        assert red.upisao is None
+        assert red.erp_napomena is None
+        assert session.scalar(select(AuditLog).where(AuditLog.action == "kalkulacija.vracena"))
+
+    # drugi put nema šta da se vrati
+    odgovor = client.post(f"/dokument/{doc_id}/vrati-na-sifre", follow_redirects=False)
+    assert "GRE%C5%A0KA" in odgovor.headers["location"]
+
+
+def test_odluka_o_sumnji_sa_ekrana_sifre_vraca_na_sifre(client, podaci, db):
+    _sa_sumnjom(db, podaci["doc"])
+    prijavi(client, OPERATER)
+    odgovor = client.post(
+        f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "jeste", "povratak": "/sifre"},
+        follow_redirects=False,
+    )
+    assert odgovor.headers["location"].startswith("/sifre?")
+
+    # povratak koji nije putanja u panelu se ne prihvata - ostaje dokument
+    odgovor = client.post(
+        f"/dokument/{podaci['doc']}/sumnja", data={"odluka": "nije", "povratak": "http://x"},
+        follow_redirects=False,
+    )
+    assert odgovor.headers["location"].startswith(f"/dokument/{podaci['doc']}?")
+
+
+def test_ekran_sifre_pokazuje_predlog_vec_u_erpu(client, podaci, db):
+    """Dule ne mora da otvara dokument po dokument da bi video predlog."""
+    doc_id = podaci["doc"]
+    _ceka_sifru(db, doc_id, sumnja={"oznaka": "MKALKUL 002/00482",
+                                    "razlog": "isti dobavljač, isti datum, isti iznos"})
+    prijavi(client, OPERATER)
+    tekst = client.get("/sifre").text
+    assert "Možda je već u ERP-u" in tekst
+    assert "MKALKUL 002/00482" in tekst
+    assert 'name="povratak" value="/sifre"' in tekst

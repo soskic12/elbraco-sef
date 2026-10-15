@@ -610,6 +610,13 @@ class StanjeNacrta(str, enum.Enum):
     # Avansni racun ne prolazi kroz kalkulaciju - mereno 18.09.: nijedan od 39
     # avansa u istoriji nema kalkulaciju u ERP-u, idu pravo racunovodstvu.
     NE_TREBA = "ne_treba"
+    # Covek je rekao da je faktura resena bez upisa iz panela: sifre ne mogu da
+    # se povezu (elektricni bicikl je na fakturi jedna stavka, kod nas pet
+    # sifara po bojama) i kalkulacija nece doci odavde. Koliko panel zna, NIJE u
+    # ERP-u; ko, kada i zasto stoji u `upisao`, `upisano_u` i `erp_napomena`.
+    # Ime clana ne sme biti duze od 10 znakova: na MS SQL-u je kolona VARCHAR
+    # po najduzem imenu u trenutku pravljenja tabele (CEKA_SIFRU).
+    ZAVRSENO = "zavrseno"
 
 
 class NacrtKalkulacije(Base):

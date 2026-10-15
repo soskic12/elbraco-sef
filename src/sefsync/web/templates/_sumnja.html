@@ -15,10 +15,12 @@
         <form class="inline" method="post" action="/dokument/{{ doc.id }}/sumnja"
               onsubmit="return confirm('Označiti {{ doc.document_number }} kao već unetu u ERP ({{ n.sumnja.oznaka }})?')">
           <input type="hidden" name="odluka" value="jeste">
+          {% if povratak is defined and povratak %}<input type="hidden" name="povratak" value="{{ povratak }}">{% endif %}
           <button type="submit">Jeste, skloni</button>
         </form>
         <form class="inline" method="post" action="/dokument/{{ doc.id }}/sumnja">
           <input type="hidden" name="odluka" value="nije">
+          {% if povratak is defined and povratak %}<input type="hidden" name="povratak" value="{{ povratak }}">{% endif %}
           <button type="submit" class="secondary">Nije to</button>
         </form>
       </div>

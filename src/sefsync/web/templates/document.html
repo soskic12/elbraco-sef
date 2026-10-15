@@ -211,6 +211,18 @@
           <span class="tag warn">čeka šifru ({{ nacrt.broj_nemapiranih }})</span>
         {% elif nacrt.stanje.value == 'ne_treba' %}
           <span class="muted">ne ide kroz kalkulaciju</span>
+        {% elif nacrt.stanje.value == 'zavrseno' %}
+          <span class="tag">završena bez upisa iz panela</span>
+          <div class="muted small">{{ nacrt.upisao }}{% if nacrt.upisano_u %},
+            {{ nacrt.upisano_u.strftime('%d.%m.%Y %H:%M') }}{% endif %}{% if nacrt.erp_napomena %}
+            — {{ nacrt.erp_napomena }}{% endif %}</div>
+          <div class="muted small">Koliko panel zna, kalkulacija <b>nije</b> u ERP-u.</div>
+          {% if user.is_operator %}
+            <form class="inline" method="post" action="/dokument/{{ doc.id }}/vrati-na-sifre"
+                  style="margin-top:4px" onsubmit="return confirm('Vratiti fakturu na ekran Šifre?')">
+              <button class="ghost small" type="submit">Vrati na ekran Šifre</button>
+            </form>
+          {% endif %}
         {% else %}
           <span class="tag err">zaustavljena</span>
           <div class="muted small">{{ (nacrt.problemi or [])|join('; ') }}</div>

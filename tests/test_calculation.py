@@ -1754,3 +1754,183 @@ def test_bez_faktora_nista_se_ne_mnozi():
 
     veze = Veze()
     assert veze.faktori.get(("100001", "200018"), 1.0) == 1.0
+
+
+def test_racun_sa_dve_stope_i_delom_bez_pdva_ima_red_za_svaku_stopu(db):
+    """Dve stope u PDVEVIDX idu u dva reda TIP 1, ne u jedan sa oba para polja.
+
+    Po ispravljenom 088/03284 (Bane, 15.10.): posebna stopa 7.283,37 + 728,33 u
+    svom redu, opšta 186,92 + 37,38 u svom, deo bez PDV-a 13,99 kao TIP 23. ERP
+    tako vodi svih 12 takvih računa, a od 213 redova u tabeli nijedan ne nosi
+    obe stope. Naš spojeni red se ispravljao rukom.
+    """
+    import datetime as dt
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import BusinessUnit, Document, DocumentLine, SefStatus, UnitKind
+
+    with db.session_scope() as session:
+        pj = BusinessUnit(code="OFFICE", name="UPRAVA", kind=UnitKind.HQ)
+        session.add(pj)
+        session.flush()
+        doc = Document(
+            sef_invoice_id=777023, document_number="16-KU-259319",
+            supplier_name="JKP Vodovod", supplier_vat="100000001",
+            supplier_reg_no="08000001", amount=8249.90, vat_amount=765.71,
+            sef_status=SefStatus.SEEN, business_unit_id=pj.id,
+            issue_date=dt.date(2026, 10, 1), delivery_date=dt.date(2026, 9, 30),
+        )
+        doc.lines.append(DocumentLine(line_no=1, name="Voda", quantity=1,
+                                      line_amount=7283.30, vat_percent=10.0,
+                                      vat_category="S"))
+        doc.lines.append(DocumentLine(line_no=2, name="Naknada za vodomer", quantity=1,
+                                      line_amount=186.90, vat_percent=20.0,
+                                      vat_category="S"))
+        doc.lines.append(DocumentLine(line_no=3, name="Taksa", quantity=1,
+                                      line_amount=13.99, vat_percent=0.0,
+                                      vat_category="OE"))
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    class Conn:
+        def execute(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+        def scalar(self):
+            return None
+
+        def all(self):
+            return []
+
+        def __iter__(self):
+            return iter(())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    nacrt = K.pripremi(doc_id, engine=type("E", (), {"connect": lambda self: Conn()})())
+
+    posebna, opsta, bez = nacrt.pdv_evidencija
+    assert [r["REDBR"] for r in nacrt.pdv_evidencija] == [1, 2, 3]
+    assert posebna["TIP"] == K.TIP_ULAZNI_RACUN
+    assert (posebna["OSNOVA1"], posebna["PDV1"]) == (7283.30, 728.33)
+    assert (posebna["OSNOVA2"], posebna["PDV2"]) == (0.0, 0.0)
+    assert posebna["IZNOS"] == 8011.63
+    assert opsta["TIP"] == K.TIP_ULAZNI_RACUN
+    assert (opsta["OSNOVA2"], opsta["PDV2"]) == (186.90, 37.38)
+    assert (opsta["OSNOVA1"], opsta["PDV1"]) == (0.0, 0.0)
+    assert opsta["IZNOS"] == 224.28
+    assert bez["TIP"] == K.TIP_BEZ_EPPDV
+    assert bez["IZNOS"] == 13.99
+    # nijedan red ne nosi obe stope - tako ERP ne vodi nijedan od 213 redova
+    assert not any(
+        (r["OSNOVA1"] or r["PDV1"]) and (r["OSNOVA2"] or r["PDV2"])
+        for r in nacrt.pdv_evidencija
+    )
+    # zbir redova je ceo racun; zaglavlje drzi svaku stopu u svom polju
+    assert round(sum(r["IZNOS"] for r in nacrt.pdv_evidencija), 2) == 8249.90
+    assert nacrt.zaglavlje["IZNOS_ZA_NAP"] == 8249.90
+    assert nacrt.zaglavlje["PRENETIPOREZ"] == 728.33
+    assert nacrt.zaglavlje["PDV"] == 37.38
+
+
+def _nacrt_bicikla(doc_id: int):
+    from sefsync.erp.kalkulacija import Nacrt
+
+    return Nacrt(
+        document_id=doc_id, tabela_zaglavlja="MKALKUL", tabela_stavki="PRMKALK",
+        magacin="008", zaglavlje={"BROJ_RN_DOB": "2026-6851", "DOBAVLJAC": "38621"},
+        nemapirane=[{"line_no": 1, "naziv": "BICIKL PONYE LITIJUM 20''"}],
+    )
+
+
+def test_osvezi_prepoznaje_rucnu_kalkulaciju_i_dok_ceka_sifru(db, monkeypatch):
+    """27 od 34 faktura koje su „čekale šifru“ već je bilo u ERP-u (server, 15.10.).
+
+    Poslovođe su ih unele rukom jer šifre nisu mogle da se povežu (bicikl u pet
+    boja), a panel je ERP pitao samo za spremne nacrte — pa su stajale na ekranu.
+    """
+    from sefsync.erp.kalkulacija import Pogodak
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=777031, document_number="2026-6851",
+                       supplier_name="CSM 2017", supplier_vat="110130228")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    monkeypatch.setattr(N, "pripremi", lambda d, **k: _nacrt_bicikla(d))
+    monkeypatch.setattr(N, "_zabelezi_popust", lambda *a, **k: None)
+    pitano: list[bool] = []
+
+    def _erp(nacrt, *, engine=None, i_predlog=False):
+        pitano.append(i_predlog)
+        return Pogodak("MKALKUL 008/00512")
+
+    monkeypatch.setattr(N, "_vec_u_erpu", _erp)
+
+    red = N.osvezi(doc_id)
+    assert red.stanje is StanjeNacrta.UPISAN
+    assert red.erp_broj == "MKALKUL 008/00512"
+    assert red.upisao == N.RUCNO_U_ERPU
+    assert red.nemapirane is None
+    # predlog po iznosu i datumu se ne trazi dok iznos nije potpun
+    assert pitano == [False]
+
+    # upisan nacrt se vise ne preracunava - ERP se ne pita ni jednom
+    pitano.clear()
+    assert N.osvezi(doc_id).stanje is StanjeNacrta.UPISAN
+    assert pitano == []
+    with db.session_scope() as session:
+        assert session.get(NacrtKalkulacije, doc_id).stanje is StanjeNacrta.UPISAN
+
+
+def test_osvezi_bez_kalkulacije_u_erpu_ostavlja_ceka_sifru(db, monkeypatch):
+    from sefsync.models import Document, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=777032, document_number="2026-6852",
+                       supplier_name="CSM 2017", supplier_vat="110130228")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+
+    monkeypatch.setattr(N, "pripremi", lambda d, **k: _nacrt_bicikla(d))
+    monkeypatch.setattr(N, "_zabelezi_popust", lambda *a, **k: None)
+    monkeypatch.setattr(N, "_vec_u_erpu", lambda nacrt, **k: None)
+
+    red = N.osvezi(doc_id)
+    assert red.stanje is StanjeNacrta.CEKA_SIFRU
+    assert red.nemapirane and red.nemapirane[0]["naziv"].startswith("BICIKL")
+    assert red.erp_broj is None
+
+
+def test_upis_odbija_fakturu_oznacenu_kao_zavrsenu(db):
+    """„Završeno bez šifara“ znači da kalkulacija ne ide iz panela — ni dugmetom."""
+    from sefsync.models import Document, NacrtKalkulacije, StanjeNacrta
+    from sefsync.services import nacrti as N
+
+    with db.session_scope() as session:
+        doc = Document(sef_invoice_id=777033, document_number="2026-6853")
+        session.add(doc)
+        session.flush()
+        doc_id = doc.id
+        session.add(NacrtKalkulacije(
+            document_id=doc_id, stanje=StanjeNacrta.ZAVRSENO, upisao="dule",
+            erp_napomena="jedna stavka, pet šifara",
+        ))
+
+    upisano, poruka = N.upisi_u_erp(doc_id, korisnik="dule")
+    assert not upisano
+    assert "završena" in poruka
+    assert "Šifre" in poruka

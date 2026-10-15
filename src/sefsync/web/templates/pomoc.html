@@ -432,7 +432,10 @@
       kalkulaciju stoji napomena;</li>
     <li>razdvaja PDV po stopama — opšta i posebna idu u odvojena polja;</li>
     <li>kad je deo računa <b>bez PDV-a</b> (npr. 349,00 kod EPS-a), upisuje ga
-      kao zaseban red poreske evidencije, tip 23;</li>
+      kao zaseban red poreske evidencije (tab POPDV), tip 23 — a oporezivi deo
+      dobija <b>po jedan red za svaku stopu</b>, posebna i opšta odvojeno, kao
+      na 088/03284 (7.283,37 + 728,33 · 13,99 bez PDV-a · 186,92 + 37,38). Do
+      15.10. su obe stope išle u jedan red, pa se ispravljalo ručno;</li>
     <li>ako račun ne nosi rok plaćanja, u valutu ide datum prometa.</li>
   </ul>
   <p class="muted small">Kalkulacija se upisuje kao <b>otvorena</b>. Knjiženje
@@ -487,6 +490,19 @@
   dobavljača.</p>
   <p class="muted small">Jedan artikal — jedan barkod. Ako dobavljač promeni
   barkod, roba se prelepljuje; ne otvara se druga šifra.</p>
+  <p><b>Faktura koju je neko već uneo u ERP ručno</b> nestaje sa ekrana sama:
+  ciklus na 15 minuta traži kalkulaciju po broju računa i dobavljaču i, kad je
+  nađe, faktura dobija oznaku „u ERP-u“. Do 15.10. se to proveravalo samo za
+  spremne kalkulacije, pa je 27 od 34 fakture stajalo na ekranu iako su odavno
+  bile u ERP-u.</p>
+  <p>Kad šifre ne mogu da se povežu (npr. jedna stavka na fakturi, a kod nas pet
+  šifara po bojama) i faktura neće ni dobiti kalkulaciju iz panela, dugme
+  <span class="tag">Završeno bez šifara</span> na dnu fakture je sklanja — uz
+  <b>razlog</b>, koji ostaje zapisan na dokumentu. Aplikacija i tada prvo pogleda
+  ERP: ako kalkulacija postoji, faktura se beleži kao „u ERP-u“. Pogrešno
+  sklonjena se vraća dugmetom <b>Vrati na ekran Šifre</b> na dokumentu.</p>
+  <p class="muted small">Sklonjena faktura nije uknjižena — ako robe ima,
+  kalkulaciju treba uneti u ERP ručno. Zato razlog nije ukras.</p>
 {% endcall %}
 
 {% call korak('Poveži sve upisane') %}
@@ -637,6 +653,10 @@
       kod istog dobavljača, javi da se napravi pravilo</td></tr>
     <tr><td>Kalkulacija „čeka šifru“</td><td>Ekran <b>Šifre</b> — poveži šifru ili
       označi da nije artikal</td></tr>
+    <tr><td>Šifra ne može da se poveže (jedna stavka na fakturi, više naših
+      šifara)</td><td>Unesi kalkulaciju u ERP ručno — panel je prepozna sam u roku
+      od 15 minuta. Ako ne treba ni to: <b>Završeno bez šifara</b> na ekranu
+      <b>Šifre</b>, uz razlog</td></tr>
     <tr><td>Kalkulacija „zaustavljena“</td><td>Piše zašto ispod oznake; najčešće
       dobavljač nije otvoren u šifarniku ili artikal nema cenu u objektu</td></tr>
     <tr><td>„šifra … ne postoji u šifarniku“</td><td>Omaška u kucanju — stavka je

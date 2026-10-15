@@ -1068,33 +1068,38 @@ def pripremi(
         # (nije predmet PDV-a), a ERP ju je na 088/03039 upisao kao red TIP 23,
         # dok je ostatak 46.961,11 = 39.134,26 + 7.826,85 upisan kao TIP 1.
         #
+        # Svaka stopa ide u SVOJ red TIP 1: posebna u OSNOVA1/PDV1, opsta u
+        # OSNOVA2/PDV2. Do 15.10. su obe stope isle u jedan red, a tako ERP ne
+        # vodi nijedan: od 213 redova u PDVEVIDX nijedan ne nosi obe stope, a
+        # svih 12 racuna sa dve stope i delom bez PDV-a ima po tri reda (npr.
+        # 088/03284: 7.283,37 + 728,33 posebna, 186,92 + 37,38 opsta, 13,99
+        # bez PDV-a). Nas spojeni red se ispravljao rukom (Bane, 15.10.).
+        #
         # Pise se samo prava podela - racun koji je ceo oporeziv (2.988 od
-        # 3.075) nema red u PDVEVIDX i ERP mu evidenciju izvede iz zaglavlja.
-        # Racun koji bi bio ceo neoporeziv se ne dira: takav u istoriji ne
-        # postoji, pa nema po cemu da se proveri sta bi ERP ocekivao.
+        # 3.075) nema red u PDVEVIDX i ERP mu evidenciju izvede iz zaglavlja,
+        # i kad nosi dve stope (24 nasa i 7 ERP-ovih takvih, nijedan sa
+        # redovima). Racun koji bi bio ceo neoporeziv se ne dira: takav u
+        # istoriji ne postoji, pa nema po cemu da se proveri sta bi ERP ocekivao.
         if bez_stavki:
             neoporezivo = _po(0.0, "osnovica")
             oporezivo = round(_po(10.0, "osnovica") + _po(20.0, "osnovica"), 2)
             if neoporezivo and oporezivo:
+                prazno = {"OSNOVA1": 0.0, "PDV1": 0.0, "OSNOVA2": 0.0, "PDV2": 0.0}
+                redovi: list[dict] = []
+                for stopa_, kol_osn, kol_pdv, porez in (
+                    (10.0, "OSNOVA1", "PDV1", pdv_posebna),
+                    (20.0, "OSNOVA2", "PDV2", pdv_opsta),
+                ):
+                    osn = _po(stopa_, "osnovica")
+                    if not osn and not porez:
+                        continue
+                    red = dict(prazno, TIP=TIP_ULAZNI_RACUN, IZNOS=round(osn + porez, 2))
+                    red[kol_osn] = osn
+                    red[kol_pdv] = porez
+                    redovi.append(red)
+                redovi.append(dict(prazno, TIP=TIP_BEZ_EPPDV, IZNOS=neoporezivo))
                 nacrt.pdv_evidencija = [
-                    {
-                        "REDBR": 1,
-                        "TIP": TIP_ULAZNI_RACUN,
-                        "IZNOS": round(oporezivo + pdv_posebna + pdv_opsta, 2),
-                        "OSNOVA1": _po(10.0, "osnovica"),
-                        "PDV1": pdv_posebna,
-                        "OSNOVA2": _po(20.0, "osnovica"),
-                        "PDV2": pdv_opsta,
-                    },
-                    {
-                        "REDBR": 2,
-                        "TIP": TIP_BEZ_EPPDV,
-                        "IZNOS": neoporezivo,
-                        "OSNOVA1": 0.0,
-                        "PDV1": 0.0,
-                        "OSNOVA2": 0.0,
-                        "PDV2": 0.0,
-                    },
+                    {"REDBR": rb, **red} for rb, red in enumerate(redovi, start=1)
                 ]
 
         # Rok placanja. Knjizno odobrenje ga po pravilu nema, pa je app pisala
