@@ -285,3 +285,14 @@ def test_slicni_artikli_ne_salju_drugi_upit_dok_prvi_cita():
     (s,) = slicni_artikli(Veza(), "Realme C100 5G 128GB Black")
     assert s["artikal"] == "14455"
     assert s["cena_mp"] == 19990.0
+
+
+def test_kljuc_bez_radnog_prostora_salje_id_radnog_prostora(monkeypatch):
+    """Ključ sa servera (16.10.) API prima samo uz anthropic-workspace-id."""
+    from sefsync.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-ant-usr-x")
+    monkeypatch.setattr(get_settings(), "anthropic_workspace_id", " wrkspc_123 ")
+    assert S._klijent().default_headers["anthropic-workspace-id"] == "wrkspc_123"
+    monkeypatch.setattr(get_settings(), "anthropic_workspace_id", "")
+    assert "anthropic-workspace-id" not in S._klijent().default_headers

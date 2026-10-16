@@ -218,10 +218,16 @@ def _upit(naziv: str, ean: str, kategorija: str, dobavljac: str, primeri: list[s
 def _klijent():
     import anthropic
 
-    kljuc = get_settings().anthropic_api_key
+    podesavanja = get_settings()
+    kljuc = podesavanja.anthropic_api_key
     if not kljuc:
         raise ValueError("Claude nije podešen — u .env fali ANTHROPIC_API_KEY.")
-    return anthropic.Anthropic(api_key=kljuc, timeout=120.0, max_retries=2)
+    zaglavlja = {}
+    if podesavanja.anthropic_workspace_id:
+        zaglavlja["anthropic-workspace-id"] = podesavanja.anthropic_workspace_id.strip()
+    return anthropic.Anthropic(
+        api_key=kljuc, timeout=120.0, max_retries=2, default_headers=zaglavlja or None
+    )
 
 
 def predlozi_claude(
@@ -267,6 +273,11 @@ def predlozi_claude(
         return PredlogSpecifikacije(poruka="Claude je trenutno zauzet — probaj za minut.")
     except anthropic.APIStatusError as exc:
         log.warning("Claude za specifikaciju: %s %s", exc.status_code, exc.message)
+        if "workspace" in (exc.message or ""):
+            return PredlogSpecifikacije(
+                poruka="Claude ključ nije vezan za radni prostor — u .env treba "
+                       "ANTHROPIC_WORKSPACE_ID, ili ključ napravljen u radnom prostoru."
+            )
         return PredlogSpecifikacije(poruka=f"Claude nije odgovorio ({exc.status_code}).")
     except anthropic.APIConnectionError:
         return PredlogSpecifikacije(poruka="Nema veze sa Claude-om — server ne vidi internet?")
