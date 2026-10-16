@@ -557,3 +557,22 @@ Na „Šifre“ ostaju 3. Grešaka nema.
 
 Još nije viđeno u radu: prvo otvaranje šifre sa specifikacijom (red u DEKA) i
 prvi predlog sa weba.
+
+### 16.10.2026. — čekovi građana (novi modul) ✔ (kod) / ✗ (paket)
+
+Ekran „Čekovi“ (poslovođa: slikanje, crvena polja, predaja, vraćeni; kancelarija:
+pregled svih jedinica i preseci). ERP nema tabele za čekove ni blagajnu — sve
+je u bazi panela (`cek`, `slika_cekova`, `predaja_cekova`; prave se same pri
+pokretanju).
+
+Proba čitanja na 4 prava čeka (`data/cekovi`, UniCredit, Erste ×2, OTP), dva
+prolaza: sve vrednosti tačne; jednom pogrešno pročitana cifra Erste računa
+uhvaćena kontrolnim brojem (crveno). Pre doterivanja uputstva model je svaki
+datum označavao nesigurnim (2027. mu je delovala sumnjivo) — ispravljeno.
+
+Pravila: rok = datum sa čeka, vikend/praznik → prvi radni dan; datum van
+5/10/15/20/25/30 je crven; prazan iznos = 5.000 po pravilu.
+
+Paket 16.10. 13:48 (`17b1b44`) ✗ nije postavljen. Novo: točak `pillow`.
+Ne traži GRANT ni novi red u `.env` (koristi isti Claude ključ). Otvoreno:
+dnevnik blagajne (čeka papirni obrazac).
