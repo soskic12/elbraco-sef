@@ -544,3 +544,16 @@ Provereno sa servera, pod nalogom panela, samo čitanje:
 
 Paket 16.10. 08:46 (`b58ad62`, sadrži `2f0393d` i `a77de73`) ✗ nije
 postavljen. Zamenjuje paket od 15.10. 15:00.
+
+### 16.10.2026. — paket `b58ad62` postavljen ✔
+
+Postavljen 09:16 (bekap `20261016-091649`), sadrži `2f0393d` i `a77de73`.
+Pre toga: ključ sa `ANTHROPIC_WORKSPACE_ID` → `GET /v1/models` HTTP 200 ✔.
+U `.venv`: novi `nacrti.py` i `specifikacija.py`, `anthropic` 1.15.0 ✔.
+
+`servis.log`: 09:20:53 „Radnik pokrenut“; 09:21:28 **„Zapeli nacrti:
+odmrznuto 27 od 30, greska 0“** — tačno 27 koliko je 15.10. nađeno u ERP-u.
+Na „Šifre“ ostaju 3. Grešaka nema.
+
+Još nije viđeno u radu: prvo otvaranje šifre sa specifikacijom (red u DEKA) i
+prvi predlog sa weba.
