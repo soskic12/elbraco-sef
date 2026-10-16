@@ -530,3 +530,17 @@ Pre postavljanja, na ELBS_2026 (i na test bazi, ako se tamo proba):
 
 U `C:\efakture\.env`: `ANTHROPIC_API_KEY=…` (bez njega dugme se ne nudi, sve
 ostalo radi). Provera posle: `sefsync erp-nalog` mora da pokaže INSERT na DEKA.
+
+### 16.10.2026. — provera pred postavljanje paketa ✔ / ključ ✗
+
+Provereno sa servera, pod nalogom panela, samo čitanje:
+
+* `sefsync_erp / ELBS_2026` na `dbo.DEKA`: **INSERT, SELECT** ✔ (GRANT pušten).
+* `ANTHROPIC_API_KEY` u `C:\efakture\.env`: jedan red, bez razmaka ✔;
+  `api.anthropic.com:443` dostupan ✔.
+* Ključ ✗: `GET /v1/models` → 400 „This API key is not scoped to a workspace,
+  so this request must include the anthropic-workspace-id header“. Dodato
+  podešavanje `ANTHROPIC_WORKSPACE_ID` (`b58ad62`).
+
+Paket 16.10. 08:46 (`b58ad62`, sadrži `2f0393d` i `a77de73`) ✗ nije
+postavljen. Zamenjuje paket od 15.10. 15:00.
