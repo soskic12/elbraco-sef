@@ -120,8 +120,10 @@
       <a href="/pravila">Pravila</a>
       <a href="/tacnost">Tačnost</a>
       <a href="/popusti">Popusti{% if popusta %} ({{ popusta }}){% endif %}</a>
+      <a href="/cekovi">Čekovi</a>
     {% elif user %}
       <a href="/moja-jedinica">Moja jedinica</a>
+      <a href="/cekovi">Čekovi</a>
       {% if popusta %}<a href="/popusti">Popusti ({{ popusta }})</a>{% endif %}
     {% endif %}
     {# Pomoc stoji na svakom ekranu - covek ne drzi odstampano uputstvo uz sebe. #}

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Čekovi — {{ jedinica.code }}{% endblock %}
+
+{% macro din(v) -%}
+  {{ '{:,.2f}'.format(v or 0).replace(',', ' ').replace('.', ',') }}
+{%- endmacro %}
+
+{% block content %}
+<h1>Čekovi — {{ jedinica.code }} {{ jedinica.name }}</h1>
+
+<div class="row" style="gap:18px;align-items:baseline">
+  <div><b>{{ ukupno[0] }}</b> <span class="muted small">u sefu</span></div>
+  <div><b>{{ din(ukupno[1]) }}</b> <span class="muted small">din</span></div>
+  <div><b style="{% if za_proveru %}color:#b91c1c{% endif %}">{{ za_proveru|length }}</b>
+    <span class="muted small">za proveru</span></div>
+  <div><b>{{ za_predaju|length }}</b> <span class="muted small">za banku danas</span></div>
+  {% if vraceni %}<div><b style="color:#b91c1c">{{ vraceni|length }}</b>
+    <span class="muted small">vraćeno iz banke</span></div>{% endif %}
+</div>
+
+{# ------------------------------------------------------------- slikanje #}
+<div class="card">
+  <h2 style="margin-top:0">1. Uslikaj jučerašnje čekove</h2>
+  <p class="small muted" style="margin-top:0">Raširi čekove na stolu (može 4–6 na jednu sliku),
+    da se vide cela donja traka sa brojevima i rukom pisan iznos i datum. Aplikacija ih
+    pročita; gde nije sigurna, polje ostaje <b style="color:#b91c1c">crveno</b> i upisuješ ga ti.</p>
+  {% if not claude_ukljucen %}
+    <p class="small" style="color:#b91c1c">Čitanje nije uključeno na serveru (nema Claude ključa).</p>
+  {% endif %}
+  <form method="post" action="/cekovi/slike" enctype="multipart/form-data">
+    {% if user.is_operator %}<input type="hidden" name="jedinica" value="{{ jedinica.code }}">{% endif %}
+    <div class="row">
+      <div class="field" style="flex:2;min-width:220px">
+        <label>Slike</label>
+        <input type="file" name="slike" accept="image/*" multiple required>
+      </div>
+      <div class="field">
+        <label>Dan pazara</label>
+        <input type="date" name="primljeno" value="{{ juce.isoformat() }}">
+        <span class="small muted">obriši za stare čekove (unazad)</span>
+      </div>
+      <div class="field"><label>&nbsp;</label><button type="submit">Pošalji</button></div>
+    </div>
+  </form>
+
+  {% for s in slike %}
+    {% if not s.procitano_u or s.greska %}
+    <div class="small" style="margin-top:6px">
+      <a href="/cekovi/slika/{{ s.id }}" target="_blank">slika {{ s.id }}</a> ·
+      {% if not s.procitano_u %}<span class="tag">čita se…</span>
+      {% else %}<span style="color:#b91c1c">{{ s.greska }}</span>
+        <form class="inline" method="post" action="/cekovi/slika/{{ s.id }}/ponovo">
+          <button class="ghost small" type="submit">Pročitaj ponovo</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{# ------------------------------------------------------------- crveno #}
+{% if za_proveru %}
+<div class="card" style="border-left:4px solid #b91c1c">
+  <h2 style="margin-top:0">2. Proveri crvena polja</h2>
+  <p class="small muted" style="margin-top:0">Pogledaj ček u sefu i upiši ono što piše.
+    Broj računa aplikacija proverava kontrolnim brojem — pogrešnu cifru neće primiti.</p>
+  {% for c in za_proveru %}
+  <form method="post" action="/cekovi/{{ c.id }}/ispravi" class="card small" style="margin:8px 0">
+    <div class="row" style="align-items:baseline">
+      <b>{{ c.banka or 'ček' }}</b>
+      {% if c.slika_id %}<a href="/cekovi/slika/{{ c.slika_id }}" target="_blank">slika</a>{% endif %}
+      <span class="spacer"></span>
+      <span style="color:#b91c1c">{{ (c.razlozi or [])|join('; ') }}</span>
+    </div>
+    <div class="row">
+      {% set crveno = 'border:2px solid #b91c1c;background:#fef2f2' %}
+      <div class="field"><label>Serijski broj</label>
+        <input name="serijski_broj" value="{{ c.serijski_broj if not c.serijski_broj.startswith('?') else '' }}"
+               style="{% if 'serijski_broj' in c.sumnjiva %}{{ crveno }}{% endif %}"></div>
+      <div class="field" style="flex:2"><label>Broj tekućeg računa</label>
+        <input name="racun" value="{{ lep_racun(c.racun) if not c.racun.startswith('?') else '' }}"
+               style="{% if 'racun' in c.sumnjiva %}{{ crveno }}{% endif %}"></div>
+      <div class="field"><label>Iznos</label>
+        <input name="iznos" type="number" step="0.01" min="0.01" value="{{ '%.2f'|format(c.iznos) }}"
+               style="{% if 'iznos' in c.sumnjiva %}{{ crveno }}{% endif %}"></div>
+      <div class="field"><label>Datum na čeku</label>
+        <input name="datum" type="date" value="{{ c.datum.isoformat() if c.datum else '' }}"
+               style="{% if 'datum' in c.sumnjiva %}{{ crveno }}{% endif %}"></div>
+      <div class="field"><label>&nbsp;</label><button type="submit">Potvrdi</button></div>
+    </div>
+  </form>
+  <form class="inline" method="post" action="/cekovi/{{ c.id }}/obrisi"
+        onsubmit="return confirm('Obrisati ovaj zapis? (npr. nije ček, ili je dupli)')">
+    <button class="ghost small" type="submit">obriši zapis</button></form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------- predaja #}
+<div class="card">
+  <h2 style="margin-top:0">3. Za banku danas ({{ danas.strftime('%d.%m.%Y') }})</h2>
+  {% if za_predaju %}
+  <form method="post" action="/cekovi/predaj"
+        onsubmit="return confirm('Predati izabrane čekove u banku? Pravi se presek za knjigovodstvo.')">
+    {% if user.is_operator %}<input type="hidden" name="jedinica" value="{{ jedinica.code }}">{% endif %}
+    <table class="small" style="width:100%">
+      <tr><th></th><th>datum na čeku</th><th>banka</th><th>serijski</th><th>račun</th>
+        <th style="text-align:right">iznos</th></tr>
+      {% for c in za_predaju %}
+      <tr>
+        <td><input type="checkbox" name="cekovi" value="{{ c.id }}"
+                   {% if not c.za_proveru %}checked{% else %}disabled title="prvo proveri crvena polja"{% endif %}></td>
+        <td>{{ c.datum.strftime('%d.%m.%Y') }}{% if rok(c.datum) != c.datum %}
+          <span class="muted">(vikend)</span>{% endif %}
+          {% if rok(c.datum) < danas %}<b style="color:#b91c1c">kasni</b>{% endif %}</td>
+        <td>{{ c.banka or '' }}</td><td>{{ c.serijski_broj }}</td><td>{{ lep_racun(c.racun) }}</td>
+        <td style="text-align:right">{{ din(c.iznos) }}{% if c.iznos_po_pravilu %}
+          <span class="muted" title="iznos nije bio upisan na čeku">*</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr><td colspan="5"><b>ukupno {{ za_predaju|length }} kom</b></td>
+        <td style="text-align:right"><b>{{ din(za_predaju|sum(attribute='iznos')) }}</b></td></tr>
+    </table>
+    <button type="submit" style="margin-top:6px">Predaj u banku i napravi presek</button>
+  </form>
+  {% else %}
+    <p class="small muted">Danas nema čekova za banku.</p>
+  {% endif %}
+</div>
+
+{# ------------------------------------------------------------- vraceni #}
+{% if vraceni %}
+<div class="card" style="border-left:4px solid #b91c1c">
+  <h2 style="margin-top:0">Vraćeni iz banke — reši sa kupcem</h2>
+  {% for c in vraceni %}
+  <form method="post" action="/cekovi/{{ c.id }}/resen" class="row small" style="align-items:center;margin:4px 0">
+    <span>{{ c.datum.strftime('%d.%m.%Y') if c.datum else '' }} · {{ c.serijski_broj }} ·
+      {{ lep_racun(c.racun) }} · <b>{{ din(c.iznos) }}</b> · vraćen {{ c.vracen_u.strftime('%d.%m.') }}
+      {% if c.napomena %}— {{ c.napomena }}{% endif %}</span>
+    <input name="napomena" required placeholder="kako je rešeno" style="flex:1;min-width:180px">
+    <button class="ghost small" type="submit">Rešeno</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------- sef #}
+<div class="card">
+  <h2 style="margin-top:0">U sefu, po danu predaje</h2>
+  {% if kalendar %}
+  <table class="small">
+    <tr><th>dan predaje</th><th style="text-align:right">kom</th><th style="text-align:right">iznos</th></tr>
+    {% for dan, (n, iznos) in kalendar %}
+      <tr><td>{{ dan.strftime('%a %d.%m.%Y') }}</td><td style="text-align:right">{{ n }}</td>
+        <td style="text-align:right">{{ din(iznos) }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="small muted">Sef je prazan.</p>{% endif %}
+  <details style="margin-top:6px"><summary class="small">svi čekovi u sefu ({{ u_sefu|length }})</summary>
+    <table class="small" style="width:100%">
+      <tr><th>datum</th><th>banka</th><th>serijski</th><th>račun</th><th>primljen</th>
+        <th style="text-align:right">iznos</th><th></th></tr>
+      {% for c in u_sefu %}
+      <tr><td>{{ c.datum.strftime('%d.%m.%Y') if c.datum else '—' }}</td><td>{{ c.banka or '' }}</td>
+        <td>{{ c.serijski_broj }}</td><td>{{ lep_racun(c.racun) }}</td>
+        <td>{{ c.primljeno.strftime('%d.%m.') if c.primljeno else 'unazad' }}</td>
+        <td style="text-align:right">{{ din(c.iznos) }}</td>
+        <td>{% if c.slika_id %}<a href="/cekovi/slika/{{ c.slika_id }}" target="_blank">slika</a>{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+  </details>
+</div>
+
+{# ------------------------------------------------------------- predati #}
+<div class="card">
+  <h2 style="margin-top:0">Predato u banku</h2>
+  {% for p in predaje %}
+    <div class="small"><a href="/cekovi/predaja/{{ p.id }}">{{ p.datum.strftime('%d.%m.%Y') }}</a>
+      — {{ p.komada }} kom, {{ din(p.iznos) }} din ({{ p.predao }})</div>
+  {% else %}<p class="small muted">Još nema predaja.</p>{% endfor %}
+  {% if predati %}
+  <details style="margin-top:6px"><summary class="small">banka vratila ček?</summary>
+    {% for c in predati %}
+    <form method="post" action="/cekovi/{{ c.id }}/vracen" class="row small" style="align-items:center;margin:3px 0"
+          onsubmit="return confirm('Banka je vratila ovaj ček?')">
+      <span>{{ c.datum.strftime('%d.%m.%Y') if c.datum else '' }} · {{ c.serijski_broj }} · {{ din(c.iznos) }}</span>
+      <input name="napomena" placeholder="razlog (nema pokrića…)" style="flex:1;min-width:160px">
+      <button class="ghost small" type="submit">Vraćen</button>
+    </form>
+    {% endfor %}
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

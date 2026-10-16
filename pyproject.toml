@@ -21,6 +21,8 @@ dependencies = [
     "pypdf>=5.0",
     # predlog specifikacije artikla (DEKA) sa weba, pri otvaranju sifre
     "anthropic>=1.14",
+    # cekovi: okretanje po EXIF-u i smanjivanje fotografije pre citanja
+    "pillow>=11.0",
 ]
 
 [project.optional-dependencies]

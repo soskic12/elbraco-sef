@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Čekovi — sve jedinice{% endblock %}
+{% macro din(v) -%}{{ '{:,.2f}'.format(v or 0).replace(',', ' ').replace('.', ',') }}{%- endmacro %}
+{% block content %}
+<h1>Čekovi — sve jedinice</h1>
+
+<div class="card">
+  <table class="small" style="width:100%">
+    <tr><th>jedinica</th><th style="text-align:right">u sefu</th><th style="text-align:right">iznos u sefu</th>
+      <th style="text-align:right">predato</th><th style="text-align:right">vraćeno</th><th></th></tr>
+    {% for j in jedinice %}
+    {% set s = j.get('u_sefu', (0, 0)) %}{% set p = j.get('predat', (0, 0)) %}{% set v = j.get('vracen', (0, 0)) %}
+    <tr>
+      <td><b>{{ j.kod }}</b> {{ j.ime }}</td>
+      <td style="text-align:right">{{ s[0] }}</td><td style="text-align:right">{{ din(s[1]) }}</td>
+      <td style="text-align:right">{{ p[0] }}</td>
+      <td style="text-align:right">{% if v[0] %}<b style="color:#b91c1c">{{ v[0] }} · {{ din(v[1]) }}</b>{% else %}0{% endif %}</td>
+      <td><a href="/cekovi?jedinica={{ j.kod }}">otvori</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Još nema unetih čekova.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Poslednje predaje u banku</h2>
+  {% for p in predaje %}
+    <div class="small"><a href="/cekovi/predaja/{{ p.id }}">{{ p.datum.strftime('%d.%m.%Y') }}</a>
+      · {{ p.business_unit.code }} — {{ p.komada }} kom, {{ din(p.iznos) }} din ({{ p.predao }})</div>
+  {% else %}<p class="small muted">Još nema predaja.</p>{% endfor %}
+</div>
+{% endblock %}

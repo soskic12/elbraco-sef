@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Presek čekova {{ p.datum.strftime('%d.%m.%Y') }}{% endblock %}
+{% macro din(v) -%}{{ '{:,.2f}'.format(v or 0).replace(',', ' ').replace('.', ',') }}{%- endmacro %}
+{% block content %}
+<div class="card">
+  <h1 style="margin-top:0">Predaja čekova u banku</h1>
+  <dl class="kv">
+    <dt>Jedinica</dt><dd>{{ p.business_unit.code }} — {{ p.business_unit.name }}</dd>
+    <dt>Datum</dt><dd>{{ p.datum.strftime('%d.%m.%Y') }}</dd>
+    <dt>Komada</dt><dd>{{ p.komada }}</dd>
+    <dt>Iznos</dt><dd>{{ din(p.iznos) }} din</dd>
+    <dt>Predao</dt><dd>{{ p.predao }}</dd>
+  </dl>
+  <table class="small" style="width:100%;margin-top:8px">
+    <tr><th>#</th><th>datum na čeku</th><th>banka</th><th>serijski broj</th><th>račun</th>
+      <th style="text-align:right">iznos</th></tr>
+    {% for c in cekovi %}
+    <tr><td>{{ loop.index }}</td><td>{{ c.datum.strftime('%d.%m.%Y') if c.datum else '' }}</td>
+      <td>{{ c.banka or '' }}</td><td>{{ c.serijski_broj }}</td><td>{{ lep_racun(c.racun) }}</td>
+      <td style="text-align:right">{{ din(c.iznos) }}</td></tr>
+    {% endfor %}
+    <tr><td colspan="5"><b>Ukupno</b></td><td style="text-align:right"><b>{{ din(p.iznos) }}</b></td></tr>
+  </table>
+  <p class="small muted">Presek vidi i knjigovodstvo u panelu (Čekovi → predaje).</p>
+  <button class="ghost" onclick="window.print()">Štampaj</button>
+  <a href="/cekovi{% if user.is_operator %}?jedinica={{ p.business_unit.code }}{% endif %}">nazad na čekove</a>
+</div>
+{% endblock %}

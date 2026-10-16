@@ -216,6 +216,8 @@ class Settings(BaseSettings):
     # Kljuc koji nije vezan za radni prostor (sk-ant-usr...) API prima samo uz
     # ID radnog prostora - inace 400 „not scoped to a workspace" (16.10.).
     anthropic_workspace_id: str = ""
+    # Citanje cekova sa slike (rukopis) - isti kljuc.
+    cekovi_model: str = "claude-opus-5-5"
 
     # --- Email notifikacije ---
     smtp_host: str = ""

@@ -882,3 +882,118 @@ class PopustZaPrenos(Base):
         if not self.nabavna or self.iznos is None:
             return None
         return abs(self.iznos) / abs(self.nabavna)
+
+
+# --------------------------------------------------------------------------- #
+# Cekovi gradjana (Bane, 16.10.)
+# --------------------------------------------------------------------------- #
+#
+# Tok u objektu: kupac da cekove (odlozeno placanje, najcesce po 5.000) ->
+# prodavac ih stavi u svoj sef -> ujutro ih poslovodja uzme, uslika i prebaci u
+# poslovodjin sef -> na datum sa ceka (vikend: prvi radni dan posle) ih nosi u
+# banku i knjigovodstvu salje presek (koliko i koji iznos) -> retko banka vrati
+# cek, poslovodja ga dobije sutradan i resava sa kupcem.
+#
+# ERP nema nijednu tabelu za cekove ni blagajnu (provereno 16.10.), pa sve
+# stoji ovde.
+
+
+class StanjeCeka(str, enum.Enum):
+    U_SEFU = "u_sefu"        # kod poslovodje, ceka datum naplate
+    PREDAT = "predat"        # odnet u banku
+    VRACEN = "vracen"        # banka ga vratila - poslovodja resava sa kupcem
+    RESEN = "resen"          # vracen cek je resen (kupac platio drugacije, zamena...)
+
+
+class SlikaCekova(Base):
+    """Jedna fotografija sa jednim ili vise cekova, i ishod citanja."""
+
+    __tablename__ = "slika_cekova"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_unit_id: Mapped[int] = mapped_column(ForeignKey("business_unit.id"), index=True)
+    putanja: Mapped[str] = mapped_column(String(400))
+    naziv_fajla: Mapped[str | None] = mapped_column(String(260), default=None)
+    # Dan pazara sa kog su cekovi - prazno kod cekova unazad, kad se ne zna.
+    primljeno: Mapped[date | None] = mapped_column(Date, default=None)
+    poslao: Mapped[str] = mapped_column(String(100))
+    poslato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Citanje ide u pozadini: dok `procitano_u` nije popunjeno, slika „se cita“.
+    procitano_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    procitano_cekova: Mapped[int | None] = mapped_column(Integer, default=None)
+    greska: Mapped[str | None] = mapped_column(String(500), default=None)
+    napomena: Mapped[str | None] = mapped_column(String(500), default=None)
+
+
+class Cek(Base):
+    """Jedan cek, procitan sa slike i (gde treba) ispravljen rukom."""
+
+    __tablename__ = "cek"
+    __table_args__ = (
+        # Isti cek dvaput uslikan ne sme da postane dva ceka.
+        UniqueConstraint("racun", "serijski_broj", name="uq_cek_racun_serijski"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_unit_id: Mapped[int] = mapped_column(ForeignKey("business_unit.id"), index=True)
+    slika_id: Mapped[int | None] = mapped_column(
+        ForeignKey("slika_cekova.id", ondelete="SET NULL"), default=None
+    )
+
+    serijski_broj: Mapped[str] = mapped_column(String(20), index=True)
+    # 18 cifara bez crtica (banka 3 + partija 13 + kontrolni 2). Erste stampa
+    # partiju bez vodecih nula - dopunjava se pri citanju.
+    racun: Mapped[str] = mapped_column(String(18), index=True)
+    banka: Mapped[str | None] = mapped_column(String(60), default=None)
+    iznos: Mapped[float] = mapped_column(Float)
+    # Iznos nije upisan na ceku -> 5.000 po pravilu (Bane, 16.10.).
+    iznos_po_pravilu: Mapped[bool] = mapped_column(Boolean, default=False)
+    iznos_slovima: Mapped[str | None] = mapped_column(String(200), default=None)
+    # Datum sa ceka = dan kad ide na naplatu.
+    datum: Mapped[date | None] = mapped_column(Date, default=None, index=True)
+    mesto: Mapped[str | None] = mapped_column(String(60), default=None)
+    primljeno: Mapped[date | None] = mapped_column(Date, default=None)
+
+    # Polja u koja citanje nije sigurno - poslovodja ih proverava (crveno).
+    # Lista imena: "serijski_broj", "racun", "iznos", "datum".
+    sumnjiva: Mapped[list | None] = mapped_column(JSON, default=None)
+    razlozi: Mapped[list | None] = mapped_column(JSON, default=None)
+    potvrdio: Mapped[str | None] = mapped_column(String(100), default=None)
+    potvrdjeno_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
+    stanje: Mapped[StanjeCeka] = mapped_column(
+        Enum(StanjeCeka), default=StanjeCeka.U_SEFU, index=True
+    )
+    predaja_id: Mapped[int | None] = mapped_column(
+        ForeignKey("predaja_cekova.id"), default=None, index=True
+    )
+    vracen_u: Mapped[date | None] = mapped_column(Date, default=None)
+    resen_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    napomena: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    uneo: Mapped[str] = mapped_column(String(100))
+    uneto_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    business_unit: Mapped[BusinessUnit] = relationship()
+    slika: Mapped[SlikaCekova | None] = relationship()
+
+    @property
+    def za_proveru(self) -> bool:
+        return bool(self.sumnjiva) and self.potvrdjeno_u is None
+
+
+class PredajaCekova(Base):
+    """Odlazak u banku: koji cekovi, koliko komada i koji iznos - presek za knjigovodstvo."""
+
+    __tablename__ = "predaja_cekova"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_unit_id: Mapped[int] = mapped_column(ForeignKey("business_unit.id"), index=True)
+    datum: Mapped[date] = mapped_column(Date, index=True)
+    komada: Mapped[int] = mapped_column(Integer)
+    iznos: Mapped[float] = mapped_column(Float)
+    predao: Mapped[str] = mapped_column(String(100))
+    predato_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    business_unit: Mapped[BusinessUnit] = relationship()
+    cekovi: Mapped[list[Cek]] = relationship(foreign_keys="Cek.predaja_id")

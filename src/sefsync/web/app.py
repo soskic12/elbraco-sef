@@ -2257,3 +2257,9 @@ def health() -> dict:
     except Exception as exc:  # noqa: BLE001 - zdravlje se ne rusi zbog ERP-a
         podaci["erp"] = {"greska": str(exc)[:80]}
     return podaci
+
+
+# Cekovi su u zasebnom modulu; uvoz na kraju jer modul koristi pomocnike odozgo.
+from .cekovi_rute import router as _cekovi_router  # noqa: E402
+
+app.include_router(_cekovi_router)
