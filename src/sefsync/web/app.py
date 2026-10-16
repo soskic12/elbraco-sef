@@ -2259,7 +2259,6 @@ def health() -> dict:
     return podaci
 
 
-# Cekovi su u zasebnom modulu; uvoz na kraju jer modul koristi pomocnike odozgo.
-from .cekovi_rute import router as _cekovi_router  # noqa: E402
-
-app.include_router(_cekovi_router)
+# Cekovi su u zasebnom modulu, koji sam registruje svoje rute. Uvoz je na kraju
+# jer modul koristi pomocnike odozgo; radi kojim god redom se moduli ucitaju.
+from . import cekovi_rute  # noqa: E402,F401

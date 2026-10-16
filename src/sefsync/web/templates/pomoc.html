@@ -91,6 +91,25 @@
   <p class="muted small">Kad jedan objekat slika artikal, vide ga svi ostali.</p>
 {% endcall %}
 
+{% call korak('Čekovi — svako jutro') %}
+  <p>Tab <b>Čekovi</b> u vrhu ekrana. Ujutro uzmeš čekove iz prodavčevog sefa,
+  raširiš ih na stolu (može 4–6 na jednu sliku) i uslikaš tako da se vidi cela
+  <b>donja traka sa brojevima</b> i rukom pisan iznos i datum. Dan pazara je
+  unapred jučerašnji.</p>
+  <p>Aplikacija pročita serijski broj, račun, iznos i datum. Polje u koje nije
+  sigurna ostane <b style="color:#b91c1c">crveno</b> — pogledaj ček i upiši šta
+  piše. Broj računa se proverava kontrolnim brojem, pa pogrešnu cifru neće
+  primiti. Prazan iznos na čeku se vodi kao 5.000.</p>
+  <p>Na dan sa čeka (5., 10., 15., 20., 25., 30.) ček se pojavi pod
+  <b>„Za banku danas“</b>. Ako je taj dan vikend ili praznik, pojavi se prvog
+  radnog dana posle. Čekiraš ih, klikneš <span class="tag">Predaj u banku</span>
+  i dobiješ presek (koliko komada, koji iznos) — isti presek vidi i
+  knjigovodstvo.</p>
+  <p class="muted small">Ako banka vrati ček: na dnu ekrana, „banka vratila
+  ček?“ → <b>Vraćen</b>. Kad rešiš sa kupcem, upiši kako i klikni <b>Rešeno</b>.
+  Stare čekove (unazad) šalješ isto, samo obrišeš dan pazara.</p>
+{% endcall %}
+
 {# ------------------------------------------------------------- 010 povrati #}
 {% elif uloga == 'povracaj' %}
 
@@ -555,6 +574,17 @@
   za taj artikal — isto kao veza šifre. Faktor aplikacija <b>nikad ne upisuje
   sama</b>: ili ga je čovek potvrdio, ili je izveden iz onoga što je poslovođa
   već unosio u ERP.</p>
+{% endcall %}
+
+{% call korak('Čekovi') %}
+  <p>Ekran <b>Čekovi</b> pokazuje za svaku jedinicu koliko je čekova u sefu,
+  koliko je predato i šta je banka vratila, i spisak poslednjih predaja sa
+  presekom. Klikom na jedinicu vidiš njen ekran kao poslovođa i možeš da radiš
+  umesto njega.</p>
+  <p class="muted small">Čekove čita Claude sa slike; račun proverava
+  kontrolni broj, iznos se poredi sa iznosom slovima, a datum mora da bude na
+  5., 10., 15., 20., 25. ili 30. — sve ostalo ostaje crveno za poslovođu. Rok
+  predaje preskače vikend i državne praznike.</p>
 {% endcall %}
 
 {% endif %}

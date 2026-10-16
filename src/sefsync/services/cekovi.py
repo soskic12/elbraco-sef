@@ -91,15 +91,67 @@ def lep_racun(racun: str | None) -> str:
     return f"{racun[:3]}-{racun[3:16]}-{racun[16:]}"
 
 
+# Dani naplate: cekovi se popunjavaju na svakih pet dana (Bane, 16.10.).
+DANI_NAPLATE = (5, 10, 15, 20, 25, 30)
+
+
+def pravoslavni_uskrs(godina: int) -> date:
+    """Pravoslavni Uskrs (Meeus, julijanski kalendar + 13 dana, vazi 1900-2099)."""
+    a, b, c = godina % 4, godina % 7, godina % 19
+    d = (19 * c + 15) % 30
+    e = (2 * a + 4 * b - d + 34) % 7
+    mesec, dan = divmod(d + e + 114, 31)
+    return date(godina, mesec, dan + 1) + timedelta(days=13)
+
+
+def neradni_dani(godina: int) -> set[date]:
+    """Drzavni praznici u Srbiji kad se ne radi (Zakon o drzavnim praznicima).
+
+    Kad Nova godina, Sretenje, Praznik rada ili Dan primirja padnu u nedelju,
+    ne radi se prvog narednog radnog dana. Bozic i uskrsnji dani se ne pomeraju.
+    """
+    uskrs = pravoslavni_uskrs(godina)
+    dani = {date(godina, 1, 7), uskrs - timedelta(days=2), uskrs, uskrs + timedelta(days=1)}
+    for mesec, prvi, drugi in ((1, 1, 2), (2, 15, 16), (5, 1, 2)):
+        dani |= {date(godina, mesec, prvi), date(godina, mesec, drugi)}
+        if date(godina, mesec, prvi).weekday() == 6 or date(godina, mesec, drugi).weekday() == 6:
+            dodatni = date(godina, mesec, drugi) + timedelta(days=1)
+            while dodatni.weekday() >= 5 or dodatni in dani:
+                dodatni += timedelta(days=1)
+            dani.add(dodatni)
+    primirje = date(godina, 11, 11)
+    dani.add(primirje)
+    if primirje.weekday() == 6:
+        dani.add(primirje + timedelta(days=1))
+    return dani
+
+
+def radni_dan(dan: date) -> bool:
+    return dan.weekday() < 5 and dan not in neradni_dani(dan.year)
+
+
 def rok_predaje(datum: date | None) -> date | None:
-    """Kad cek ide u banku: datum sa ceka, a vikend -> prvi radni dan posle."""
+    """Kad cek ide u banku: datum sa ceka, a vikend ili praznik -> prvi radni dan posle.
+
+    Primer: 15.02.2026. je nedelja (Sretenje), 16.02. praznik, 17.02. se ne
+    radi jer je praznik pao u nedelju - cek ide u banku 18.02.
+    """
     if datum is None:
         return None
-    if datum.weekday() == 5:
-        return datum + timedelta(days=2)
-    if datum.weekday() == 6:
-        return datum + timedelta(days=1)
-    return datum
+    dan = datum
+    while not radni_dan(dan):
+        dan += timedelta(days=1)
+    return dan
+
+
+def obican_dan_naplate(datum: date) -> bool:
+    """Da li datum pada na uobicajen dan naplate (5., 10., ... 30.).
+
+    Februar nema 30., pa se tada prihvata i poslednji dan meseca.
+    """
+    if datum.day in DANI_NAPLATE:
+        return True
+    return datum.month == 2 and (datum + timedelta(days=1)).month == 3
 
 
 @dataclass
@@ -184,6 +236,10 @@ def proveri(procitan: dict, *, primljeno: date | None, oznaka: str) -> Provera:
             sumnja("datum", f"datum {datum:%d.%m.%Y} je neobično daleko od dana prijema")
         elif not sigurno.get("datum", True):
             sumnja("datum", "datum nije jasno čitljiv")
+        elif not obican_dan_naplate(datum):
+            # Cekovi idu na 5., 10., 15., 20., 25. i 30. - drugi dan je skoro
+            # uvek pogresno procitana cifra (6 umesto 5, 16 umesto 15).
+            sumnja("datum", f"{datum.day}. nije uobičajen dan naplate (5, 10, 15, 20, 25, 30)")
 
     return Provera(serijski, racun, round(iznos, 2), po_pravilu, datum, sumnjiva, razlozi)
 

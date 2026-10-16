@@ -19,7 +19,7 @@ from ..config import get_settings
 from ..db import session_scope
 from ..models import BusinessUnit, Cek, PredajaCekova, SlikaCekova, StanjeCeka
 from ..services import cekovi as C
-from .app import Korisnik, _back, _unit_for, log, templates
+from .app import Korisnik, _back, _unit_for, app, log, templates
 
 router = APIRouter()
 
@@ -282,4 +282,4 @@ def cekovi_resen(cek_id: int, user: Korisnik,
     return _back(nazad, "Vraćen ček je rešen.")
 
 
-__all__ = ["router", "log"]
+app.include_router(router)
