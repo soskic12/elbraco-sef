@@ -576,3 +576,18 @@ Pravila: rok = datum sa čeka, vikend/praznik → prvi radni dan; datum van
 Paket 16.10. 13:48 (`17b1b44`) ✗ nije postavljen. Novo: točak `pillow`.
 Ne traži GRANT ni novi red u `.env` (koristi isti Claude ključ). Otvoreno:
 dnevnik blagajne (čeka papirni obrazac).
+
+### 17.10.2026. — blagajna čekova (nalozi i dnevnik) ✔ (kod) / ✗ (paket)
+
+Po slikama tri papirne knjige iz objekta (`docs/IMG-*-V.jpg`): „Nalog blagajni
+da naplati“ (knjiga „Pazar“), „Nalog blagajni da isplati“ (knjiga „Banka“) i
+„Dnevnik blagajne“ — sve tri vode samo čekove.
+
+`bfdf731`: „Zatvori pazar“ → nalog da naplati; predaja u banku → nalog da
+isplati (ista transakcija); dnevnik za period sa saldom i proverom prema
+čekovima u sefu; početno stanje (saldo + sledeći brojevi naloga) jednom po
+objektu. Testova 582 ✔.
+
+Paket 17.10. 10:17 (`bfdf731`, sadrži i module čekova `17b1b44`) ✗ nije
+postavljen. Zamenjuje paket od 16.10. 13:48. Prvo pravljenje je palo bez
+poruke posle točkova (exit 255), drugo je prošlo — uzrok nije utvrđen.
