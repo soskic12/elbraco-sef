@@ -970,6 +970,10 @@ class Cek(Base):
     vracen_u: Mapped[date | None] = mapped_column(Date, default=None)
     resen_u: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     napomena: Mapped[str | None] = mapped_column(String(500), default=None)
+    # Nalog blagajni da naplati kojim je cek usao u blagajnu (dan pazara).
+    nalog_naplati_id: Mapped[int | None] = mapped_column(
+        ForeignKey("nalog_blagajne.id"), default=None, index=True
+    )
 
     uneo: Mapped[str] = mapped_column(String(100))
     uneto_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -997,3 +1001,71 @@ class PredajaCekova(Base):
 
     business_unit: Mapped[BusinessUnit] = relationship()
     cekovi: Mapped[list[Cek]] = relationship(foreign_keys="Cek.predaja_id")
+
+
+# --------------------------------------------------------------------------- #
+# Blagajna cekova: nalozi i dnevnik (Bane, 17.10.)
+# --------------------------------------------------------------------------- #
+#
+# Papir koji se vodi u svakom objektu (slike u docs/, 17.10.) - sve tri knjige
+# vode SAMO cekove:
+#   * „Nalog blagajni da naplati“ (knjiga „Pazar“): jedan nalog po danu,
+#     „Cekovi pazar“, iznos, broj 097/2026;
+#   * „Nalog blagajni da isplati“ (knjiga „Banka“): jedan po odlasku u banku,
+#     „Cekovi naplata“;
+#   * „Dnevnik blagajne“: nalozi redom, ulaz/izlaz, saldo od - primitak -
+#     izdatak - saldo do. Saldo je ono sto je u sefu.
+
+
+class VrstaNaloga(str, enum.Enum):
+    NAPLATI = "naplati"     # ulaz: cekovi iz pazara
+    ISPLATI = "isplati"     # izlaz: cekovi odneti u banku
+
+
+class NalogBlagajne(Base):
+    __tablename__ = "nalog_blagajne"
+    __table_args__ = (
+        UniqueConstraint("business_unit_id", "vrsta", "godina", "broj",
+                         name="uq_nalog_blagajne_broj"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_unit_id: Mapped[int] = mapped_column(ForeignKey("business_unit.id"), index=True)
+    vrsta: Mapped[VrstaNaloga] = mapped_column(Enum(VrstaNaloga))
+    godina: Mapped[int] = mapped_column(Integer)
+    broj: Mapped[int] = mapped_column(Integer)
+    datum: Mapped[date] = mapped_column(Date, index=True)
+    iznos: Mapped[float] = mapped_column(Float)
+    opis: Mapped[str] = mapped_column(String(200))
+    komada: Mapped[int] = mapped_column(Integer, default=0)
+    predaja_id: Mapped[int | None] = mapped_column(
+        ForeignKey("predaja_cekova.id"), default=None, index=True
+    )
+    napravio: Mapped[str] = mapped_column(String(100))
+    napravljeno_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    business_unit: Mapped[BusinessUnit] = relationship()
+
+    @property
+    def oznaka(self) -> str:
+        return f"{self.broj:03d}/{self.godina}"
+
+
+class PocetnoStanjeBlagajne(Base):
+    """Odakle dnevnik krece: saldo iz papirne knjige i sledeci brojevi naloga.
+
+    Upisuje se jednom po objektu, pri prelasku sa papira. Cekovi uneti unazad
+    (bez dana pazara) su deo ovog salda, a ne novi ulaz.
+    """
+
+    __tablename__ = "pocetno_stanje_blagajne"
+
+    business_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("business_unit.id"), primary_key=True
+    )
+    datum: Mapped[date] = mapped_column(Date)
+    saldo: Mapped[float] = mapped_column(Float)
+    prvi_broj_naplati: Mapped[int] = mapped_column(Integer, default=1)
+    prvi_broj_isplati: Mapped[int] = mapped_column(Integer, default=1)
+    upisao: Mapped[str] = mapped_column(String(100))
+    upisano_u: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

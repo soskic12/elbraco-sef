@@ -110,6 +110,23 @@
   Stare čekove (unazad) šalješ isto, samo obrišeš dan pazara.</p>
 {% endcall %}
 
+{% call korak('Blagajna čekova — umesto tri knjige') %}
+  <p>Knjige „Pazar“, „Banka“ i dnevnik blagajne vodi aplikacija:</p>
+  <ul class="small">
+    <li><b>Nalog blagajni da naplati</b> — kad su svi čekovi jednog dana provereni,
+      na ekranu Čekovi klikneš <span class="tag">Zatvori pazar</span>. Nastaje nalog
+      „Čekovi pazar“ sa sledećim brojem.</li>
+    <li><b>Nalog blagajni da isplati</b> — nastaje sam kad predaš čekove u banku
+      („Čekovi naplata“).</li>
+    <li><b>Dnevnik blagajne</b> — link „dnevnik blagajne“; biraš period i štampaš.
+      Saldo od, ukupni primitak, izdatak i saldo do su izračunati.</li>
+  </ul>
+  <p class="muted small">Prvi put upišeš <b>početno stanje</b> iz papirne knjige: poslednji
+  saldo i sledeće slobodne brojeve naloga, da se numeracija nastavi. Ispod dnevnika
+  piše da li se saldo slaže sa čekovima koji su u aplikaciji — dok stari čekovi
+  nisu uslikani, razlika je ono što još fali.</p>
+{% endcall %}
+
 {# ------------------------------------------------------------- 010 povrati #}
 {% elif uloga == 'povracaj' %}
 

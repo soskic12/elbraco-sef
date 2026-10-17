@@ -351,3 +351,96 @@ def test_presek_i_pregled_za_kancelariju(db, jedinica):
         app_module.app.dependency_overrides.clear()
     assert "Predaja čekova u banku" in presek and "5 000,00" in presek
     assert "MP002" in pregled and f"/cekovi/predaja/{pid}" in pregled
+
+
+# --------------------------------------------------------------------------- #
+# blagajna: nalozi i dnevnik (papirne knjige iz objekta, 17.10.)
+# --------------------------------------------------------------------------- #
+
+
+def test_blagajna_ceo_tok_kao_u_knjizi(db, jedinica):
+    from sefsync.models import NalogBlagajne, VrstaNaloga
+    from sefsync.services import blagajna as B
+
+    # pocetno stanje iz papirne knjige: saldo i sledeci brojevi (097 je poslednji upisan)
+    B.postavi_pocetno(jedinica, datum=date(2026, 10, 1), saldo=1_000_000.0,
+                      prvi_naplati=98, prvi_isplati=41, korisnik="predrag")
+    # stari cek (unazad) je deo pocetnog salda
+    _cek(db, jedinica, serijski_broj="9000000000001", racun=OTP, primljeno=None,
+         datum=date(2026, 12, 5), iznos=1_000_000.0)
+
+    a = _cek(db, jedinica, primljeno=date(2026, 10, 14), datum=date(2026, 10, 15))
+    _cek(db, jedinica, serijski_broj="0000001901886", racun=ERSTE, primljeno=date(2026, 10, 14),
+         datum=date(2026, 11, 15), iznos=4500.0)
+    crven = _cek(db, jedinica, serijski_broj="1000065897042", racun=OTP,
+                 primljeno=date(2026, 10, 15), datum=date(2026, 11, 20), sumnjiva=["datum"])
+
+    with db.session_scope() as session:
+        pazari = B.pazari_bez_naloga(session, jedinica)
+    assert [(p["dan"], p["komada"], p["iznos"], p["crvenih"]) for p in pazari] == [
+        (date(2026, 10, 14), 2, 9500.0, 0), (date(2026, 10, 15), 1, 5000.0, 1)]
+
+    n1 = B.zakljuci_pazar(jedinica, date(2026, 10, 14), korisnik="predrag")
+    with pytest.raises(ValueError, match="crvena"):
+        B.zakljuci_pazar(jedinica, date(2026, 10, 15), korisnik="predrag")
+    with pytest.raises(ValueError, match="nema čekova"):
+        B.zakljuci_pazar(jedinica, date(2026, 10, 14), korisnik="predrag")
+
+    pid = C.predaj(jedinica, [a], korisnik="predrag", dan=date(2026, 10, 15))
+    with db.session_scope() as session:
+        naplati = session.get(NalogBlagajne, n1)
+        assert (naplati.oznaka, naplati.iznos, naplati.opis) == ("098/2026", 9500.0, "Čekovi pazar 14.10.")
+        isplati = session.query(NalogBlagajne).filter_by(predaja_id=pid).one()
+        assert isplati.vrsta is VrstaNaloga.ISPLATI and isplati.oznaka == "041/2026"
+        assert isplati.opis == "Čekovi naplata 15.10." and isplati.iznos == 5000.0
+
+        d = B.dnevnik(session, jedinica, date(2026, 10, 1), date(2099, 1, 1))
+        assert (d.saldo_od, d.primitak, d.izdatak, d.saldo_do) == (1_000_000.0, 9500.0, 5000.0, 1_004_500.0)
+        # u sefu: stari 1.000.000 + Erste 4.500; crveni sa nezatvorenog pazara se ne broji
+        assert (d.u_sefu_komada, d.u_sefu_iznos, d.razlika) == (2, 1_004_500.0, 0.0)
+
+        # period posle: saldo od = saldo do prethodnog
+        d2 = B.dnevnik(session, jedinica, date(2026, 10, 16), date(2026, 10, 31))
+        assert d2.saldo_od == 1_004_500.0 and d2.stavke == []
+
+    # posle prvog naloga pocetno stanje se vise ne menja
+    with pytest.raises(ValueError, match="već pravljeni"):
+        B.postavi_pocetno(jedinica, datum=date(2026, 10, 1), saldo=1.0, prvi_naplati=1,
+                          prvi_isplati=1, korisnik="predrag")
+
+
+def test_bez_pocetnog_stanja_brojevi_krecu_od_1(db, jedinica):
+    from sefsync.models import NalogBlagajne
+    from sefsync.services import blagajna as B
+
+    _cek(db, jedinica, primljeno=date(2026, 10, 14))
+    n = B.zakljuci_pazar(jedinica, date(2026, 10, 14), korisnik="predrag")
+    with db.session_scope() as session:
+        assert session.get(NalogBlagajne, n).oznaka == "001/2026"
+
+
+def test_ekrani_blagajne(db, jedinica, monkeypatch):
+    from sefsync.models import BusinessUnit
+    from sefsync.services import blagajna as B
+    from sefsync.web.auth import Role, User
+
+    import sefsync.web.cekovi_rute as rute
+
+    _cek(db, jedinica, primljeno=date(2026, 10, 14))
+    monkeypatch.setattr(rute, "_unit_for", lambda s, u: s.get(BusinessUnit, jedinica))
+    klijent, app_module = _klijent_za(User("predrag", "Bajic Predrag", Role.POSLOVODJA, "002", "POSLOVODJA"))
+    try:
+        assert "Zatvori pazar" in klijent.get("/cekovi").text
+        prazan = klijent.get("/cekovi/blagajna").text
+        assert "Početno stanje" in prazan
+        klijent.post("/cekovi/blagajna/pocetno", data={"datum": "2026-10-01", "saldo": "1833743",
+                                                     "prvi_naplati": 98, "prvi_isplati": 41})
+        odg = klijent.post("/cekovi/blagajna/zakljuci", data={"dan": "2026-10-14"},
+                           follow_redirects=False)
+        assert odg.status_code == 303 and odg.headers["location"].startswith("/cekovi/nalog/")
+        nalog = klijent.get(odg.headers["location"]).text
+        dnev = klijent.get("/cekovi/blagajna?od=2026-10-01&do=2026-10-31").text
+    finally:
+        app_module.app.dependency_overrides.clear()
+    assert "НАЛОГ БЛАГАЈНИ ДА НАПЛАТИ" in nalog and "098/2026" in nalog
+    assert "Čekovi pazar 14.10." in dnev and "1 833 743,00" in dnev and "1 838 743,00" in dnev

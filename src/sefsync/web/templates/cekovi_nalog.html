@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Nalog {{ n.oznaka }}{% endblock %}
+{% macro din(v) -%}{{ '{:,.2f}'.format(v or 0).replace(',', ' ').replace('.', ',') }}{%- endmacro %}
+{% block content %}
+<div class="card" style="max-width:720px">
+  <div class="row" style="align-items:baseline">
+    <h1 style="margin:0">{% if n.vrsta.value == 'naplati' %}НАЛОГ БЛАГАЈНИ ДА НАПЛАТИ{% else %}НАЛОГ БЛАГАЈНИ ДА ИСПЛАТИ{% endif %}</h1>
+    <span class="spacer"></span>
+    <span>Број <b>{{ n.oznaka }}</b> · Датум <b>{{ n.datum.strftime('%d.%m.%Y') }}</b></span>
+  </div>
+  <div class="small muted">{{ n.business_unit.code }} — {{ n.business_unit.name }}</div>
+  <table style="width:100%;margin-top:10px">
+    <tr><th style="text-align:left">САДРЖАЈ</th><th style="text-align:right">ИЗНОС</th></tr>
+    <tr><td>{{ n.opis }} ({{ n.komada }} kom)</td><td style="text-align:right">{{ din(n.iznos) }}</td></tr>
+  </table>
+  <div class="row small" style="margin-top:28px;gap:40px">
+    <span>Благајна ____________</span><span>Књижио ____________</span>
+    <span>{% if n.vrsta.value == 'naplati' %}Уплатио{% else %}Примио{% endif %} ____________</span>
+  </div>
+  <p class="small muted" style="margin-top:14px">Napravio {{ n.napravio }}
+    {{ n.napravljeno_u.strftime('%d.%m.%Y %H:%M') }}{% if n.predaja_id %} ·
+    <a href="/cekovi/predaja/{{ n.predaja_id }}">spisak predatih čekova</a>{% endif %}</p>
+  <button class="ghost" onclick="window.print()">Štampaj</button>
+  <a href="/cekovi/blagajna{% if user.is_operator %}?jedinica={{ n.business_unit.code }}{% endif %}">dnevnik blagajne</a>
+</div>
+{% endblock %}

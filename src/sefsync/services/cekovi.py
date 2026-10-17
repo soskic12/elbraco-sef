@@ -602,6 +602,11 @@ def predaj(business_unit_id: int, cek_ids: list[int], *, korisnik: str,
         session.flush()
         for c in cekovi:
             c.stanje, c.predaja_id = StanjeCeka.PREDAT, predaja.id
+        # Nalog blagajni da isplati nastaje u istom upisu - predaja bez naloga
+        # bi ostavila dnevnik blagajne sa saldom koji nije tacan.
+        from .blagajna import nalog_za_predaju
+
+        nalog_za_predaju(session, predaja, korisnik=korisnik)
         session.add(AuditLog(actor=korisnik, action="cekovi.predati",
                              detail=f"predaja {predaja.id}: {predaja.komada} kom, {predaja.iznos:,.2f}"))
         return predaja.id

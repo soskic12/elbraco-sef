@@ -110,6 +110,9 @@ def cekovi_strana(request: Request, user: Korisnik, jedinica: str = "") -> HTMLR
                 po_roku[rok][0] += 1
                 po_roku[rok][1] += c.iznos
         kalendar = sorted(po_roku.items())
+        from ..services.blagajna import pazari_bez_naloga
+
+        pazari = pazari_bez_naloga(session, j.id)
         ukupno = (len(u_sefu), sum(c.iznos for c in u_sefu))
         session.expunge_all()
 
@@ -117,7 +120,7 @@ def cekovi_strana(request: Request, user: Korisnik, jedinica: str = "") -> HTMLR
         "user": user, "jedinica": j, "slike": slike, "za_proveru": za_proveru,
         "za_predaju": za_predaju, "vraceni": vraceni, "predati": predati,
         "predaje": predaje, "kalendar": kalendar, "ukupno": ukupno,
-        "u_sefu": u_sefu, "danas": danas, "juce": danas - timedelta(days=1),
+        "u_sefu": u_sefu, "danas": danas, "juce": danas - timedelta(days=1), "pazari": pazari,
         "claude_ukljucen": bool(get_settings().anthropic_api_key),
         "lep_racun": C.lep_racun, "rok": C.rok_predaje,
     })
@@ -280,6 +283,86 @@ def cekovi_resen(cek_id: int, user: Korisnik,
     except ValueError as exc:
         return _back(nazad, str(exc), False)
     return _back(nazad, "Vraćen ček je rešen.")
+
+
+# --------------------------------------------------------------------------- #
+# blagajna: nalozi i dnevnik
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/cekovi/blagajna/zakljuci")
+def blagajna_zakljuci(user: Korisnik, dan: Annotated[str, Form()],
+                      jedinica: Annotated[str, Form()] = "") -> RedirectResponse:
+    """Pazar jednog dana ulazi u blagajnu: nalog blagajni da naplati."""
+    from ..services.blagajna import zakljuci_pazar
+
+    with session_scope() as session:
+        j = _jedinica(session, user, jedinica)
+        jid, kod = j.id, j.code
+    try:
+        nalog_id = zakljuci_pazar(jid, date.fromisoformat(dan), korisnik=user.login)
+    except ValueError as exc:
+        return _back(_nazad(user, kod), str(exc), False)
+    return RedirectResponse(f"/cekovi/nalog/{nalog_id}", status_code=303)
+
+
+@router.get("/cekovi/nalog/{nalog_id}", response_class=HTMLResponse)
+def blagajna_nalog(request: Request, nalog_id: int, user: Korisnik) -> HTMLResponse:
+    from ..models import NalogBlagajne
+
+    with session_scope() as session:
+        n = session.get(NalogBlagajne, nalog_id)
+        if n is None:
+            raise HTTPException(404, "Nema tog naloga.")
+        _sme(session, user, n.business_unit_id)
+        _ = n.business_unit.name
+        session.expunge_all()
+    return templates.TemplateResponse(request, "cekovi_nalog.html", {"user": user, "n": n})
+
+
+@router.get("/cekovi/blagajna", response_class=HTMLResponse)
+def blagajna_dnevnik(request: Request, user: Korisnik, jedinica: str = "",
+                     od: str = "", do: str = "") -> HTMLResponse:
+    from ..services.blagajna import dnevnik
+
+    danas = date.today()
+    try:
+        dan_do = date.fromisoformat(do) if do else danas
+        dan_od = date.fromisoformat(od) if od else dan_do.replace(day=1)
+    except ValueError:
+        raise HTTPException(400, "Datum nije ispravan.") from None
+    with session_scope() as session:
+        j = _jedinica(session, user, jedinica)
+        d = dnevnik(session, j.id, dan_od, dan_do)
+        session.expunge_all()
+    return templates.TemplateResponse(request, "cekovi_blagajna.html", {
+        "user": user, "jedinica": j, "d": d, "danas": danas,
+    })
+
+
+@router.post("/cekovi/blagajna/pocetno")
+def blagajna_pocetno(
+    user: Korisnik,
+    datum: Annotated[str, Form()],
+    saldo: Annotated[str, Form()],
+    prvi_naplati: Annotated[int, Form()] = 1,
+    prvi_isplati: Annotated[int, Form()] = 1,
+    jedinica: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    from ..services.blagajna import postavi_pocetno
+
+    with session_scope() as session:
+        j = _jedinica(session, user, jedinica)
+        jid, kod = j.id, j.code
+    nazad = f"/cekovi/blagajna?jedinica={kod}" if user.is_operator else "/cekovi/blagajna"
+    try:
+        postavi_pocetno(jid, datum=date.fromisoformat(datum),
+                        saldo=float(saldo.strip().replace(",", ".")),
+                        prvi_naplati=prvi_naplati, prvi_isplati=prvi_isplati,
+                        korisnik=user.login)
+    except ValueError as exc:
+        return _back(nazad, str(exc), False)
+    return _back(nazad, "Početno stanje blagajne je upisano.")
 
 
 app.include_router(router)

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Dnevnik blagajne — {{ jedinica.code }}{% endblock %}
+{% macro din(v) -%}{{ '{:,.2f}'.format(v or 0).replace(',', ' ').replace('.', ',') }}{%- endmacro %}
+{% block content %}
+{% set q = '?jedinica=' ~ jedinica.code if user.is_operator else '' %}
+<h1>Дневник благајне — {{ jedinica.code }} {{ jedinica.name }}</h1>
+
+<form method="get" class="row small" style="align-items:end">
+  {% if user.is_operator %}<input type="hidden" name="jedinica" value="{{ jedinica.code }}">{% endif %}
+  <div class="field"><label>od</label><input type="date" name="od" value="{{ d.od.isoformat() }}"></div>
+  <div class="field"><label>do</label><input type="date" name="do" value="{{ d.do.isoformat() }}"></div>
+  <button class="ghost" type="submit">Prikaži</button>
+  <button class="ghost" type="button" onclick="window.print()">Štampaj</button>
+  <a href="/cekovi{{ q }}">nazad na čekove</a>
+</form>
+
+{% if not d.pocetno %}
+<div class="card" style="border-left:4px solid #b45309">
+  <h2 style="margin-top:0">Početno stanje (jednom, iz papirne knjige)</h2>
+  <p class="small muted" style="margin-top:0">Upiši poslednji <b>saldo</b> iz papirnog dnevnika
+    blagajne i datum, i <b>sledeće slobodne brojeve</b> naloga iz knjiga „Pazar“ (da naplati) i
+    „Banka“ (da isplati), da se numeracija nastavi. Stari čekovi koje uslikaš unazad su deo
+    ovog salda.</p>
+  <form method="post" action="/cekovi/blagajna/pocetno" class="row">
+    {% if user.is_operator %}<input type="hidden" name="jedinica" value="{{ jedinica.code }}">{% endif %}
+    <div class="field"><label>Saldo na dan</label><input type="date" name="datum" required value="{{ danas.isoformat() }}"></div>
+    <div class="field"><label>Saldo (din)</label><input name="saldo" required placeholder="npr. 1833743"></div>
+    <div class="field"><label>Sledeći broj „da naplati“</label><input type="number" name="prvi_naplati" min="1" value="1"></div>
+    <div class="field"><label>Sledeći broj „da isplati“</label><input type="number" name="prvi_isplati" min="1" value="1"></div>
+    <div class="field"><label>&nbsp;</label><button type="submit">Upiši</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <table class="small" style="width:100%">
+    <tr><th>Темељница</th><th>Датум</th><th>Опис</th><th style="text-align:right">Улаз</th>
+      <th style="text-align:right">Излаз</th></tr>
+    {% for n in d.stavke %}
+    <tr>
+      <td><a href="/cekovi/nalog/{{ n.id }}">{{ n.oznaka }}</a>
+        <span class="muted">{{ 'N' if n.vrsta.value == 'naplati' else 'I' }}</span></td>
+      <td>{{ n.datum.strftime('%d.%m.%Y') }}</td>
+      <td>{{ n.opis }} <span class="muted">({{ n.komada }} kom)</span></td>
+      <td style="text-align:right">{% if n.vrsta.value == 'naplati' %}{{ din(n.iznos) }}{% endif %}</td>
+      <td style="text-align:right">{% if n.vrsta.value == 'isplati' %}{{ din(n.iznos) }}{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">U ovom periodu nema naloga.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card" style="max-width:520px">
+  <h2 style="margin-top:0">Промет благајне</h2>
+  <table class="small" style="width:100%">
+    <tr><td>Салдо од {{ d.od.strftime('%d.%m.%Y') }}</td><td style="text-align:right">{{ din(d.saldo_od) }}</td></tr>
+    <tr><td>Укупни примитак</td><td style="text-align:right">{{ din(d.primitak) }}</td></tr>
+    <tr><td>Одбија се издатак</td><td style="text-align:right">{{ din(d.izdatak) }}</td></tr>
+    <tr><td><b>Салдо од {{ d.do.strftime('%d.%m.%Y') }}</b></td><td style="text-align:right"><b>{{ din(d.saldo_do) }}</b></td></tr>
+  </table>
+  {% if d.pocetno %}
+  <p class="small muted">Početno stanje: {{ din(d.pocetno.saldo) }} na dan
+    {{ d.pocetno.datum.strftime('%d.%m.%Y') }} ({{ d.pocetno.upisao }}).</p>
+  {% endif %}
+  {% if d.do >= danas %}
+  <p class="small">Čekova u sefu po aplikaciji: <b>{{ d.u_sefu_komada }}</b> kom,
+    <b>{{ din(d.u_sefu_iznos) }}</b> din.
+    {% if d.razlika|abs > 0.005 %}
+      <span style="color:#b45309">Razlika prema dnevniku: {{ din(d.razlika) }} — to su čekovi koji
+      još nisu uslikani (stari), ili nešto nije zapisano.</span>
+    {% else %}<span style="color:#166534">Slaže se sa dnevnikom.</span>{% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

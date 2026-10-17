@@ -95,6 +95,27 @@
 </div>
 {% endif %}
 
+{# ------------------------------------------------------------- blagajna #}
+<div class="card">
+  <div class="row" style="align-items:baseline">
+    <h2 style="margin:0">Pazar u blagajnu</h2><span class="spacer"></span>
+    <a href="/cekovi/blagajna{% if user.is_operator %}?jedinica={{ jedinica.code }}{% endif %}">dnevnik blagajne →</a>
+  </div>
+  {% if pazari %}
+  <p class="small muted">Kad su svi čekovi jednog dana pročitani i provereni, zatvori pazar —
+    nastaje <b>nalog blagajni da naplati</b> sa sledećim brojem.</p>
+  {% for p in pazari %}
+  <form method="post" action="/cekovi/blagajna/zakljuci" class="row small" style="align-items:center;margin:3px 0">
+    {% if user.is_operator %}<input type="hidden" name="jedinica" value="{{ jedinica.code }}">{% endif %}
+    <input type="hidden" name="dan" value="{{ p.dan.isoformat() }}">
+    <span>pazar <b>{{ p.dan.strftime('%d.%m.%Y') }}</b> — {{ p.komada }} kom, {{ din(p.iznos) }} din</span>
+    {% if p.crvenih %}<span style="color:#b91c1c">{{ p.crvenih }} za proveru</span>
+    {% else %}<button class="ghost small" type="submit">Zatvori pazar (nalog da naplati)</button>{% endif %}
+  </form>
+  {% endfor %}
+  {% else %}<p class="small muted">Svi pazari su u blagajni.</p>{% endif %}
+</div>
+
 {# ------------------------------------------------------------- predaja #}
 <div class="card">
   <h2 style="margin-top:0">3. Za banku danas ({{ danas.strftime('%d.%m.%Y') }})</h2>
