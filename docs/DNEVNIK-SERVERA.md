@@ -591,3 +591,20 @@ objektu. Testova 582 ✔.
 Paket 17.10. 10:17 (`bfdf731`, sadrži i module čekova `17b1b44`) ✗ nije
 postavljen. Zamenjuje paket od 16.10. 13:48. Prvo pravljenje je palo bez
 poruke posle točkova (exit 255), drugo je prošlo — uzrok nije utvrđen.
+
+### 17.10.2026. — Hubert rakije u pabu upisane kao Clatronic i LG ✔ (nalaz) / ✗ (paket)
+
+`26-FA001012133` (Coffee Center, MP071, 15.10.): stavke 9 i 11 (Hubertova
+kajsija 0,7 ×2, šljiva barrique 0,7 ×1) nose „EAN“ `1348` i `1360` — interne
+šifre dobavljača. Veze nije bilo, pa je app tražila barkod u ARTIKLI i našla
+`1348` Clatronic SM 3081 i `1360` LG GR 349SQF (artikli kojima je šifra
+upisana kao barkod — takvih je 7.005). Upis 12:49 (Joco, potvrda prijema),
+`MKALKUL 071/00204`, 21 stavka. Joco je oba reda ispravio u ERP-u (RBR nosi
+njegovo ime i kasniji žig): 9999959 Hubert Kajsija 1,4 l, 9999960 Hubert
+Šljiva 0,7 l. Kalkulacija je proknjižena.
+
+Provera ostalih: kratke „EAN“ šalju još CSM 2017 (`002`) i jedan dobavljač
+(`003302`) — ne pogađaju nijedan naš artikal. Drugih ovakvih upisa nema.
+
+Popravka u sledećem paketu (posle `bfdf731`): EAN se uzima kao barkod samo
+ako ima 8, 12, 13 ili 14 cifara — i za kalkulaciju i za predlog nove šifre.
