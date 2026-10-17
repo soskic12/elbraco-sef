@@ -425,6 +425,17 @@ def predlozi(
         predlog = PredlogArtikla(document_id=document_id, line_no=line_no)
         predlog.naziv = (linija.name or "").strip()[:60]
         predlog.barkod = (linija.standard_item_id or "").strip()
+        from .kalkulacija import je_barkod
+
+        if predlog.barkod and not je_barkod(predlog.barkod):
+            # Interna sifra dobavljaca u polju za EAN (Coffee Center: „1348“) bi
+            # ovde rekla „barkod vec ima sifru 1348 - povezi“ i odvela na
+            # Clatronic. Nije barkod - tretira se kao da ga nema.
+            predlog.napomene.append(
+                f"Faktura u polju za EAN nosi „{predlog.barkod}“, što nije barkod "
+                "(verovatno interna šifra dobavljača) — upiši barkod sa ambalaže."
+            )
+            predlog.barkod = ""
         predlog.nabavna_cena = linija.price
 
         jedinica = (linija.unit_code or "").strip().upper()

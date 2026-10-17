@@ -1934,3 +1934,34 @@ def test_upis_odbija_fakturu_oznacenu_kao_zavrsenu(db):
     assert not upisano
     assert "završena" in poruka
     assert "Šifre" in poruka
+
+
+def test_interna_sifra_u_polju_ean_nije_barkod():
+    """Coffee Center 15.10. (26-FA001012133): „EAN“ 1348 i 1360 su njegove sifre.
+
+    Kod nas Clatronic SM 3081 ima barkod 1348 (sifra umesto barkoda, kao kod
+    7.005 artikala), pa je Hubert kajsija upisana u pab kao Clatronic.
+    """
+    from types import SimpleNamespace as NS
+
+    from sefsync.erp import kalkulacija as K
+    from sefsync.models import DocumentLine
+
+    pitano = []
+
+    class Conn:
+        def execute(self, upit, parametri=None):
+            pitano.append(parametri)
+            return NS(all=lambda: [NS(a="1348")])
+
+    linija = DocumentLine(line_no=9, name="HUBERTOVA KAJSIJA 0,7", sellers_item_id="023853",
+                          standard_item_id="1348")
+    assert K._nasa_sifra(None, Conn(), "105874681", linija, veze=K.Veze()) == (None, "nepoznat")
+    assert pitano == []                      # ERP se po tom „barkodu“ ni ne pita
+
+    linija.standard_item_id = "8606107780061"
+    assert K._nasa_sifra(None, Conn(), "105874681", linija, veze=K.Veze()) == ("1348", "barkod")
+
+    assert K.je_barkod("12345678") and K.je_barkod("8606107780061")
+    assert not K.je_barkod("1348") and not K.je_barkod("002") and not K.je_barkod("12345678901")
+    assert not K.je_barkod("TAS01510") and not K.je_barkod(None)

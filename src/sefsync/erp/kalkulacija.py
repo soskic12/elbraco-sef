@@ -548,6 +548,23 @@ def _sifra_je_oznaka(session, pib: str, sifra: str) -> bool:
     return len(nazivi) >= OZNAKA_OD_NAZIVA
 
 
+def je_barkod(vrednost: str | None) -> bool:
+    """Da li je „EAN“ sa fakture stvarno barkod: samo cifre, 8, 12, 13 ili 14.
+
+    Neki dobavljaci u polje za EAN upisuju svoju internu sifru. Coffee Center
+    je 15.10. poslao `1348` i `1360` za Hubert kajsiju i sljivu (26-FA001012133),
+    a kod nas 7.005 artikala bez barkoda nosi svoju sifru kao barkod - pa je
+    `1348` pogodio Clatronic SM 3081, a `1360` LG frizider GR 349SQF, i tako su
+    upisani u pab. Joco je ispravio rucno u ERP-u.
+
+    Kontrolna cifra se namerno ne proverava: 49 od 18.611 EAN-ova standardne
+    duzine je ne prolazi (mereno 17.10.), a medju njima ima pravih barkodova
+    koje i ERP vodi tako.
+    """
+    v = (vrednost or "").strip()
+    return v.isdigit() and len(v) in (8, 12, 13, 14)
+
+
 @dataclass
 class Veze:
     """Sifarnik veza, procitan jednom. Vidi `veze_dobavljaca`."""
@@ -669,7 +686,7 @@ def _nasa_sifra(
     # 1.872 ima barkod i nijedan ne vodi na dve sifre - pa je trazenje
     # jednoznacno. Ako se ikad pojavi dvosmislen, ne odlucuje se.
     barkod = (linija.standard_item_id or "").strip()
-    if barkod:
+    if barkod and je_barkod(barkod):
         kodovi = veze.po_barkodu.get(barkod, set())
         if len(kodovi) == 1:
             return next(iter(kodovi)), "mapiranje po barkodu"
